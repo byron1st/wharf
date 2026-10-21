@@ -1,0 +1,33 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editors
+.idea/
+.vscode/
+.zed/
+*.swp
+*.swo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Go build outputs (make build writes ./<bin> at the repo root)
+/server
+/bin/
+*.exe
+*.test
+
+# Test / coverage / profiling
+coverage.out
+*.out
+*.prof
+
+# Go workspace (local-only)
+go.work
+go.work.sum
