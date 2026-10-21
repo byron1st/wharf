@@ -1,10 +1,10 @@
-BINS ?= server
+BINS ?= wharf
 RUN_BIN ?= $(firstword $(BINS))
 BUILD_FLAGS ?=
 MOCK_DIR ?= internal/pkg/mocks
 SQLC_CONFIG ?= ./scripts/sqlc.yaml
 SQLC_DB_FILE ?= internal/adapter/db/db.go
-SWAG_MAIN ?= cmd/server/main.go
+SWAG_MAIN ?= cmd/wharf/main.go
 SWAG_OUT ?= docs
 E2E_PKG ?= ./tests/e2e/...
 EXCLUDE ?= (mocks|docs|cmd)

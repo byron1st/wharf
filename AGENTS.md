@@ -22,11 +22,11 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 - `make coverage`: Report total coverage over non-generated packages.
 - `make outdated`: List outdated direct dependencies.
 - `make build`: Build binaries from `./cmd/<bin>`.
-- `make run`: Run the server (`./cmd/server`).
+- `make run`: Run the server (`./cmd/wharf`).
 
 ## Architecture Overview
 
-- `cmd/server/`: Entry point; wires config, adapters, services, and routes only.
+- `cmd/wharf/`: Entry point; wires config, adapters, services, and routes only.
 - `internal/route/`: HTTP handlers and Swagger annotations; translates requests/responses and calls services.
 - `internal/service/`: Business logic; depends on adapter interfaces, never on HTTP types.
 - `internal/adapter/`: External I/O (database, third-party APIs). `internal/adapter/db/` holds sqlc output.
@@ -38,8 +38,9 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 
 ## Code Conventions
 
-- Layering is one-way: `route` → `service` → `adapter`. `cmd/server/main.go` only wires. No catch-all `types` or `util` package.
-- Expected failures are exported `Err...` sentinels in the package that owns the operation, with exactly one origin return site each.
+- Layering is one-way: `route` → `service` → `adapter`. `cmd/wharf/main.go` only wires. No catch-all `types` or `util` package.
+- Expected failures are exported `Err...` sentinels in the package that owns the operation. Name them after what failed (`ErrFailedToSendRequest = errors.New("failed to send request")`, not `ErrRequest`).
+- Each sentinel has exactly one origin return site, so the error alone pinpoints where it failed. If a condition arises in two places, define two sentinels.
 - Wrap stdlib/third-party errors as `errors.Join(ErrLocal, err)`; add context with `fmt.Errorf("%w: field=%s", ErrSentinel, value)`. Compare with `errors.Is` / `errors.As`, never by string.
 - `context.Context` is the first parameter of anything that does I/O, calls an adapter, or can block.
 
@@ -54,6 +55,6 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 
 - NEVER hand-edit generated code (`internal/pkg/mocks/`, `internal/adapter/db/`, Swagger output in `docs/`); change the source (interface, SQL, annotation) and run `make gen`.
 - NEVER run raw `go test`, `go build`, or `golangci-lint` commands; use the matching `make` target so tooling stays consistent.
-- NEVER commit secrets or `.env` files; read configuration from environment variables at startup in `cmd/server`.
+- NEVER commit secrets or `.env` files; read configuration from environment variables at startup in `cmd/wharf`.
 - NEVER import `internal/route` from `internal/service` or `internal/adapter`; pass plain domain types down the layers instead.
 - NEVER add a third-party dependency when the standard library covers the need; justify any new module in the PR description.

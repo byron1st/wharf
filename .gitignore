@@ -18,7 +18,7 @@ Thumbs.db
 *.log
 
 # Go build outputs (make build writes ./<bin> at the repo root)
-/server
+/wharf
 /bin/
 *.exe
 *.test
