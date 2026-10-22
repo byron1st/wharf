@@ -7,7 +7,36 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"regexp"
 	"strings"
+)
+
+var (
+	ErrAlreadyConnected      = errors.New("db: already connected")
+	ErrFailedToOpenDatabase  = errors.New("db: failed to open database")
+	ErrFailedToPingDatabase  = errors.New("db: failed to ping database")
+	ErrFailedToCloseDatabase = errors.New("db: failed to close database")
+
+	ErrFailedToReadMigrations           = errors.New("db: failed to read migrations")
+	ErrInvalidMigrationFileName         = errors.New("db: invalid migration file name")
+	ErrDuplicateMigrationVersion        = errors.New("db: duplicate migration version")
+	ErrFailedToReadSchemaMigrationsFile = errors.New("db: failed to read schema_migrations.sql file")
+	ErrFailedToCreateMigrationsTable    = errors.New("db: failed to create schema_migrations table")
+	ErrFailedToCheckMigrationApplied    = errors.New("db: failed to check migration applied")
+	ErrFailedToReadMigrationFile        = errors.New("db: failed to read migration file")
+	ErrFailedToBeginMigrationTx         = errors.New("db: failed to begin migration transaction")
+	ErrFailedToApplyMigration           = errors.New("db: failed to apply migration")
+	ErrFailedToRecordMigration          = errors.New("db: failed to record migration")
+	ErrFailedToCommitMigrationTx        = errors.New("db: failed to commit migration transaction")
+)
+
+// migrationFileName is "{4-digit version}_{description}.sql". The fixed-width
+// version makes file-name order the apply order.
+var migrationFileName = regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)
+
+const (
+	schemaMigrationsFile = "schema_migrations.sql"
+	migrationsDir        = "migrations"
 )
 
 // busyTimeoutPragma makes a statement wait up to 5s for a lock held by another

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"regexp"
 	"sync"
 
 	_ "modernc.org/sqlite"
@@ -14,35 +13,10 @@ import (
 
 var (
 	ErrNotConnected            = errors.New("db: not connected")
-	ErrAlreadyConnected        = errors.New("db: already connected")
-	ErrFailedToOpenDatabase    = errors.New("db: failed to open database")
-	ErrFailedToPingDatabase    = errors.New("db: failed to ping database")
-	ErrFailedToCloseDatabase   = errors.New("db: failed to close database")
 	ErrFailedToBeginTx         = errors.New("db: failed to begin transaction")
 	ErrFailedToCreateTask      = errors.New("db: failed to create task")
 	ErrFailedToCommitTx        = errors.New("db: failed to commit transaction")
 	ErrFailedToCheckTaskExists = errors.New("db: failed to check task existence")
-
-	ErrFailedToReadMigrations           = errors.New("db: failed to read migrations")
-	ErrInvalidMigrationFileName         = errors.New("db: invalid migration file name")
-	ErrDuplicateMigrationVersion        = errors.New("db: duplicate migration version")
-	ErrFailedToReadSchemaMigrationsFile = errors.New("db: failed to read schema_migrations.sql file")
-	ErrFailedToCreateMigrationsTable    = errors.New("db: failed to create schema_migrations table")
-	ErrFailedToCheckMigrationApplied    = errors.New("db: failed to check migration applied")
-	ErrFailedToReadMigrationFile        = errors.New("db: failed to read migration file")
-	ErrFailedToBeginMigrationTx         = errors.New("db: failed to begin migration transaction")
-	ErrFailedToApplyMigration           = errors.New("db: failed to apply migration")
-	ErrFailedToRecordMigration          = errors.New("db: failed to record migration")
-	ErrFailedToCommitMigrationTx        = errors.New("db: failed to commit migration transaction")
-)
-
-// migrationFileName is "{4-digit version}_{description}.sql". The fixed-width
-// version makes file-name order the apply order.
-var migrationFileName = regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)
-
-const (
-	schemaMigrationsFile = "schema_migrations.sql"
-	migrationsDir        = "migrations"
 )
 
 type Manager interface {
