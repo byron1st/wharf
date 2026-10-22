@@ -37,6 +37,7 @@ type tool struct {
 	execCmd string
 }
 
+// NewTool returns a Tool that runs execCmd, failing when it is not an executable file.
 func NewTool(execCmd string) (Tool, error) {
 	c, err := filepath.Abs(execCmd)
 	if err != nil {
@@ -55,6 +56,8 @@ func NewTool(execCmd string) (Tool, error) {
 	return &tool{execCmd: c}, nil
 }
 
+// Run executes the command in opt.Cwd and returns its stdout. The process is
+// killed when ctx is done.
 func (t *tool) Run(ctx context.Context, opt RunOption) (string, error) {
 	cwdPath, err := filepath.Abs(opt.Cwd)
 	if err != nil {

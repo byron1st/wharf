@@ -41,6 +41,11 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 - Layering is one-way: `route` → `service` → `adapter`. `cmd/wharf/main.go` only wires. No catch-all `types` or `util` package.
 - `context.Context` is the first parameter of anything that does I/O, calls an adapter, or can block.
 
+### Comments
+
+- Every exported function and method (including exported methods on unexported types) has a doc comment starting with its name.
+- Unexported functions, variables, and constants get a comment only when their intent is not obvious from the name and code.
+
 ### Errors
 
 - Expected failures are exported `Err...` sentinels in the package that owns the operation. Name them after what failed (`ErrFailedToSendRequest = errors.New("http: failed to send request")`, not `ErrRequest`).

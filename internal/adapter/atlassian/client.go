@@ -25,10 +25,14 @@ type client struct {
 	tool tool.Tool
 }
 
+// NewClient returns a Client that queries Jira through the given CLI tool.
 func NewClient(tool tool.Tool) Client {
 	return &client{tool: tool}
 }
 
+// GetMyTasks returns the Jira work items assigned to the current user that are
+// not done. Items that fail to load or convert are reported in the joined error
+// alongside the tasks that succeeded.
 func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 	keys, errs, err := c.searchKeys(ctx)
 	if err != nil {

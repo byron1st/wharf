@@ -160,6 +160,8 @@ const (
 	viewFields     = "summary,description,status,duedate,parent,subtasks,issuelinks," + startDateField
 )
 
+// JiraSearchOption returns the CLI option that searches the work items
+// assigned to the current user that are not done.
 func JiraSearchOption() tool.RunOption {
 	return tool.RunOption{
 		Cmd: "jira",
@@ -176,6 +178,8 @@ func JiraSearchOption() tool.RunOption {
 	}
 }
 
+// JiraViewOption returns the CLI option that fetches the fields of the work
+// item identified by key.
 func JiraViewOption(key string) tool.RunOption {
 	return tool.RunOption{
 		Cmd: "jira",
