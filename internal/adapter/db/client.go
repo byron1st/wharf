@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 var (
+	ErrNotConnected            = errors.New("db: not connected")
+	ErrAlreadyConnected        = errors.New("db: already connected")
 	ErrFailedToOpenDatabase    = errors.New("db: failed to open database")
 	ErrFailedToPingDatabase    = errors.New("db: failed to ping database")
 	ErrFailedToCloseDatabase   = errors.New("db: failed to close database")
@@ -58,8 +61,12 @@ type Manager interface {
 type manager struct {
 	path       string
 	migrations fs.FS
-	db         *sql.DB
-	queries    *Queries
+
+	// mu guards db and queries: Connect and Close replace them under the write
+	// lock, so Close waits for in-flight operations, which hold the read lock.
+	mu      sync.RWMutex
+	db      *sql.DB
+	queries *Queries
 }
 
 // NewManager creates a manager for the SQLite database at path. migrations
@@ -73,6 +80,13 @@ func NewManager(path string, migrations fs.FS) Manager {
 // stored or none is. A task whose ID is already stored has its other fields
 // overwritten. An empty list is a no-op.
 func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
 	if len(tasks) == 0 {
 		return nil
 	}
@@ -101,10 +115,26 @@ func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
 
 // ExistsTask reports whether a task with id is stored.
 func (m *manager) ExistsTask(ctx context.Context, id string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if err := m.checkConnected(); err != nil {
+		return false, err
+	}
+
 	exists, err := m.queries.ExistsTask(ctx, id)
 	if err != nil {
 		return false, errors.Join(ErrFailedToCheckTaskExists, err)
 	}
 
 	return exists, nil
+}
+
+// checkConnected must be called with mu held.
+func (m *manager) checkConnected() error {
+	if m.db == nil {
+		return ErrNotConnected
+	}
+
+	return nil
 }

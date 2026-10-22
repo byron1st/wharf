@@ -3,8 +3,10 @@ package db_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io/fs"
 	"path/filepath"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -228,4 +230,70 @@ func TestConnectWaitsForLockHeldByAnotherConnection(t *testing.T) {
 	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
 	require.NoError(t, <-released)
 	requireExists(t, manager, "WHF-1", true)
+}
+
+func TestMethodsRequireConnection(t *testing.T) {
+	notConnected := db.NewManager(":memory:", scripts.Migrations())
+
+	closed := newManager(t)
+	require.NoError(t, closed.Close())
+
+	for name, manager := range map[string]db.Manager{"before connect": notConnected, "after close": closed} {
+		t.Run(name, func(t *testing.T) {
+			require.ErrorIs(
+				t,
+				manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}),
+				db.ErrNotConnected,
+			)
+
+			_, err := manager.ExistsTask(context.Background(), "WHF-1")
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
+			require.NoError(t, manager.Close())
+		})
+	}
+}
+
+func TestConnectTwiceKeepsExistingConnection(t *testing.T) {
+	manager := newManager(t)
+
+	require.ErrorIs(t, manager.Connect(context.Background()), db.ErrAlreadyConnected)
+	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
+	requireExists(t, manager, "WHF-1", true)
+}
+
+func TestConnectAfterClose(t *testing.T) {
+	manager, _ := newFileManager(t, scripts.Migrations())
+	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
+	require.NoError(t, manager.Close())
+
+	require.NoError(t, manager.Connect(context.Background()))
+	requireExists(t, manager, "WHF-1", true)
+}
+
+func TestCloseWaitsForInFlightOperations(t *testing.T) {
+	manager := newManager(t)
+
+	var wg sync.WaitGroup
+
+	errs := make(chan error, 10)
+
+	for i := range 10 {
+		wg.Go(func() {
+			errs <- manager.CreateTasks(context.Background(), []db.Task{newTask(fmt.Sprintf("WHF-%d", i))})
+		})
+	}
+
+	require.NoError(t, manager.Close())
+	wg.Wait()
+	close(errs)
+
+	// Each operation either finished before Close or saw the closed manager;
+	// none hit a closed *sql.DB.
+	for err := range errs {
+		if err != nil {
+			require.ErrorIs(t, err, db.ErrNotConnected)
+		}
+	}
 }

@@ -14,8 +14,16 @@ import (
 // connection, such as another process, instead of failing with SQLITE_BUSY.
 const busyTimeoutPragma = "_pragma=busy_timeout(5000)"
 
-// Connect opens the database and verifies the connection.
+// Connect opens the database and verifies the connection. It fails with
+// ErrAlreadyConnected while a previous connection is open.
 func (m *manager) Connect(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.db != nil {
+		return ErrAlreadyConnected
+	}
+
 	separator := "?"
 	if strings.Contains(m.path, "?") {
 		separator = "&"
@@ -41,13 +49,20 @@ func (m *manager) Connect(ctx context.Context) error {
 	return nil
 }
 
-// Close closes the database connection. It is a no-op when not connected.
+// Close closes the database connection, after which Connect may be called
+// again. It is a no-op when not connected.
 func (m *manager) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.db == nil {
 		return nil
 	}
 
-	if err := m.db.Close(); err != nil {
+	err := m.db.Close()
+	m.db, m.queries = nil, nil
+
+	if err != nil {
 		return errors.Join(ErrFailedToCloseDatabase, err)
 	}
 
@@ -59,6 +74,13 @@ func (m *manager) Close() error {
 // transaction together with its record in schema_migrations, so a failed
 // migration leaves no partial change.
 func (m *manager) Migrate(ctx context.Context) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
 	migrations, err := readMigrations(m.migrations)
 	if err != nil {
 		return err
@@ -93,6 +115,7 @@ func (m *manager) Migrate(ctx context.Context) error {
 	return nil
 }
 
+// applyMigration must be called with mu held.
 func (m *manager) applyMigration(ctx context.Context, mig migration) error {
 	content, err := fs.ReadFile(m.migrations, path.Join(migrationsDir, mig.name))
 	if err != nil {

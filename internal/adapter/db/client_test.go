@@ -191,8 +191,9 @@ func TestCreateTasksBeginTxFailure(t *testing.T) {
 }
 
 func TestExistsTaskFailure(t *testing.T) {
-	manager := newManager(t)
-	require.NoError(t, manager.Close())
+	// These migrations do not create the tasks table, so the query fails.
+	manager := connect(t, withMigrations(t, map[string]string{"0001_empty.sql": "SELECT 1;"}))
+	require.NoError(t, manager.Migrate(context.Background()))
 
 	exists, err := manager.ExistsTask(context.Background(), "WHF-1")
 	require.ErrorIs(t, err, db.ErrFailedToCheckTaskExists)
