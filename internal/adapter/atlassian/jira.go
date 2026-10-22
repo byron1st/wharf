@@ -106,7 +106,7 @@ func ToStatus(name, categoryKey string) (task.Status, error) {
 }
 
 const (
-	myTasksJQL = "assignee = currentUser()"
+	myTasksJQL = "assignee = currentUser() AND statusCategory != done"
 
 	// Jira Cloud's default "Start date" field. `workitem search` rejects date
 	// fields, so they are fetched per work item with `workitem view`.

@@ -24,7 +24,7 @@ var searchOption = tool.RunOption{
 		"workitem",
 		"search",
 		"--jql",
-		"assignee = currentUser()",
+		"assignee = currentUser() AND statusCategory != done",
 		"--fields",
 		"key,summary",
 		"--paginate",
