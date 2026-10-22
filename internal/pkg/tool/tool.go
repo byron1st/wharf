@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -16,6 +17,8 @@ type Tool interface {
 
 var (
 	ErrFailedToParseExecCmdPath = errors.New("tool: failed to parse exec cmd path")
+	ErrFailedToStatExecCmd      = errors.New("tool: failed to stat exec cmd")
+	ErrExecCmdIsNotExecutable   = errors.New("tool: exec cmd is not an executable file")
 	ErrFailedToParseCwdPath     = errors.New("tool: failed to parse cwd path")
 	ErrFailedToExecuteCmd       = errors.New("tool: failed to execute cmd")
 )
@@ -38,6 +41,15 @@ func NewTool(execCmd string) (Tool, error) {
 	c, err := filepath.Abs(execCmd)
 	if err != nil {
 		return nil, errors.Join(ErrFailedToParseExecCmdPath, err)
+	}
+
+	info, err := os.Stat(c)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToStatExecCmd, c), err)
+	}
+
+	if info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+		return nil, fmt.Errorf("%w: path=%s, mode=%s", ErrExecCmdIsNotExecutable, c, info.Mode())
 	}
 
 	return &tool{execCmd: c}, nil

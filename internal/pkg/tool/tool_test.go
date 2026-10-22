@@ -3,6 +3,7 @@ package tool_test
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,8 +88,11 @@ func TestRunResolvesRelativePaths(t *testing.T) {
 }
 
 func TestRunMissingExecCmd(t *testing.T) {
-	tl, err := tool.NewTool(filepath.Join(t.TempDir(), "missing"))
+	execCmd := writeScript(t, t.TempDir())
+
+	tl, err := tool.NewTool(execCmd)
 	require.NoError(t, err)
+	require.NoError(t, os.Remove(execCmd))
 
 	_, err = tl.Run(t.Context(), tool.RunOption{Cmd: "echo", Cwd: t.TempDir()})
 	require.ErrorIs(t, err, tool.ErrFailedToExecuteCmd)
@@ -126,4 +130,42 @@ func TestRunDoesNotStartWhenContextCanceled(t *testing.T) {
 	_, err = tl.Run(ctx, tool.RunOption{Cmd: "echo", Args: []string{"a"}, Cwd: dir})
 	require.ErrorIs(t, err, tool.ErrFailedToExecuteCmd)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestNewToolMissingExecCmd(t *testing.T) {
+	tl, err := tool.NewTool(filepath.Join(t.TempDir(), "missing"))
+	require.ErrorIs(t, err, tool.ErrFailedToStatExecCmd)
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	require.Nil(t, tl)
+}
+
+func TestNewToolRejectsNonExecutable(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "plain.txt")
+	require.NoError(t, os.WriteFile(file, []byte("not a script"), 0o644))
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{name: "file without exec permission", path: file},
+		{name: "directory", path: dir},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tl, err := tool.NewTool(tt.path)
+			require.ErrorIs(t, err, tool.ErrExecCmdIsNotExecutable)
+			require.ErrorContains(t, err, "path="+tt.path)
+			require.Nil(t, tl)
+		})
+	}
+}
+
+func TestNewToolAcceptsAnyExecBit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "owner-only.sh")
+	require.NoError(t, os.WriteFile(path, []byte(fakeScript), 0o700))
+
+	_, err := tool.NewTool(path)
+	require.NoError(t, err)
 }
