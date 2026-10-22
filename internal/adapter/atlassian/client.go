@@ -15,9 +15,6 @@ var (
 	ErrMissingWorkItemKey        = errors.New("atlassian: missing work item key")
 	ErrGetMyTasksCanceled        = errors.New("atlassian: get my tasks canceled")
 	ErrFailedToParseViewOutput   = errors.New("atlassian: failed to parse view output")
-	ErrUnknownStatusCategory     = errors.New("atlassian: unknown status category")
-	ErrFailedToParseStartDate    = errors.New("atlassian: failed to parse start date")
-	ErrFailedToParseDueDate      = errors.New("atlassian: failed to parse due date")
 )
 
 type Client interface {
@@ -86,7 +83,7 @@ func (c *client) searchKeys(ctx context.Context) ([]string, error) {
 }
 
 func (c *client) viewWorkItem(ctx context.Context, key string) (ViewWorkItem, error) {
-	out, err := c.tool.Run(ctx, JiraWorkOption(key))
+	out, err := c.tool.Run(ctx, JiraViewOption(key))
 	if err != nil {
 		return ViewWorkItem{}, fmt.Errorf("%w: key=%s", err, key)
 	}

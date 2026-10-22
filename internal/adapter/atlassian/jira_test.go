@@ -38,7 +38,7 @@ func TestToStatus(t *testing.T) {
 	tests := []struct {
 		name        string
 		statusName  string
-		categoryKey string
+		categoryKey atlassian.StatusCategoryKey
 		want        task.Status
 	}{
 		{name: "new is todo", statusName: "To Do", categoryKey: "new", want: task.StatusTodo},
@@ -77,7 +77,7 @@ func TestToStatusUnknownCategory(t *testing.T) {
 	tests := []struct {
 		name        string
 		statusName  string
-		categoryKey string
+		categoryKey atlassian.StatusCategoryKey
 	}{
 		{name: "undefined category", statusName: "Triage", categoryKey: "undefined"},
 		{name: "empty category", statusName: "", categoryKey: ""},
@@ -88,7 +88,7 @@ func TestToStatusUnknownCategory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			status, err := atlassian.ToStatus(tt.statusName, tt.categoryKey)
 			require.ErrorIs(t, err, atlassian.ErrUnknownStatusCategory)
-			require.ErrorContains(t, err, "status="+tt.statusName+", category="+tt.categoryKey)
+			require.ErrorContains(t, err, "status="+tt.statusName+", category="+string(tt.categoryKey))
 			require.Empty(t, status)
 		})
 	}
@@ -232,7 +232,7 @@ func TestToTaskDescription(t *testing.T) {
 
 func TestJiraRunOptions(t *testing.T) {
 	require.Equal(t, searchOption, atlassian.JiraSearchOption())
-	require.Equal(t, viewOption("WHF-1"), atlassian.JiraWorkOption("WHF-1"))
+	require.Equal(t, viewOption("WHF-1"), atlassian.JiraViewOption("WHF-1"))
 }
 
 func TestJiraRunOptionsReturnFreshValues(t *testing.T) {
@@ -241,8 +241,8 @@ func TestJiraRunOptionsReturnFreshValues(t *testing.T) {
 
 	require.Equal(t, searchOption, atlassian.JiraSearchOption())
 
-	view := atlassian.JiraWorkOption("WHF-1")
+	view := atlassian.JiraViewOption("WHF-1")
 	view.Args[0] = "mutated"
 
-	require.Equal(t, viewOption("WHF-1"), atlassian.JiraWorkOption("WHF-1"))
+	require.Equal(t, viewOption("WHF-1"), atlassian.JiraViewOption("WHF-1"))
 }

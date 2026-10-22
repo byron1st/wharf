@@ -10,6 +10,12 @@ import (
 	"github.com/byron1st/wharf/internal/pkg/tool"
 )
 
+var (
+	ErrUnknownStatusCategory  = errors.New("atlassian: unknown status category")
+	ErrFailedToParseStartDate = errors.New("atlassian: failed to parse start date")
+	ErrFailedToParseDueDate   = errors.New("atlassian: failed to parse due date")
+)
+
 type SearchItem struct {
 	Key string `json:"key"`
 }
@@ -22,7 +28,7 @@ type ViewWorkItem struct {
 		Status      struct {
 			Name           string `json:"name"`
 			StatusCategory struct {
-				Key string `json:"key"`
+				Key StatusCategoryKey `json:"key"`
 			} `json:"statusCategory"`
 		} `json:"status"`
 		DueDate   string `json:"duedate"`
@@ -77,9 +83,9 @@ func parseDate(value string) (*time.Time, error) {
 type StatusCategoryKey string
 
 const (
-	StatusCategoryKeyNew          StatusCategoryKey = "new"
-	StatusCategoryKeyIntermediate StatusCategoryKey = "indeterminate"
-	StatusCategoryKeyDone         StatusCategoryKey = "done"
+	StatusCategoryKeyNew           StatusCategoryKey = "new"
+	StatusCategoryKeyIndeterminate StatusCategoryKey = "indeterminate"
+	StatusCategoryKeyDone          StatusCategoryKey = "done"
 )
 
 const (
@@ -88,15 +94,15 @@ const (
 
 // ToStatus maps Jira status categories to task statuses. Jira has no
 // "canceled" category, so the Canceled status (category done) is matched by name.
-func ToStatus(name, categoryKey string) (task.Status, error) {
+func ToStatus(name string, categoryKey StatusCategoryKey) (task.Status, error) {
 	if name == StatusNameCanceled {
 		return task.StatusCanceled, nil
 	}
 
-	switch StatusCategoryKey(categoryKey) {
+	switch categoryKey {
 	case StatusCategoryKeyNew:
 		return task.StatusTodo, nil
-	case StatusCategoryKeyIntermediate:
+	case StatusCategoryKeyIndeterminate:
 		return task.StatusInProgress, nil
 	case StatusCategoryKeyDone:
 		return task.StatusDone, nil
@@ -130,7 +136,7 @@ func JiraSearchOption() tool.RunOption {
 	}
 }
 
-func JiraWorkOption(key string) tool.RunOption {
+func JiraViewOption(key string) tool.RunOption {
 	return tool.RunOption{
 		Cmd: "jira",
 		Args: []string{
