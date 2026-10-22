@@ -1,0 +1,3 @@
+{
+  "install": "set -e; rm -rf \"$HOME/personal-harness\" && git clone --depth 1 https://github.com/byron1st/personal-harness \"$HOME/personal-harness\" && cd \"$HOME/personal-harness\" && ./scripts/apply-to.sh cursor && cd - && go mod download"
+}
