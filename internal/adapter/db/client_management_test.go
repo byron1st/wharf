@@ -152,7 +152,7 @@ func TestMigrateFailures(t *testing.T) {
 		{
 			name:       "missing schema_migrations.sql",
 			migrations: fstest.MapFS{"migrations/0001_create.sql": {Data: []byte("SELECT 1;")}},
-			wantErr:    db.ErrFailedToReadMigrationsTable,
+			wantErr:    db.ErrFailedToReadSchemaMigrationsFile,
 		},
 		{
 			name: "invalid schema_migrations.sql",

@@ -88,7 +88,7 @@ func (m *manager) Migrate(ctx context.Context) error {
 
 	schema, err := fs.ReadFile(m.migrations, schemaMigrationsFile)
 	if err != nil {
-		return errors.Join(ErrFailedToReadMigrationsTable, err)
+		return errors.Join(ErrFailedToReadSchemaMigrationsFile, err)
 	}
 
 	// The file uses CREATE TABLE IF NOT EXISTS, so it is applied on every
