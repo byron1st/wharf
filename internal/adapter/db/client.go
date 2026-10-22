@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"sync"
 
 	_ "modernc.org/sqlite"
 )
@@ -35,17 +34,14 @@ type Manager interface {
 type manager struct {
 	path       string
 	migrations fs.FS
-
-	// mu guards db and queries: Connect and Close replace them under the write
-	// lock, so Close waits for in-flight operations, which hold the read lock.
-	mu      sync.RWMutex
-	db      *sql.DB
-	queries *Queries
+	db         *sql.DB
+	queries    *Queries
 }
 
 // NewManager creates a manager for the SQLite database at path. migrations
 // holds schema_migrations.sql and the migrations directory at its root. Call
-// Connect before using it.
+// Connect before using it. Connect and Close are meant for program start and
+// shutdown and must not run concurrently with other methods.
 func NewManager(path string, migrations fs.FS) Manager {
 	return &manager{path: path, migrations: migrations}
 }
@@ -55,9 +51,6 @@ func NewManager(path string, migrations fs.FS) Manager {
 // overwritten. Empty ChildrenIds and LinkedIds are stored as "[]" so the
 // columns always hold a JSON array. An empty list is a no-op.
 func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	if err := m.checkConnected(); err != nil {
 		return err
 	}
@@ -94,9 +87,6 @@ func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
 
 // ExistsTask reports whether a task with id is stored.
 func (m *manager) ExistsTask(ctx context.Context, id string) (bool, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	if err := m.checkConnected(); err != nil {
 		return false, err
 	}
@@ -109,7 +99,6 @@ func (m *manager) ExistsTask(ctx context.Context, id string) (bool, error) {
 	return exists, nil
 }
 
-// checkConnected must be called with mu held.
 func (m *manager) checkConnected() error {
 	if m.db == nil {
 		return ErrNotConnected

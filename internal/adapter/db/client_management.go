@@ -12,11 +12,10 @@ import (
 )
 
 var (
-	ErrAlreadyConnected      = errors.New("db: already connected")
-	ErrFailedToOpenDatabase  = errors.New("db: failed to open database")
-	ErrFailedToPingDatabase  = errors.New("db: failed to ping database")
-	ErrFailedToCloseDatabase = errors.New("db: failed to close database")
-
+	ErrAlreadyConnected                 = errors.New("db: already connected")
+	ErrFailedToOpenDatabase             = errors.New("db: failed to open database")
+	ErrFailedToPingDatabase             = errors.New("db: failed to ping database")
+	ErrFailedToCloseDatabase            = errors.New("db: failed to close database")
 	ErrFailedToReadMigrations           = errors.New("db: failed to read migrations")
 	ErrInvalidMigrationFileName         = errors.New("db: invalid migration file name")
 	ErrDuplicateMigrationVersion        = errors.New("db: duplicate migration version")
@@ -50,9 +49,6 @@ const busyTimeoutPragma = "_pragma=busy_timeout(5000)"
 // Connect opens the database and verifies the connection. It fails with
 // ErrAlreadyConnected while a previous connection is open.
 func (m *manager) Connect(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if m.db != nil {
 		return ErrAlreadyConnected
 	}
@@ -85,9 +81,6 @@ func (m *manager) Connect(ctx context.Context) error {
 // Close closes the database connection, after which Connect may be called
 // again. It is a no-op when not connected.
 func (m *manager) Close() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if m.db == nil {
 		return nil
 	}
@@ -107,9 +100,6 @@ func (m *manager) Close() error {
 // transaction together with its record in schema_migrations, so a failed
 // migration leaves no partial change.
 func (m *manager) Migrate(ctx context.Context) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	if err := m.checkConnected(); err != nil {
 		return err
 	}
@@ -148,7 +138,6 @@ func (m *manager) Migrate(ctx context.Context) error {
 	return nil
 }
 
-// applyMigration must be called with mu held.
 func (m *manager) applyMigration(ctx context.Context, mig migration) error {
 	content, err := fs.ReadFile(m.migrations, path.Join(migrationsDir, mig.name))
 	if err != nil {

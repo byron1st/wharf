@@ -3,10 +3,8 @@ package db_test
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"io/fs"
 	"path/filepath"
-	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -270,30 +268,4 @@ func TestConnectAfterClose(t *testing.T) {
 
 	require.NoError(t, manager.Connect(context.Background()))
 	requireExists(t, manager, "WHF-1", true)
-}
-
-func TestCloseWaitsForInFlightOperations(t *testing.T) {
-	manager := newManager(t)
-
-	var wg sync.WaitGroup
-
-	errs := make(chan error, 10)
-
-	for i := range 10 {
-		wg.Go(func() {
-			errs <- manager.CreateTasks(context.Background(), []db.Task{newTask(fmt.Sprintf("WHF-%d", i))})
-		})
-	}
-
-	require.NoError(t, manager.Close())
-	wg.Wait()
-	close(errs)
-
-	// Each operation either finished before Close or saw the closed manager;
-	// none hit a closed *sql.DB.
-	for err := range errs {
-		if err != nil {
-			require.ErrorIs(t, err, db.ErrNotConnected)
-		}
-	}
 }
