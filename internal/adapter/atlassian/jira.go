@@ -151,6 +151,11 @@ func JiraViewOption(key string) tool.RunOption {
 }
 
 // TODO: Convert ADF to Markdown
+//   - Render date nodes from attrs.timestamp (epoch milliseconds); they are
+//     dropped today.
+//   - Render status and emoji nodes from attrs.text; they are dropped today.
+//   - Keep list and task markers (`- `, `1. `, `[x]`/`[ ]` from taskItem
+//     attrs.state) so items stay distinguishable.
 
 // adfNode is a node of the Atlassian Document Format that Jira uses for rich
 // text fields such as description.
