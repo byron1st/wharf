@@ -187,7 +187,7 @@ func TestGetMyTasksViewErrors(t *testing.T) {
 			tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 			require.ErrorIs(t, err, tt.wantErr)
 			require.ErrorContains(t, err, "key=WHF-1")
-			require.Nil(t, tasks)
+			require.Empty(t, tasks)
 		})
 	}
 }
@@ -278,7 +278,7 @@ func TestGetMyTasksKeepsSearchErrorsWhenViewFails(t *testing.T) {
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 	require.ErrorIs(t, err, atlassian.ErrFailedToParseViewOutput)
 	require.ErrorIs(t, err, atlassian.ErrMissingWorkItemKey)
-	require.Nil(t, tasks)
+	require.Empty(t, tasks)
 }
 
 func TestGetMyTasksStopsViewingWhenContextCanceled(t *testing.T) {
@@ -314,14 +314,28 @@ func TestGetMyTasksStopsWhenContextCanceledBetweenViews(t *testing.T) {
 	require.Nil(t, tasks)
 }
 
-func TestGetMyTasksDiscardsConvertedTasksWhenLaterViewFails(t *testing.T) {
+func TestGetMyTasksKeepsOtherTasksWhenViewFails(t *testing.T) {
 	m := mocks.NewMockTool(t)
 	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search.json"), nil).Once()
 	m.EXPECT().Run(mock.Anything, viewOption("WHF-1")).Return(fixture(t, "view_unknown_status.json"), nil).Once()
 	m.EXPECT().Run(mock.Anything, viewOption("WHF-2")).Return("", tool.ErrFailedToExecuteCmd).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-3")).Return("Key: WHF-3\n", nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-4")).Return(fixture(t, "view_canceled.json"), nil).Once()
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
+	require.Equal(t, []task.Task{
+		{ID: "WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
+		{
+			ID:          "WHF-4",
+			Originated:  task.OriginJira,
+			Title:       "Migrate legacy cron jobs",
+			Description: "Superseded by WHF-2.",
+			Status:      task.StatusCanceled,
+		},
+	}, tasks)
+	require.ErrorIs(t, err, atlassian.ErrUnknownStatusCategory)
 	require.ErrorIs(t, err, tool.ErrFailedToExecuteCmd)
 	require.ErrorContains(t, err, "key=WHF-2")
-	require.Nil(t, tasks)
+	require.ErrorIs(t, err, atlassian.ErrFailedToParseViewOutput)
+	require.ErrorContains(t, err, "key=WHF-3")
 }

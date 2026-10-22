@@ -48,7 +48,8 @@ func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 
 		item, err := c.viewWorkItem(ctx, key)
 		if err != nil {
-			return nil, errors.Join(append(errs, err)...)
+			errs = append(errs, err)
+			continue
 		}
 
 		t, err := ToTask(item)
