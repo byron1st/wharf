@@ -31,9 +31,23 @@ type ViewWorkItem struct {
 				Key StatusCategoryKey `json:"key"`
 			} `json:"statusCategory"`
 		} `json:"status"`
-		DueDate   string `json:"duedate"`
-		StartDate string `json:"customfield_10015"`
+		DueDate    string       `json:"duedate"`
+		StartDate  string       `json:"customfield_10015"`
+		Parent     *LinkedItem  `json:"parent"`
+		Subtasks   []LinkedItem `json:"subtasks"`
+		IssueLinks []IssueLink  `json:"issuelinks"`
 	} `json:"fields"`
+}
+
+type LinkedItem struct {
+	Key string `json:"key"`
+}
+
+// IssueLink holds the other side of a link in either inwardIssue or
+// outwardIssue, depending on the link direction.
+type IssueLink struct {
+	InwardIssue  *LinkedItem `json:"inwardIssue"`
+	OutwardIssue *LinkedItem `json:"outwardIssue"`
 }
 
 // ToTask converts a work item even when some fields are invalid: invalid
@@ -56,6 +70,29 @@ func ToTask(item ViewWorkItem) (task.Task, error) {
 		dueDateErr = errors.Join(fmt.Errorf("%w: key=%s", ErrFailedToParseDueDate, item.Key), dueDateErr)
 	}
 
+	var parentID string
+	if f.Parent != nil {
+		parentID = f.Parent.Key
+	}
+
+	var childrenIDs []string
+
+	for _, subtask := range f.Subtasks {
+		if subtask.Key != "" {
+			childrenIDs = append(childrenIDs, subtask.Key)
+		}
+	}
+
+	var linkedIDs []string
+
+	for _, link := range f.IssueLinks {
+		for _, linked := range []*LinkedItem{link.InwardIssue, link.OutwardIssue} {
+			if linked != nil && linked.Key != "" {
+				linkedIDs = append(linkedIDs, linked.Key)
+			}
+		}
+	}
+
 	return task.Task{
 		ID:          item.Key,
 		Originated:  task.OriginJira,
@@ -64,6 +101,9 @@ func ToTask(item ViewWorkItem) (task.Task, error) {
 		Status:      status,
 		StartDate:   startDate,
 		DueDate:     dueDate,
+		ParentID:    parentID,
+		ChildrenIDs: childrenIDs,
+		LinkedIDs:   linkedIDs,
 	}, errors.Join(statusErr, startDateErr, dueDateErr)
 }
 
@@ -117,7 +157,7 @@ const (
 	// Jira Cloud's default "Start date" field. `workitem search` rejects date
 	// fields, so they are fetched per work item with `workitem view`.
 	startDateField = "customfield_10015"
-	viewFields     = "summary,description,status,duedate," + startDateField
+	viewFields     = "summary,description,status,duedate,parent,subtasks,issuelinks," + startDateField
 )
 
 func JiraSearchOption() tool.RunOption {

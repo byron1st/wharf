@@ -10,4 +10,7 @@ type Task struct {
 	Status      Status
 	StartDate   *time.Time
 	DueDate     *time.Time
+	ParentID    string
+	ChildrenIDs []string
+	LinkedIDs   []string
 }

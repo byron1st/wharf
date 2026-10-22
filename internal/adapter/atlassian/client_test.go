@@ -40,7 +40,7 @@ func viewOption(key string) tool.RunOption {
 			"view",
 			key,
 			"--fields",
-			"summary,description,status,duedate,customfield_10015",
+			"summary,description,status,duedate,parent,subtasks,issuelinks,customfield_10015",
 			"--json",
 		},
 	}
@@ -94,9 +94,12 @@ func TestGetMyTasks(t *testing.T) {
 				"Owner: @Jane Doe see https://example.atlassian.net/browse/WHF-1\n" +
 				"line one\nline two\n" +
 				"acli jira workitem search \\\n  --json",
-			Status:    task.StatusInProgress,
-			StartDate: date(t, "2026-10-01"),
-			DueDate:   date(t, "2026-10-31"),
+			Status:      task.StatusInProgress,
+			StartDate:   date(t, "2026-10-01"),
+			DueDate:     date(t, "2026-10-31"),
+			ParentID:    "WHF-10",
+			ChildrenIDs: []string{"WHF-5", "WHF-6"},
+			LinkedIDs:   []string{"WHF-1", "WHF-3"},
 		},
 		{
 			ID:          "WHF-3",

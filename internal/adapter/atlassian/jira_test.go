@@ -120,6 +120,70 @@ func TestToTaskWithoutOptionalFields(t *testing.T) {
 	}, got)
 }
 
+func TestToTaskRelations(t *testing.T) {
+	tests := []struct {
+		name            string
+		fields          string
+		wantParentID    string
+		wantChildrenIDs []string
+		wantLinkedIDs   []string
+	}{
+		{name: "no relations", fields: `"parent": null, "subtasks": [], "issuelinks": []`},
+		{
+			name:         "parent key",
+			fields:       `"parent": {"id": "10100", "key": "WHF-10", "fields": {"summary": "Task sync"}}`,
+			wantParentID: "WHF-10",
+		},
+		{
+			name: "subtask keys keep their order",
+			fields: `"subtasks": [
+				{"id": "10106", "key": "WHF-6", "fields": {"summary": "Store synced tasks"}},
+				{"id": "10105", "key": "WHF-5", "fields": {"summary": "Add sync scheduler"}}
+			]`,
+			wantChildrenIDs: []string{"WHF-6", "WHF-5"},
+		},
+		{
+			name:            "subtasks without a key are skipped",
+			fields:          `"subtasks": [{"id": "10105"}, {"id": "10106", "key": "WHF-6"}]`,
+			wantChildrenIDs: []string{"WHF-6"},
+		},
+		{
+			name: "links in both directions keep their order",
+			fields: `"issuelinks": [
+				{"id": "1", "type": {"name": "Blocks"}, "outwardIssue": {"key": "WHF-3"}},
+				{"id": "2", "type": {"name": "Relates"}, "inwardIssue": {"key": "WHF-2"}}
+			]`,
+			wantLinkedIDs: []string{"WHF-3", "WHF-2"},
+		},
+		{
+			name: "links without a key are skipped",
+			fields: `"issuelinks": [
+				{"id": "1", "type": {"name": "Relates"}},
+				{"id": "2", "type": {"name": "Relates"}, "inwardIssue": {"key": ""}},
+				{"id": "3", "type": {"name": "Relates"}, "inwardIssue": {"key": "WHF-2"}}
+			]`,
+			wantLinkedIDs: []string{"WHF-2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := atlassian.ToTask(viewWorkItem(t, `{
+				"key": "WHF-1",
+				"fields": {
+					"summary": "Write onboarding guide",
+					"status": {"name": "To Do", "statusCategory": {"key": "new"}},
+					`+tt.fields+`
+				}
+			}`))
+			require.NoError(t, err)
+			require.Equal(t, tt.wantParentID, got.ParentID)
+			require.Equal(t, tt.wantChildrenIDs, got.ChildrenIDs)
+			require.Equal(t, tt.wantLinkedIDs, got.LinkedIDs)
+		})
+	}
+}
+
 func TestToTaskInvalidFields(t *testing.T) {
 	got, err := atlassian.ToTask(viewWorkItem(t, fixture(t, "view_invalid_fields.json")))
 	require.Equal(t, task.Task{

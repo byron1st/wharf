@@ -234,6 +234,60 @@
       "version": 1
     },
     "duedate": "2026-10-31",
+    "issuelinks": [
+      {
+        "id": "20001",
+        "inwardIssue": {
+          "fields": {
+            "summary": "Write onboarding guide"
+          },
+          "id": "10101",
+          "key": "WHF-1",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10101"
+        },
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20001",
+        "type": {
+          "id": "10000",
+          "inward": "is blocked by",
+          "name": "Blocks",
+          "outward": "blocks",
+          "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10000"
+        }
+      },
+      {
+        "id": "20002",
+        "outwardIssue": {
+          "fields": {
+            "summary": "Fix flaky login test"
+          },
+          "id": "10103",
+          "key": "WHF-3",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10103"
+        },
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20002",
+        "type": {
+          "id": "10003",
+          "inward": "relates to",
+          "name": "Relates",
+          "outward": "relates to",
+          "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10003"
+        }
+      }
+    ],
+    "parent": {
+      "fields": {
+        "issuetype": {
+          "hierarchyLevel": 1,
+          "id": "10000",
+          "name": "Epic",
+          "subtask": false
+        },
+        "summary": "Task sync"
+      },
+      "id": "10100",
+      "key": "WHF-10",
+      "self": "https://example.atlassian.net/rest/api/3/issue/10100"
+    },
     "status": {
       "description": "",
       "iconUrl": "https://example.atlassian.net/images/icons/status_generic.gif",
@@ -248,6 +302,36 @@
         "self": "https://example.atlassian.net/rest/api/3/statuscategory/4"
       }
     },
+    "subtasks": [
+      {
+        "fields": {
+          "issuetype": {
+            "hierarchyLevel": -1,
+            "id": "10086",
+            "name": "Sub-task",
+            "subtask": true
+          },
+          "summary": "Add sync scheduler"
+        },
+        "id": "10105",
+        "key": "WHF-5",
+        "self": "https://example.atlassian.net/rest/api/3/issue/10105"
+      },
+      {
+        "fields": {
+          "issuetype": {
+            "hierarchyLevel": -1,
+            "id": "10086",
+            "name": "Sub-task",
+            "subtask": true
+          },
+          "summary": "Store synced tasks"
+        },
+        "id": "10106",
+        "key": "WHF-6",
+        "self": "https://example.atlassian.net/rest/api/3/issue/10106"
+      }
+    ],
     "summary": "Implement Jira sync"
   },
   "fieldsToInclude": null,
