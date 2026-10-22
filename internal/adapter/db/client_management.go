@@ -41,6 +41,10 @@ const (
 
 // busyTimeoutPragma makes a statement wait up to 5s for a lock held by another
 // connection, such as another process, instead of failing with SQLITE_BUSY.
+// It does not help a transaction that reads before it writes: BeginTx starts a
+// DEFERRED transaction, and SQLite fails its upgrade to a write lock with
+// SQLITE_BUSY at once to avoid a deadlock. Transactions here therefore start
+// with a write.
 const busyTimeoutPragma = "_pragma=busy_timeout(5000)"
 
 // Connect opens the database and verifies the connection. It fails with
