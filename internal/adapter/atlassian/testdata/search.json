@@ -1,0 +1,78 @@
+[
+  {
+    "changelog": null,
+    "editmeta": null,
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "fields": {
+      "summary": "Write onboarding guide"
+    },
+    "fieldsToInclude": null,
+    "id": "10101",
+    "key": "WHF-1",
+    "names": null,
+    "operations": null,
+    "properties": null,
+    "renderedFields": null,
+    "schema": null,
+    "self": "https://example.atlassian.net/rest/api/3/issue/10101",
+    "transitions": null,
+    "versionedRepresentations": null
+  },
+  {
+    "changelog": null,
+    "editmeta": null,
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "fields": {
+      "summary": "Implement Jira sync"
+    },
+    "fieldsToInclude": null,
+    "id": "10102",
+    "key": "WHF-2",
+    "names": null,
+    "operations": null,
+    "properties": null,
+    "renderedFields": null,
+    "schema": null,
+    "self": "https://example.atlassian.net/rest/api/3/issue/10102",
+    "transitions": null,
+    "versionedRepresentations": null
+  },
+  {
+    "changelog": null,
+    "editmeta": null,
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "fields": {
+      "summary": "Fix flaky login test"
+    },
+    "fieldsToInclude": null,
+    "id": "10103",
+    "key": "WHF-3",
+    "names": null,
+    "operations": null,
+    "properties": null,
+    "renderedFields": null,
+    "schema": null,
+    "self": "https://example.atlassian.net/rest/api/3/issue/10103",
+    "transitions": null,
+    "versionedRepresentations": null
+  },
+  {
+    "changelog": null,
+    "editmeta": null,
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "fields": {
+      "summary": "Migrate legacy cron jobs"
+    },
+    "fieldsToInclude": null,
+    "id": "10104",
+    "key": "WHF-4",
+    "names": null,
+    "operations": null,
+    "properties": null,
+    "renderedFields": null,
+    "schema": null,
+    "self": "https://example.atlassian.net/rest/api/3/issue/10104",
+    "transitions": null,
+    "versionedRepresentations": null
+  }
+]

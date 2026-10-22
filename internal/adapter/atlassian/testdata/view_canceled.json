@@ -1,0 +1,53 @@
+{
+  "changelog": null,
+  "editmeta": null,
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "fields": {
+    "customfield_10015": null,
+    "description": {
+      "content": [
+        {
+          "attrs": {
+            "localId": "p1"
+          },
+          "content": [
+            {
+              "text": "Superseded by WHF-2.",
+              "type": "text"
+            }
+          ],
+          "type": "paragraph"
+        }
+      ],
+      "type": "doc",
+      "version": 1
+    },
+    "duedate": null,
+    "status": {
+      "description": "",
+      "iconUrl": "https://example.atlassian.net/images/icons/status_generic.gif",
+      "id": "10051",
+      "name": "Canceled",
+      "self": "https://example.atlassian.net/rest/api/3/status/10051",
+      "statusCategory": {
+        "colorName": "green",
+        "id": 3,
+        "key": "done",
+        "name": "Done",
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/3"
+      }
+    },
+    "summary": "Migrate legacy cron jobs"
+  },
+  "fieldsToInclude": null,
+  "id": "10104",
+  "key": "WHF-4",
+  "names": null,
+  "operations": null,
+  "properties": null,
+  "renderedFields": null,
+  "schema": null,
+  "self": "https://example.atlassian.net/rest/api/3/issue/10104",
+  "transitions": null,
+  "versionedRepresentations": null
+}
