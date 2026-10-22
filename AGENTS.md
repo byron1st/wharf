@@ -33,6 +33,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 - `internal/pkg/<topic>/`: Module-private shared code. `internal/pkg/mocks/` holds generated mocks.
 - `pkg/<topic>/`: Public, importable contracts (only when something must be shared outside the module).
 - `scripts/`: Tooling config such as `sqlc.yaml`, SQL schema, and queries.
+- `scripts/migrations/`: SQL migrations named `{4-digit version}_{snake_case description}.sql` (e.g. `0002_add_task_index.sql`); `db.Manager.Migrate` applies them in version order and never re-applies one, so never edit or renumber an applied migration — add a new one.
 - `docs/`: Generated Swagger output and project documentation.
 - `tests/e2e/`: End-to-end tests against a running server.
 

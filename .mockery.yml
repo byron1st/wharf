@@ -4,6 +4,9 @@ pkgname: mocks
 filename: "{{.SrcPackageName}}_{{.InterfaceName | lower}}.go"
 structname: "{{.Mock}}{{.InterfaceName}}"
 packages:
+  github.com/byron1st/wharf/internal/adapter/db:
+    interfaces:
+      Manager:
   github.com/byron1st/wharf/internal/pkg/tool:
     interfaces:
       Tool:
