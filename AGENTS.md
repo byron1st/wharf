@@ -29,7 +29,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 - `cmd/wharf/`: Entry point; wires config, adapters, services, and routes only.
 - `internal/route/`: HTTP handlers and Swagger annotations; translates requests/responses and calls services.
 - `internal/service/`: Business logic; depends on adapter interfaces, never on HTTP types.
-- `internal/adapter/`: External I/O (database, third-party APIs). `internal/adapter/db/` holds sqlc output.
+- `internal/adapter/`: External I/O (database, third-party APIs). `internal/adapter/db/` holds sqlc output (`db.go`, `models.go`, `queries.sql.go`) next to the hand-written `db.Manager` (`client.go`, `client_management.go`).
 - `internal/pkg/<topic>/`: Module-private shared code. `internal/pkg/mocks/` holds generated mocks.
 - `pkg/<topic>/`: Public, importable contracts (only when something must be shared outside the module).
 - `scripts/`: Tooling config such as `sqlc.yaml`, SQL schema, and queries. Its Go package (`scripts.Migrations()`) embeds `schema_migrations.sql` and `migrations/` for `db.NewManager`, since `go:embed` cannot reach files outside the package directory.
@@ -63,7 +63,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 
 ## Boundaries
 
-- NEVER hand-edit generated code (`internal/pkg/mocks/`, `internal/adapter/db/`, Swagger output in `docs/`); change the source (interface, SQL, annotation) and run `make gen`.
+- NEVER hand-edit generated code (`internal/pkg/mocks/`, sqlc output `internal/adapter/db/{db,models,queries.sql}.go`, Swagger output in `docs/`); change the source (interface, SQL, annotation) and run `make gen`.
 - NEVER run raw `go test`, `go build`, or `golangci-lint` commands; use the matching `make` target so tooling stays consistent.
 - NEVER commit secrets or `.env` files; read configuration from environment variables at startup in `cmd/wharf`.
 - NEVER import `internal/route` from `internal/service` or `internal/adapter`; pass plain domain types down the layers instead.
