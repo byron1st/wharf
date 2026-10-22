@@ -1,13 +1,35 @@
+# .golangci.yml (golangci-lint v2)
 version: "2"
-
 linters:
   enable:
     - wsl_v5
+  settings:
+    staticcheck:
+      checks:
+        - "all"
+        - "-ST1000"
+        - "-ST1003"
+        - "-ST1016"
+        - "-ST1020"
+        - "-ST1021"
+        - "-ST1022"
+        - "-QF1008"
+    wsl_v5:
+      default: default        # 기본 체크 세트 유지
+      enable:
+        - after-block         # } 뒤에는 항상 빈 줄
+      branch-max-lines: 2
 
 formatters:
   enable:
+    - gofumpt        # 선택: gofmt보다 엄격한 포맷
     - golines
-    - swaggo
   settings:
     golines:
       max-len: 120
+      tab-len: 4
+      shorten-comments: false
+      reformat-tags: false
+      chain-split-dots: true
+  exclusions:
+    generated: lax   # "Code generated ... DO NOT EDIT" 헤더가 있는 파일은 건너뜀
