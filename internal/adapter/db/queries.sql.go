@@ -19,43 +19,6 @@ func (q *Queries) CreateSchemaMigration(ctx context.Context, version string) err
 	return err
 }
 
-const createTask = `-- name: CreateTask :exec
-INSERT INTO tasks (
-    id, originated, title, description, status, start_date, due_date, parent_id, children_ids, linked_ids
-) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-)
-`
-
-type CreateTaskParams struct {
-	ID          string
-	Originated  string
-	Title       string
-	Description string
-	Status      string
-	StartDate   sql.NullTime
-	DueDate     sql.NullTime
-	ParentID    string
-	ChildrenIds string
-	LinkedIds   string
-}
-
-func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
-	_, err := q.db.ExecContext(ctx, createTask,
-		arg.ID,
-		arg.Originated,
-		arg.Title,
-		arg.Description,
-		arg.Status,
-		arg.StartDate,
-		arg.DueDate,
-		arg.ParentID,
-		arg.ChildrenIds,
-		arg.LinkedIds,
-	)
-	return err
-}
-
 const existsSchemaMigration = `-- name: ExistsSchemaMigration :one
 SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = ?)
 `
@@ -76,4 +39,51 @@ func (q *Queries) ExistsTask(ctx context.Context, id string) (bool, error) {
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const upsertTask = `-- name: UpsertTask :exec
+INSERT INTO tasks (
+    id, originated, title, description, status, start_date, due_date, parent_id, children_ids, linked_ids
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+ON CONFLICT (id) DO UPDATE SET
+    originated   = excluded.originated,
+    title        = excluded.title,
+    description  = excluded.description,
+    status       = excluded.status,
+    start_date   = excluded.start_date,
+    due_date     = excluded.due_date,
+    parent_id    = excluded.parent_id,
+    children_ids = excluded.children_ids,
+    linked_ids   = excluded.linked_ids
+`
+
+type UpsertTaskParams struct {
+	ID          string
+	Originated  string
+	Title       string
+	Description string
+	Status      string
+	StartDate   sql.NullTime
+	DueDate     sql.NullTime
+	ParentID    string
+	ChildrenIds string
+	LinkedIds   string
+}
+
+func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) error {
+	_, err := q.db.ExecContext(ctx, upsertTask,
+		arg.ID,
+		arg.Originated,
+		arg.Title,
+		arg.Description,
+		arg.Status,
+		arg.StartDate,
+		arg.DueDate,
+		arg.ParentID,
+		arg.ChildrenIds,
+		arg.LinkedIds,
+	)
+	return err
 }

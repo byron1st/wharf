@@ -70,7 +70,8 @@ func NewManager(path string, migrations fs.FS) Manager {
 }
 
 // CreateTasks stores all tasks in one transaction: either every task is
-// stored or none is. An empty list is a no-op.
+// stored or none is. A task whose ID is already stored has its other fields
+// overwritten. An empty list is a no-op.
 func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
 	if len(tasks) == 0 {
 		return nil
@@ -86,7 +87,7 @@ func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
 
 	queries := m.queries.WithTx(tx)
 	for _, task := range tasks {
-		if err := queries.CreateTask(ctx, CreateTaskParams(task)); err != nil {
+		if err := queries.UpsertTask(ctx, UpsertTaskParams(task)); err != nil {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToCreateTask, err), task.ID)
 		}
 	}
