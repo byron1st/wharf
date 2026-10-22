@@ -7,11 +7,21 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"strings"
 )
+
+// busyTimeoutPragma makes a statement wait up to 5s for a lock held by another
+// connection, such as another process, instead of failing with SQLITE_BUSY.
+const busyTimeoutPragma = "_pragma=busy_timeout(5000)"
 
 // Connect opens the database and verifies the connection.
 func (m *manager) Connect(ctx context.Context) error {
-	database, err := sql.Open("sqlite", m.path)
+	separator := "?"
+	if strings.Contains(m.path, "?") {
+		separator = "&"
+	}
+
+	database, err := sql.Open("sqlite", m.path+separator+busyTimeoutPragma)
 	if err != nil {
 		return errors.Join(ErrFailedToOpenDatabase, err)
 	}

@@ -2,10 +2,12 @@ package db_test
 
 import (
 	"context"
+	"database/sql"
 	"io/fs"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -197,4 +199,33 @@ func TestMigrateFailures(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConnectWaitsForLockHeldByAnotherConnection(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	other, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = other.Close() })
+
+	conn, err := other.Conn(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	_, err = conn.ExecContext(context.Background(), "BEGIN IMMEDIATE")
+	require.NoError(t, err)
+
+	released := make(chan error, 1)
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+
+		_, err := conn.ExecContext(context.Background(), "COMMIT")
+		released <- err
+	}()
+
+	// Without a busy timeout this fails immediately with SQLITE_BUSY.
+	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
+	require.NoError(t, <-released)
+	requireExists(t, manager, "WHF-1", true)
 }
