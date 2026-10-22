@@ -114,8 +114,8 @@ const (
 	viewFields     = "summary,description,status,duedate," + startDateField
 )
 
-var (
-	JiraSearchOption = tool.RunOption{
+func JiraSearchOption() tool.RunOption {
+	return tool.RunOption{
 		Cmd: "jira",
 		Args: []string{
 			"workitem",
@@ -128,20 +128,21 @@ var (
 			"--json",
 		},
 	}
-	JiraWorkOption = func(key string) tool.RunOption {
-		return tool.RunOption{
-			Cmd: "jira",
-			Args: []string{
-				"workitem",
-				"view",
-				key,
-				"--fields",
-				viewFields,
-				"--json",
-			},
-		}
+}
+
+func JiraWorkOption(key string) tool.RunOption {
+	return tool.RunOption{
+		Cmd: "jira",
+		Args: []string{
+			"workitem",
+			"view",
+			key,
+			"--fields",
+			viewFields,
+			"--json",
+		},
 	}
-)
+}
 
 // TODO: Convert ADF to Markdown
 

@@ -231,6 +231,18 @@ func TestToTaskDescription(t *testing.T) {
 }
 
 func TestJiraRunOptions(t *testing.T) {
-	require.Equal(t, searchOption, atlassian.JiraSearchOption)
+	require.Equal(t, searchOption, atlassian.JiraSearchOption())
+	require.Equal(t, viewOption("WHF-1"), atlassian.JiraWorkOption("WHF-1"))
+}
+
+func TestJiraRunOptionsReturnFreshValues(t *testing.T) {
+	search := atlassian.JiraSearchOption()
+	search.Args[0] = "mutated"
+
+	require.Equal(t, searchOption, atlassian.JiraSearchOption())
+
+	view := atlassian.JiraWorkOption("WHF-1")
+	view.Args[0] = "mutated"
+
 	require.Equal(t, viewOption("WHF-1"), atlassian.JiraWorkOption("WHF-1"))
 }

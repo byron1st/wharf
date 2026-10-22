@@ -61,7 +61,7 @@ func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 }
 
 func (c *client) searchKeys(ctx context.Context) ([]string, error) {
-	out, err := c.tool.Run(ctx, JiraSearchOption)
+	out, err := c.tool.Run(ctx, JiraSearchOption())
 	if err != nil {
 		return nil, err
 	}
