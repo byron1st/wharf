@@ -1,11 +1,13 @@
 package tool_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -18,6 +20,7 @@ case "$1" in
   cwd) cat marker.txt ;;
   warn) echo "warning" >&2; echo "ok" ;;
   fail) echo "boom" >&2; exit 3 ;;
+  sleep) sleep 10 ;;
 esac
 `
 
@@ -39,25 +42,25 @@ func TestRun(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("returns stdout with cmd and args passed", func(t *testing.T) {
-		out, err := tl.Run(tool.RunOption{Cmd: "echo", Args: []string{"a", "b"}, Cwd: dir})
+		out, err := tl.Run(t.Context(), tool.RunOption{Cmd: "echo", Args: []string{"a", "b"}, Cwd: dir})
 		require.NoError(t, err)
 		require.Equal(t, "a b\n", out)
 	})
 
 	t.Run("runs in cwd", func(t *testing.T) {
-		out, err := tl.Run(tool.RunOption{Cmd: "cwd", Cwd: dir})
+		out, err := tl.Run(t.Context(), tool.RunOption{Cmd: "cwd", Cwd: dir})
 		require.NoError(t, err)
 		require.Equal(t, "in-cwd", out)
 	})
 
 	t.Run("ignores stderr on success", func(t *testing.T) {
-		out, err := tl.Run(tool.RunOption{Cmd: "warn", Cwd: dir})
+		out, err := tl.Run(t.Context(), tool.RunOption{Cmd: "warn", Cwd: dir})
 		require.NoError(t, err)
 		require.Equal(t, "ok\n", out)
 	})
 
 	t.Run("returns error with stderr on non-zero exit", func(t *testing.T) {
-		out, err := tl.Run(tool.RunOption{Cmd: "fail", Cwd: dir})
+		out, err := tl.Run(t.Context(), tool.RunOption{Cmd: "fail", Cwd: dir})
 		require.ErrorIs(t, err, tool.ErrFailedToExecuteCmd)
 		require.ErrorContains(t, err, "stderr=boom")
 		require.Empty(t, out)
@@ -78,7 +81,7 @@ func TestRunResolvesRelativePaths(t *testing.T) {
 	tl, err := tool.NewTool("fake.sh")
 	require.NoError(t, err)
 
-	out, err := tl.Run(tool.RunOption{Cmd: "cwd", Cwd: "sub"})
+	out, err := tl.Run(t.Context(), tool.RunOption{Cmd: "cwd", Cwd: "sub"})
 	require.NoError(t, err)
 	require.Equal(t, "in-sub", out)
 }
@@ -87,9 +90,40 @@ func TestRunMissingExecCmd(t *testing.T) {
 	tl, err := tool.NewTool(filepath.Join(t.TempDir(), "missing"))
 	require.NoError(t, err)
 
-	_, err = tl.Run(tool.RunOption{Cmd: "echo", Cwd: t.TempDir()})
+	_, err = tl.Run(t.Context(), tool.RunOption{Cmd: "echo", Cwd: t.TempDir()})
 	require.ErrorIs(t, err, tool.ErrFailedToExecuteCmd)
 
 	var exitErr *exec.ExitError
 	require.False(t, errors.As(err, &exitErr))
+}
+
+func TestRunKillsProcessWhenContextDone(t *testing.T) {
+	dir := t.TempDir()
+
+	tl, err := tool.NewTool(writeScript(t, dir))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	out, err := tl.Run(ctx, tool.RunOption{Cmd: "sleep", Cwd: dir})
+	require.ErrorIs(t, err, tool.ErrFailedToExecuteCmd)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Empty(t, out)
+	require.Less(t, time.Since(start), 5*time.Second)
+}
+
+func TestRunDoesNotStartWhenContextCanceled(t *testing.T) {
+	dir := t.TempDir()
+
+	tl, err := tool.NewTool(writeScript(t, dir))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err = tl.Run(ctx, tool.RunOption{Cmd: "echo", Args: []string{"a"}, Cwd: dir})
+	require.ErrorIs(t, err, tool.ErrFailedToExecuteCmd)
+	require.ErrorIs(t, err, context.Canceled)
 }

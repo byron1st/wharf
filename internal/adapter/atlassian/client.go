@@ -33,7 +33,7 @@ func NewClient(tool tool.Tool) Client {
 }
 
 func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
-	keys, searchErr := c.searchKeys()
+	keys, searchErr := c.searchKeys(ctx)
 	if len(keys) == 0 && searchErr != nil {
 		return nil, searchErr
 	}
@@ -46,7 +46,7 @@ func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 			return nil, errors.Join(ErrGetMyTasksCanceled, err)
 		}
 
-		item, err := c.viewWorkItem(key)
+		item, err := c.viewWorkItem(ctx, key)
 		if err != nil {
 			return nil, errors.Join(append(errs, err)...)
 		}
@@ -59,8 +59,8 @@ func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 	return tasks, errors.Join(errs...)
 }
 
-func (c *client) searchKeys() ([]string, error) {
-	out, err := c.tool.Run(JiraSearchOption)
+func (c *client) searchKeys(ctx context.Context) ([]string, error) {
+	out, err := c.tool.Run(ctx, JiraSearchOption)
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +84,8 @@ func (c *client) searchKeys() ([]string, error) {
 	return keys, err
 }
 
-func (c *client) viewWorkItem(key string) (ViewWorkItem, error) {
-	out, err := c.tool.Run(JiraWorkOption(key))
+func (c *client) viewWorkItem(ctx context.Context, key string) (ViewWorkItem, error) {
+	out, err := c.tool.Run(ctx, JiraWorkOption(key))
 	if err != nil {
 		return ViewWorkItem{}, fmt.Errorf("%w: key=%s", err, key)
 	}

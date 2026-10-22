@@ -5,6 +5,8 @@
 package mocks
 
 import (
+	"context"
+
 	"github.com/byron1st/wharf/internal/pkg/tool"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -46,8 +48,8 @@ func (_m *MockTool) EXPECT() *MockTool_Expecter {
 }
 
 // Run provides a mock function for the type MockTool
-func (_mock *MockTool) Run(opt tool.RunOption) (string, error) {
-	ret := _mock.Called(opt)
+func (_mock *MockTool) Run(ctx context.Context, opt tool.RunOption) (string, error) {
+	ret := _mock.Called(ctx, opt)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Run")
@@ -55,16 +57,16 @@ func (_mock *MockTool) Run(opt tool.RunOption) (string, error) {
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(tool.RunOption) (string, error)); ok {
-		return returnFunc(opt)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, tool.RunOption) (string, error)); ok {
+		return returnFunc(ctx, opt)
 	}
-	if returnFunc, ok := ret.Get(0).(func(tool.RunOption) string); ok {
-		r0 = returnFunc(opt)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, tool.RunOption) string); ok {
+		r0 = returnFunc(ctx, opt)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(tool.RunOption) error); ok {
-		r1 = returnFunc(opt)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, tool.RunOption) error); ok {
+		r1 = returnFunc(ctx, opt)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -77,19 +79,25 @@ type MockTool_Run_Call struct {
 }
 
 // Run is a helper method to define mock.On call
+//   - ctx context.Context
 //   - opt tool.RunOption
-func (_e *MockTool_Expecter) Run(opt any) *MockTool_Run_Call {
-	return &MockTool_Run_Call{Call: _e.mock.On("Run", opt)}
+func (_e *MockTool_Expecter) Run(ctx any, opt any) *MockTool_Run_Call {
+	return &MockTool_Run_Call{Call: _e.mock.On("Run", ctx, opt)}
 }
 
-func (_c *MockTool_Run_Call) Run(run func(opt tool.RunOption)) *MockTool_Run_Call {
+func (_c *MockTool_Run_Call) Run(run func(ctx context.Context, opt tool.RunOption)) *MockTool_Run_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 tool.RunOption
+		var arg0 context.Context
 		if args[0] != nil {
-			arg0 = args[0].(tool.RunOption)
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 tool.RunOption
+		if args[1] != nil {
+			arg1 = args[1].(tool.RunOption)
 		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
@@ -100,7 +108,7 @@ func (_c *MockTool_Run_Call) Return(s string, err error) *MockTool_Run_Call {
 	return _c
 }
 
-func (_c *MockTool_Run_Call) RunAndReturn(run func(opt tool.RunOption) (string, error)) *MockTool_Run_Call {
+func (_c *MockTool_Run_Call) RunAndReturn(run func(ctx context.Context, opt tool.RunOption) (string, error)) *MockTool_Run_Call {
 	_c.Call.Return(run)
 	return _c
 }

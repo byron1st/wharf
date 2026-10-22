@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/byron1st/wharf/internal/adapter/atlassian"
@@ -65,11 +66,11 @@ func date(t *testing.T, value string) *time.Time {
 
 func TestGetMyTasks(t *testing.T) {
 	m := mocks.NewMockTool(t)
-	m.EXPECT().Run(searchOption).Return(fixture(t, "search.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-1")).Return(fixture(t, "view_todo.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-2")).Return(fixture(t, "view_in_progress.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-3")).Return(fixture(t, "view_done.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-4")).Return(fixture(t, "view_canceled.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-1")).Return(fixture(t, "view_todo.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-2")).Return(fixture(t, "view_in_progress.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-3")).Return(fixture(t, "view_done.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-4")).Return(fixture(t, "view_canceled.json"), nil).Once()
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 	require.NoError(t, err)
@@ -118,7 +119,7 @@ func TestGetMyTasks(t *testing.T) {
 
 func TestGetMyTasksNoWorkItems(t *testing.T) {
 	m := mocks.NewMockTool(t)
-	m.EXPECT().Run(searchOption).Return(fixture(t, "search_empty.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search_empty.json"), nil).Once()
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 	require.NoError(t, err)
@@ -149,7 +150,7 @@ func TestGetMyTasksSearchErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := mocks.NewMockTool(t)
-			m.EXPECT().Run(searchOption).Return(tt.out, tt.runErr).Once()
+			m.EXPECT().Run(mock.Anything, searchOption).Return(tt.out, tt.runErr).Once()
 
 			tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 			require.ErrorIs(t, err, tt.wantErr)
@@ -180,8 +181,8 @@ func TestGetMyTasksViewErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := mocks.NewMockTool(t)
-			m.EXPECT().Run(searchOption).Return(fixture(t, "search_single.json"), nil).Once()
-			m.EXPECT().Run(viewOption("WHF-1")).Return(tt.out, tt.runErr).Once()
+			m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search_single.json"), nil).Once()
+			m.EXPECT().Run(mock.Anything, viewOption("WHF-1")).Return(tt.out, tt.runErr).Once()
 
 			tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 			require.ErrorIs(t, err, tt.wantErr)
@@ -241,8 +242,8 @@ func TestGetMyTasksCollectsFieldErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := mocks.NewMockTool(t)
-			m.EXPECT().Run(searchOption).Return(fixture(t, "search_single.json"), nil).Once()
-			m.EXPECT().Run(viewOption("WHF-1")).Return(tt.out, nil).Once()
+			m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search_single.json"), nil).Once()
+			m.EXPECT().Run(mock.Anything, viewOption("WHF-1")).Return(tt.out, nil).Once()
 
 			tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 			require.Equal(t, []task.Task{tt.want}, tasks)
@@ -257,8 +258,8 @@ func TestGetMyTasksCollectsFieldErrors(t *testing.T) {
 
 func TestGetMyTasksCollectsErrorsAcrossWorkItems(t *testing.T) {
 	m := mocks.NewMockTool(t)
-	m.EXPECT().Run(searchOption).Return(fixture(t, "search_with_null_item.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-1")).Return(fixture(t, "view_unknown_status.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search_with_null_item.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-1")).Return(fixture(t, "view_unknown_status.json"), nil).Once()
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 	require.Equal(t, []task.Task{
@@ -271,8 +272,8 @@ func TestGetMyTasksCollectsErrorsAcrossWorkItems(t *testing.T) {
 
 func TestGetMyTasksKeepsSearchErrorsWhenViewFails(t *testing.T) {
 	m := mocks.NewMockTool(t)
-	m.EXPECT().Run(searchOption).Return(fixture(t, "search_with_null_item.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-1")).Return("Key: WHF-1\n", nil).Once()
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search_with_null_item.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-1")).Return("Key: WHF-1\n", nil).Once()
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 	require.ErrorIs(t, err, atlassian.ErrFailedToParseViewOutput)
@@ -282,7 +283,7 @@ func TestGetMyTasksKeepsSearchErrorsWhenViewFails(t *testing.T) {
 
 func TestGetMyTasksStopsViewingWhenContextCanceled(t *testing.T) {
 	m := mocks.NewMockTool(t)
-	m.EXPECT().Run(searchOption).Return(fixture(t, "search.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search.json"), nil).Once()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -297,12 +298,15 @@ func TestGetMyTasksStopsWhenContextCanceledBetweenViews(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 
 	m := mocks.NewMockTool(t)
-	m.EXPECT().Run(searchOption).Return(fixture(t, "search.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-1")).RunAndReturn(func(tool.RunOption) (string, error) {
-		cancel()
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search.json"), nil).Once()
+	m.EXPECT().
+		Run(mock.Anything, viewOption("WHF-1")).
+		RunAndReturn(func(context.Context, tool.RunOption) (string, error) {
+			cancel()
 
-		return fixture(t, "view_todo.json"), nil
-	}).Once()
+			return fixture(t, "view_todo.json"), nil
+		}).
+		Once()
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(ctx)
 	require.ErrorIs(t, err, atlassian.ErrGetMyTasksCanceled)
@@ -312,9 +316,9 @@ func TestGetMyTasksStopsWhenContextCanceledBetweenViews(t *testing.T) {
 
 func TestGetMyTasksDiscardsConvertedTasksWhenLaterViewFails(t *testing.T) {
 	m := mocks.NewMockTool(t)
-	m.EXPECT().Run(searchOption).Return(fixture(t, "search.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-1")).Return(fixture(t, "view_unknown_status.json"), nil).Once()
-	m.EXPECT().Run(viewOption("WHF-2")).Return("", tool.ErrFailedToExecuteCmd).Once()
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-1")).Return(fixture(t, "view_unknown_status.json"), nil).Once()
+	m.EXPECT().Run(mock.Anything, viewOption("WHF-2")).Return("", tool.ErrFailedToExecuteCmd).Once()
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 	require.ErrorIs(t, err, tool.ErrFailedToExecuteCmd)
