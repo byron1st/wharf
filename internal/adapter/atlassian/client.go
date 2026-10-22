@@ -30,17 +30,16 @@ func NewClient(tool tool.Tool) Client {
 }
 
 func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
-	keys, searchErr := c.searchKeys(ctx)
-	if len(keys) == 0 && searchErr != nil {
-		return nil, searchErr
+	keys, errs, err := c.searchKeys(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	tasks := make([]task.Task, 0, len(keys))
-	errs := []error{searchErr}
 
 	for _, key := range keys {
 		if err := ctx.Err(); err != nil {
-			return nil, errors.Join(ErrGetMyTasksCanceled, err)
+			return nil, errors.Join(append(errs, ErrGetMyTasksCanceled, err)...)
 		}
 
 		item, err := c.viewWorkItem(ctx, key)
@@ -57,29 +56,33 @@ func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 	return tasks, errors.Join(errs...)
 }
 
-func (c *client) searchKeys(ctx context.Context) ([]string, error) {
+// searchKeys returns the found keys and the errors of items without a key.
+// The last error is set only when the search itself failed.
+func (c *client) searchKeys(ctx context.Context) ([]string, []error, error) {
 	out, err := c.tool.Run(ctx, JiraSearchOption())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var items []SearchItem
 	if err := json.Unmarshal([]byte(out), &items); err != nil {
-		return nil, errors.Join(ErrFailedToParseSearchOutput, err)
+		return nil, nil, errors.Join(ErrFailedToParseSearchOutput, err)
 	}
 
 	keys := make([]string, 0, len(items))
 
+	var errs []error
+
 	for i, item := range items {
 		if item.Key == "" {
-			err = errors.Join(err, fmt.Errorf("%w: index=%d", ErrMissingWorkItemKey, i))
+			errs = append(errs, fmt.Errorf("%w: index=%d", ErrMissingWorkItemKey, i))
 			continue
 		}
 
 		keys = append(keys, item.Key)
 	}
 
-	return keys, err
+	return keys, errs, nil
 }
 
 func (c *client) viewWorkItem(ctx context.Context, key string) (ViewWorkItem, error) {

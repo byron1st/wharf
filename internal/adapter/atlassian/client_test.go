@@ -144,7 +144,6 @@ func TestGetMyTasksSearchErrors(t *testing.T) {
 			out:     "✓ Number of work items in the search: 4\n",
 			wantErr: atlassian.ErrFailedToParseSearchOutput,
 		},
-		{name: "work item is null", out: fixture(t, "search_null_item.json"), wantErr: atlassian.ErrMissingWorkItemKey},
 	}
 
 	for _, tt := range tests {
@@ -157,6 +156,16 @@ func TestGetMyTasksSearchErrors(t *testing.T) {
 			require.Nil(t, tasks)
 		})
 	}
+}
+
+func TestGetMyTasksOnlyNullWorkItems(t *testing.T) {
+	m := mocks.NewMockTool(t)
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search_null_item.json"), nil).Once()
+
+	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
+	require.ErrorIs(t, err, atlassian.ErrMissingWorkItemKey)
+	require.NotNil(t, tasks)
+	require.Empty(t, tasks)
 }
 
 func TestGetMyTasksViewErrors(t *testing.T) {
@@ -338,4 +347,18 @@ func TestGetMyTasksKeepsOtherTasksWhenViewFails(t *testing.T) {
 	require.ErrorContains(t, err, "key=WHF-2")
 	require.ErrorIs(t, err, atlassian.ErrFailedToParseViewOutput)
 	require.ErrorContains(t, err, "key=WHF-3")
+}
+
+func TestGetMyTasksKeepsCollectedErrorsWhenContextCanceled(t *testing.T) {
+	m := mocks.NewMockTool(t)
+	m.EXPECT().Run(mock.Anything, searchOption).Return(fixture(t, "search_with_null_item.json"), nil).Once()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	tasks, err := atlassian.NewClient(m).GetMyTasks(ctx)
+	require.ErrorIs(t, err, atlassian.ErrGetMyTasksCanceled)
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, atlassian.ErrMissingWorkItemKey)
+	require.Nil(t, tasks)
 }
