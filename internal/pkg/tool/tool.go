@@ -13,9 +13,9 @@ type Tool interface {
 }
 
 var (
-	ErrFailedToParseExecCmdPath = errors.New("failed to parse exec cmd path")
-	ErrFailedToParseCwdPath     = errors.New("failed to parse cwd path")
-	ErrFailedToExecuteCmd       = errors.New("failed to execute cmd")
+	ErrFailedToParseExecCmdPath = errors.New("tool: failed to parse exec cmd path")
+	ErrFailedToParseCwdPath     = errors.New("tool: failed to parse cwd path")
+	ErrFailedToExecuteCmd       = errors.New("tool: failed to execute cmd")
 )
 
 type RunOption struct {

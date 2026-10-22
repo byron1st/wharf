@@ -39,10 +39,14 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 ## Code Conventions
 
 - Layering is one-way: `route` → `service` → `adapter`. `cmd/wharf/main.go` only wires. No catch-all `types` or `util` package.
-- Expected failures are exported `Err...` sentinels in the package that owns the operation. Name them after what failed (`ErrFailedToSendRequest = errors.New("failed to send request")`, not `ErrRequest`).
-- Each sentinel has exactly one origin return site, so the error alone pinpoints where it failed. If a condition arises in two places, define two sentinels.
-- Wrap stdlib/third-party errors as `errors.Join(ErrLocal, err)`; add context with `fmt.Errorf("%w: field=%s", ErrSentinel, value)`. Compare with `errors.Is` / `errors.As`, never by string.
 - `context.Context` is the first parameter of anything that does I/O, calls an adapter, or can block.
+
+### Errors
+
+- Expected failures are exported `Err...` sentinels in the package that owns the operation. Name them after what failed (`ErrFailedToSendRequest = errors.New("http: failed to send request")`, not `ErrRequest`).
+- Sentinel messages start with the owning package name and a colon (`"tool: failed to execute cmd"`), following Effective Go, so joined error chains show which layer each line came from. Context added with `fmt.Errorf` does not repeat the prefix.
+- Each sentinel has exactly one origin return site, so the error alone pinpoints where it failed. If a condition arises in two places, define two sentinels.
+- Wrap only stdlib/third-party errors, as `errors.Join(ErrLocal, err)`; return errors from this module's packages as-is so chains don't grow with every layer, unless the caller holds context the error lacks (`fmt.Errorf("%w: key=%s", err, key)`). Add context with `fmt.Errorf("%w: field=%s", ErrSentinel, value)`. Compare with `errors.Is` / `errors.As`, never by string.
 
 ## Testing
 
