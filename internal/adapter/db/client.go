@@ -52,7 +52,8 @@ func NewManager(path string, migrations fs.FS) Manager {
 
 // CreateTasks stores all tasks in one transaction: either every task is
 // stored or none is. A task whose ID is already stored has its other fields
-// overwritten. An empty list is a no-op.
+// overwritten. Empty ChildrenIds and LinkedIds are stored as "[]" so the
+// columns always hold a JSON array. An empty list is a no-op.
 func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -74,7 +75,11 @@ func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
 	defer func() { _ = tx.Rollback() }()
 
 	queries := m.queries.WithTx(tx)
+
 	for _, task := range tasks {
+		task.ChildrenIds = orEmptyJSONArray(task.ChildrenIds)
+		task.LinkedIds = orEmptyJSONArray(task.LinkedIds)
+
 		if err := queries.UpsertTask(ctx, UpsertTaskParams(task)); err != nil {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToCreateTask, err), task.ID)
 		}
@@ -111,4 +116,12 @@ func (m *manager) checkConnected() error {
 	}
 
 	return nil
+}
+
+func orEmptyJSONArray(ids string) string {
+	if ids == "" {
+		return "[]"
+	}
+
+	return ids
 }

@@ -77,9 +77,11 @@ func projectMigrationsWith(t *testing.T, extra map[string]string) fstest.MapFS {
 }
 
 type readTask struct {
-	title    string
-	status   string
-	parentID string
+	title       string
+	status      string
+	parentID    string
+	childrenIDs string
+	linkedIDs   string
 }
 
 // read loads a stored task through a separate connection, since Manager has
@@ -93,8 +95,8 @@ func read(t *testing.T, path, id string) readTask {
 
 	var task readTask
 
-	err = conn.QueryRowContext(context.Background(), "SELECT title, status, parent_id FROM tasks WHERE id = ?", id).
-		Scan(&task.title, &task.status, &task.parentID)
+	err = conn.QueryRowContext(context.Background(), "SELECT title, status, parent_id, children_ids, linked_ids FROM tasks WHERE id = ?", id).
+		Scan(&task.title, &task.status, &task.parentID, &task.childrenIDs, &task.linkedIDs)
 	require.NoError(t, err)
 
 	return task
@@ -148,8 +150,33 @@ func TestCreateTasksOverwritesExistingTask(t *testing.T) {
 	updated.Status = "done"
 	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{updated, newTask("WHF-2")}))
 
-	require.Equal(t, readTask{title: "new", status: "done", parentID: ""}, read(t, path, "WHF-1"))
+	require.Equal(
+		t,
+		readTask{title: "new", status: "done", childrenIDs: "[]", linkedIDs: "[]"},
+		read(t, path, "WHF-1"),
+	)
 	requireExists(t, manager, "WHF-2", true)
+}
+
+func TestCreateTasksStoresEmptyIDListsAsJSONArray(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	existing := newTask("WHF-1")
+	existing.ChildrenIds = `["WHF-2"]`
+	existing.LinkedIds = `["WHF-3"]`
+	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{existing}))
+
+	// Neither the overwrite nor the new task sets the ID lists.
+	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{
+		{ID: "WHF-1", Originated: "jira", Title: "WHF-1", Status: "todo"},
+		{ID: "WHF-4", Originated: "jira", Title: "WHF-4", Status: "todo"},
+	}))
+
+	for _, id := range []string{"WHF-1", "WHF-4"} {
+		task := read(t, path, id)
+		require.Equal(t, "[]", task.childrenIDs, "id=%s", id)
+		require.Equal(t, "[]", task.linkedIDs, "id=%s", id)
+	}
 }
 
 func TestCreateTasksRollsBackOnFailure(t *testing.T) {
