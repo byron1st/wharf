@@ -4,19 +4,17 @@ BUILD_FLAGS ?=
 MOCK_DIR ?= internal/pkg/mocks
 SQLC_CONFIG ?= ./scripts/sqlc.yaml
 SQLC_DB_FILE ?= internal/adapter/db/db.go
-SWAG_MAIN ?= cmd/wharf/main.go
-SWAG_OUT ?= docs
 E2E_PKG ?= ./tests/e2e/...
-EXCLUDE ?= (mocks|docs|cmd)
+EXCLUDE ?= (mocks|cmd)
 
 .PHONY: outdated
 # List outdated direct dependencies
 outdated:
 	@go list -u -m -f '{{if and (not .Main) (not .Indirect) .Update}}{{.Path}} {{.Version}} -> {{.Update.Version}}{{end}}' all | sed '/^$$/d'
 
-.PHONY: gen mockgen modelgen docsgen
-# Generate mocks, database models, and Swagger documentation
-gen: mockgen modelgen docsgen
+.PHONY: gen mockgen modelgen
+# Generate mocks and database models
+gen: mockgen modelgen
 
 # Generate mocks for interfaces in the project
 mockgen:
@@ -31,11 +29,6 @@ modelgen:
 	sqlc generate -f $(SQLC_CONFIG)
 	find $$(dirname $(SQLC_DB_FILE)) -type f -name '$$(basename $(SQLC_DB_FILE))' -exec perl -pi -e 's/interface\{\}/any/g' {} +
 	find $$(dirname $(SQLC_DB_FILE)) -type f -name '$$(basename $(SQLC_DB_FILE))' -exec gofmt -w {} +
-
-# Generate Swagger documentation using swag
-docsgen:
-	command -v swag >/dev/null 2>&1 || go install github.com/swaggo/swag/cmd/swag@latest
-	swag init -g $(SWAG_MAIN) -o $(SWAG_OUT)
 
 .PHONY: format lint check clean-testcache test race test-e2e test-mutation test-mutation-pkg
 # Run formatting and linting

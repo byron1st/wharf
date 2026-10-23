@@ -1,6 +1,6 @@
 # wharf
 
-Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated database access and swag-generated Swagger docs.
+Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated database access.
 
 ## Key Requirements
 
@@ -13,7 +13,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 - `make format`: Format and modernize code (`go fmt`, `go fix`, `golangci-lint fmt`).
 - `make lint`: Tidy modules and run `golangci-lint`.
 - `make check`: Run `format` and `lint`. Run after every Go source change.
-- `make gen`: Regenerate mocks (`mockgen`), sqlc models (`modelgen`), and Swagger docs (`docsgen`).
+- `make gen`: Regenerate mocks (`mockgen`) and sqlc models (`modelgen`).
 - `make test`: Run all tests with a clean test cache.
 - `make race`: Run short tests with the race detector.
 - `make test-e2e`: Run end-to-end tests under `tests/e2e`.
@@ -27,14 +27,14 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 ## Architecture Overview
 
 - `cmd/wharf/`: Entry point; wires config, adapters, services, and routes only.
-- `internal/route/`: HTTP handlers and Swagger annotations; translates requests/responses and calls services.
+- `internal/route/`: HTTP handlers; translates requests/responses and calls services.
 - `internal/service/`: Business logic; depends on adapter interfaces, never on HTTP types.
 - `internal/adapter/`: External I/O (database, third-party APIs). `internal/adapter/db/` holds sqlc output (`db.go`, `models.go`, `queries.sql.go`) next to the hand-written `db.Manager` (`client.go`, `client_management.go`).
 - `internal/pkg/<topic>/`: Module-private shared code. `internal/pkg/mocks/` holds generated mocks.
 - `pkg/<topic>/`: Public, importable contracts (only when something must be shared outside the module).
 - `scripts/`: Tooling config such as `sqlc.yaml`, SQL schema, and queries. Its Go package (`scripts.Migrations()`) embeds `schema_migrations.sql` and `migrations/` for `db.NewManager`, since `go:embed` cannot reach files outside the package directory.
 - `scripts/migrations/`: SQL migrations named `{4-digit version}_{snake_case description}.sql` (e.g. `0002_add_task_index.sql`); `db.Manager.Migrate` applies them in version order and never re-applies one, so never edit or renumber an applied migration — add a new one. Each file runs inside a transaction, so it must not contain `BEGIN`/`COMMIT`, `VACUUM`, or `PRAGMA foreign_keys` (silently ignored inside a transaction).
-- `docs/`: Generated Swagger output and project documentation.
+- `docs/`: Project documentation.
 - `tests/e2e/`: End-to-end tests against a running server.
 
 ## Code Conventions
@@ -63,7 +63,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 
 ## Boundaries
 
-- NEVER hand-edit generated code (`internal/pkg/mocks/`, sqlc output `internal/adapter/db/{db,models,queries.sql}.go`, Swagger output in `docs/`); change the source (interface, SQL, annotation) and run `make gen`.
+- NEVER hand-edit generated code (`internal/pkg/mocks/`, sqlc output `internal/adapter/db/{db,models,queries.sql}.go`); change the source (interface, SQL) and run `make gen`.
 - NEVER run raw `go test`, `go build`, or `golangci-lint` commands; use the matching `make` target so tooling stays consistent.
 - NEVER commit secrets or `.env` files; read configuration from environment variables at startup in `cmd/wharf`.
 - NEVER import `internal/route` from `internal/service` or `internal/adapter`; pass plain domain types down the layers instead.
