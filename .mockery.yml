@@ -10,3 +10,9 @@ packages:
   github.com/byron1st/wharf/internal/pkg/tool:
     interfaces:
       Tool:
+  github.com/byron1st/wharf/internal/adapter/atlassian:
+    interfaces:
+      Client:
+  github.com/byron1st/wharf/internal/service:
+    interfaces:
+      Service:

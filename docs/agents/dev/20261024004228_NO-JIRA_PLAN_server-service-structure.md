@@ -8,6 +8,8 @@ Title: server-service-structure
 
 # internal/server · internal/service 기본 구조와 `POST /tasks/jira` 시범 API
 
+Report: [20261024004228_NO-JIRA_IMPL_server-service-structure.md](./20261024004228_NO-JIRA_IMPL_server-service-structure.md)
+
 ## Non-goals
 
 - `GET /healthz`, `POST /tasks/jira` 외의 endpoint. task 조회 API·조회 쿼리도 만들지 않는다.
@@ -78,9 +80,9 @@ Title: server-service-structure
 
 ## TODOs
 
-- [ ] `CreateTasks` → `UpsertTasks([]task.Task)` 로 바꾸고 변환을 구현. `ExistsTask` 메서드와 쿼리를 지우고 `make gen`. 영향받는 db 테스트를 직접 SQL 확인 방식으로 고침 (AC-5, AC-6) (mechanical) (→ research: sqlite-sqlc-setup, server-service-structure)
-- [ ] `service.Service` 와 Jira 동기화 함수를 부분 실패 규칙대로 구현. `.mockery.yml` 에 Service·Client 를 등록하고 `make gen` 후 mock 테스트 작성 (AC-2, AC-3, AC-4, AC-10) (design-bearing) (→ research: server-service-structure)
-- [ ] `route.go` 에 healthz 와 `POST /tasks/jira` handler 를 구현하고 `MockService` + httptest 로 테스트 (AC-1, AC-2, AC-3, AC-4) (mechanical) (→ research: server-service-structure)
-- [ ] `server.go` 에 미들웨어 세 개와 `Run`(graceful shutdown) 을 구현하고 테스트 (AC-7, AC-8) (mechanical) (→ research: server-service-structure)
-- [ ] `cmd/wharf/main.go` 에서 env, DB, tool, atlassian client, service, handler, server 를 wiring 하고 실행으로 확인 (AC-9, AC-10) (mechanical)
-- [ ] AGENTS.md 의 `internal/route` 경로 언급을 `internal/server` 로 수정 (AC-11) (mechanical)
+- [x] `CreateTasks` → `UpsertTasks([]task.Task)` 로 바꾸고 변환을 구현. `ExistsTask` 메서드와 쿼리를 지우고 `make gen`. 영향받는 db 테스트를 직접 SQL 확인 방식으로 고침 (AC-5, AC-6) (mechanical) (→ research: sqlite-sqlc-setup, server-service-structure)
+- [x] `service.Service` 와 Jira 동기화 함수를 부분 실패 규칙대로 구현. `.mockery.yml` 에 Service·Client 를 등록하고 `make gen` 후 mock 테스트 작성 (AC-2, AC-3, AC-4, AC-10) (design-bearing) (→ research: server-service-structure)
+- [x] `route.go` 에 healthz 와 `POST /tasks/jira` handler 를 구현하고 `MockService` + httptest 로 테스트 (AC-1, AC-2, AC-3, AC-4) (mechanical) (→ research: server-service-structure)
+- [x] `server.go` 에 미들웨어 세 개와 `Run`(graceful shutdown) 을 구현하고 테스트 (AC-7, AC-8) (mechanical) (→ research: server-service-structure)
+- [x] `cmd/wharf/main.go` 에서 env, DB, tool, atlassian client, service, handler, server 를 wiring 하고 실행으로 확인 (AC-9, AC-10) (mechanical)
+- [x] AGENTS.md 의 `internal/route` 경로 언급을 `internal/server` 로 수정 (AC-11) (mechanical)

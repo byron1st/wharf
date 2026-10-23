@@ -30,17 +30,6 @@ func (q *Queries) ExistsSchemaMigration(ctx context.Context, version string) (bo
 	return exists, err
 }
 
-const existsTask = `-- name: ExistsTask :one
-SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?)
-`
-
-func (q *Queries) ExistsTask(ctx context.Context, id string) (bool, error) {
-	row := q.db.QueryRowContext(ctx, existsTask, id)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const upsertTask = `-- name: UpsertTask :exec
 INSERT INTO tasks (
     id, originated, title, description, status, start_date, due_date, parent_id, children_ids, linked_ids

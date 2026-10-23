@@ -15,9 +15,6 @@ ON CONFLICT (id) DO UPDATE SET
     children_ids = excluded.children_ids,
     linked_ids   = excluded.linked_ids;
 
--- name: ExistsTask :one
-SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?);
-
 -- name: ExistsSchemaMigration :one
 SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = ?);
 

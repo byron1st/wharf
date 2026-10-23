@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/scripts"
 )
 
@@ -79,6 +80,8 @@ func projectMigrationsWith(t *testing.T, extra map[string]string) fstest.MapFS {
 type readTask struct {
 	title       string
 	status      string
+	startDate   sql.NullTime
+	dueDate     sql.NullTime
 	parentID    string
 	childrenIDs string
 	linkedIDs   string
@@ -89,97 +92,130 @@ type readTask struct {
 func read(t *testing.T, path, id string) readTask {
 	t.Helper()
 
-	conn, err := sql.Open("sqlite", path)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = conn.Close() })
-
 	var task readTask
 
-	err = conn.QueryRowContext(context.Background(), "SELECT title, status, parent_id, children_ids, linked_ids FROM tasks WHERE id = ?", id).
-		Scan(&task.title, &task.status, &task.parentID, &task.childrenIDs, &task.linkedIDs)
+	err := open(t, path).QueryRowContext(
+		context.Background(),
+		"SELECT title, status, start_date, due_date, parent_id, children_ids, linked_ids FROM tasks WHERE id = ?",
+		id,
+	).Scan(&task.title, &task.status, &task.startDate, &task.dueDate, &task.parentID, &task.childrenIDs, &task.linkedIDs)
 	require.NoError(t, err)
 
 	return task
 }
 
-func requireExists(t *testing.T, manager db.Manager, id string, want bool) {
+// requireExists checks through a separate connection whether a task with id
+// is stored, since Manager has no read query for tasks.
+func requireExists(t *testing.T, path, id string, want bool) {
 	t.Helper()
 
-	exists, err := manager.ExistsTask(context.Background(), id)
+	var exists bool
+
+	err := open(t, path).QueryRowContext(context.Background(), "SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?)", id).
+		Scan(&exists)
 	require.NoError(t, err)
 	require.Equal(t, want, exists, "id=%s", id)
 }
 
-func newTask(id string) db.Task {
-	return db.Task{ID: id, Originated: "jira", Title: id, Status: "todo", ChildrenIds: "[]", LinkedIds: "[]"}
+func open(t *testing.T, path string) *sql.DB {
+	t.Helper()
+
+	conn, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	return conn
 }
 
-func TestCreateTasks(t *testing.T) {
-	manager := newManager(t)
+func newTask(id string) task.Task {
+	return task.Task{ID: id, Originated: task.OriginJira, Title: id, Status: task.StatusTodo}
+}
+
+func TestUpsertTasks(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	due := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
 
 	full := newTask("WHF-1")
-	full.StartDate = sql.NullTime{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true}
-	full.DueDate = sql.NullTime{Time: time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC), Valid: true}
+	full.StartDate = &start
+	full.DueDate = &due
 	full.ParentID = "WHF-0"
-	full.ChildrenIds = `["WHF-2"]`
+	full.ChildrenIDs = []string{"WHF-2", "WHF-3"}
+	full.LinkedIDs = []string{"WHF-4"}
 
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{full, newTask("WHF-2")}))
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{full, newTask("WHF-2")}))
 
-	requireExists(t, manager, "WHF-1", true)
-	requireExists(t, manager, "WHF-2", true)
-	requireExists(t, manager, "WHF-9", false)
+	got := read(t, path, "WHF-1")
+	require.Equal(t, `["WHF-2","WHF-3"]`, got.childrenIDs)
+	require.Equal(t, `["WHF-4"]`, got.linkedIDs)
+	require.Equal(t, "WHF-0", got.parentID)
+	require.True(t, got.startDate.Valid)
+	require.True(t, start.Equal(got.startDate.Time))
+	require.True(t, got.dueDate.Valid)
+	require.True(t, due.Equal(got.dueDate.Time))
+
+	require.Equal(
+		t,
+		readTask{title: "WHF-2", status: "todo", childrenIDs: "[]", linkedIDs: "[]"},
+		read(t, path, "WHF-2"),
+	)
+	requireExists(t, path, "WHF-9", false)
 }
 
-func TestCreateTasksEmpty(t *testing.T) {
+func TestUpsertTasksEmpty(t *testing.T) {
 	manager := newManager(t)
 
-	require.NoError(t, manager.CreateTasks(context.Background(), nil))
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{}))
+	require.NoError(t, manager.UpsertTasks(context.Background(), nil))
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{}))
 }
 
-func TestCreateTasksOverwritesExistingTask(t *testing.T) {
+func TestUpsertTasksOverwritesExistingTask(t *testing.T) {
 	manager, path := newFileManager(t, scripts.Migrations())
+
+	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 
 	existing := newTask("WHF-1")
 	existing.Title = "old"
 	existing.ParentID = "WHF-0"
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{existing}))
+	existing.StartDate = &start
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{existing}))
 
 	updated := newTask("WHF-1")
 	updated.Title = "new"
-	updated.Status = "done"
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{updated, newTask("WHF-2")}))
+	updated.Status = task.StatusDone
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{updated, newTask("WHF-2")}))
 
 	require.Equal(
 		t,
 		readTask{title: "new", status: "done", childrenIDs: "[]", linkedIDs: "[]"},
 		read(t, path, "WHF-1"),
 	)
-	requireExists(t, manager, "WHF-2", true)
+	requireExists(t, path, "WHF-2", true)
 }
 
-func TestCreateTasksStoresEmptyIDListsAsJSONArray(t *testing.T) {
+func TestUpsertTasksStoresEmptyIDListsAsJSONArray(t *testing.T) {
 	manager, path := newFileManager(t, scripts.Migrations())
 
 	existing := newTask("WHF-1")
-	existing.ChildrenIds = `["WHF-2"]`
-	existing.LinkedIds = `["WHF-3"]`
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{existing}))
+	existing.ChildrenIDs = []string{"WHF-2"}
+	existing.LinkedIDs = []string{"WHF-3"}
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{existing}))
 
-	// Neither the overwrite nor the new task sets the ID lists.
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{
-		{ID: "WHF-1", Originated: "jira", Title: "WHF-1", Status: "todo"},
-		{ID: "WHF-4", Originated: "jira", Title: "WHF-4", Status: "todo"},
-	}))
+	// The overwrite sets empty lists and the new task leaves them nil.
+	overwrite := newTask("WHF-1")
+	overwrite.ChildrenIDs = []string{}
+	overwrite.LinkedIDs = []string{}
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{overwrite, newTask("WHF-4")}))
 
 	for _, id := range []string{"WHF-1", "WHF-4"} {
-		task := read(t, path, id)
-		require.Equal(t, "[]", task.childrenIDs, "id=%s", id)
-		require.Equal(t, "[]", task.linkedIDs, "id=%s", id)
+		got := read(t, path, id)
+		require.Equal(t, "[]", got.childrenIDs, "id=%s", id)
+		require.Equal(t, "[]", got.linkedIDs, "id=%s", id)
 	}
 }
 
-func TestCreateTasksRollsBackOnFailure(t *testing.T) {
+func TestUpsertTasksRollsBackOnFailure(t *testing.T) {
 	// The trigger rejects WHF-FAIL after the earlier tasks in the batch are
 	// already written.
 	manager, path := newFileManager(t, projectMigrationsWith(t, map[string]string{
@@ -189,40 +225,30 @@ func TestCreateTasksRollsBackOnFailure(t *testing.T) {
 
 	existing := newTask("WHF-1")
 	existing.Title = "old"
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{existing}))
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{existing}))
 
 	updated := newTask("WHF-1")
 	updated.Title = "new"
 
-	err := manager.CreateTasks(
+	err := manager.UpsertTasks(
 		context.Background(),
-		[]db.Task{updated, newTask("WHF-2"), newTask("WHF-FAIL"), newTask("WHF-3")},
+		[]task.Task{updated, newTask("WHF-2"), newTask("WHF-FAIL"), newTask("WHF-3")},
 	)
-	require.ErrorIs(t, err, db.ErrFailedToCreateTask)
+	require.ErrorIs(t, err, db.ErrFailedToUpsertTask)
 	require.ErrorContains(t, err, "id=WHF-FAIL")
 
 	require.Equal(t, "old", read(t, path, "WHF-1").title)
-	requireExists(t, manager, "WHF-2", false)
-	requireExists(t, manager, "WHF-3", false)
+	requireExists(t, path, "WHF-2", false)
+	requireExists(t, path, "WHF-3", false)
 }
 
-func TestCreateTasksBeginTxFailure(t *testing.T) {
-	manager := newManager(t)
+func TestUpsertTasksBeginTxFailure(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := manager.CreateTasks(ctx, []db.Task{newTask("WHF-1")})
+	err := manager.UpsertTasks(ctx, []task.Task{newTask("WHF-1")})
 	require.ErrorIs(t, err, db.ErrFailedToBeginTx)
-	requireExists(t, manager, "WHF-1", false)
-}
-
-func TestExistsTaskFailure(t *testing.T) {
-	// These migrations do not create the tasks table, so the query fails.
-	manager := connect(t, withMigrations(t, map[string]string{"0001_empty.sql": "SELECT 1;"}))
-	require.NoError(t, manager.Migrate(context.Background()))
-
-	exists, err := manager.ExistsTask(context.Background(), "WHF-1")
-	require.ErrorIs(t, err, db.ErrFailedToCheckTaskExists)
-	require.False(t, exists)
+	requireExists(t, path, "WHF-1", false)
 }

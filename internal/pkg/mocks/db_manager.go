@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/task"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -142,129 +142,6 @@ func (_c *MockManager_Connect_Call) RunAndReturn(run func(ctx context.Context) e
 	return _c
 }
 
-// CreateTasks provides a mock function for the type MockManager
-func (_mock *MockManager) CreateTasks(ctx context.Context, tasks []db.Task) error {
-	ret := _mock.Called(ctx, tasks)
-
-	if len(ret) == 0 {
-		panic("no return value specified for CreateTasks")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []db.Task) error); ok {
-		r0 = returnFunc(ctx, tasks)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockManager_CreateTasks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateTasks'
-type MockManager_CreateTasks_Call struct {
-	*mock.Call
-}
-
-// CreateTasks is a helper method to define mock.On call
-//   - ctx context.Context
-//   - tasks []db.Task
-func (_e *MockManager_Expecter) CreateTasks(ctx any, tasks any) *MockManager_CreateTasks_Call {
-	return &MockManager_CreateTasks_Call{Call: _e.mock.On("CreateTasks", ctx, tasks)}
-}
-
-func (_c *MockManager_CreateTasks_Call) Run(run func(ctx context.Context, tasks []db.Task)) *MockManager_CreateTasks_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 []db.Task
-		if args[1] != nil {
-			arg1 = args[1].([]db.Task)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockManager_CreateTasks_Call) Return(err error) *MockManager_CreateTasks_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockManager_CreateTasks_Call) RunAndReturn(run func(ctx context.Context, tasks []db.Task) error) *MockManager_CreateTasks_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ExistsTask provides a mock function for the type MockManager
-func (_mock *MockManager) ExistsTask(ctx context.Context, id string) (bool, error) {
-	ret := _mock.Called(ctx, id)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ExistsTask")
-	}
-
-	var r0 bool
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (bool, error)); ok {
-		return returnFunc(ctx, id)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) bool); ok {
-		r0 = returnFunc(ctx, id)
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, id)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockManager_ExistsTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExistsTask'
-type MockManager_ExistsTask_Call struct {
-	*mock.Call
-}
-
-// ExistsTask is a helper method to define mock.On call
-//   - ctx context.Context
-//   - id string
-func (_e *MockManager_Expecter) ExistsTask(ctx any, id any) *MockManager_ExistsTask_Call {
-	return &MockManager_ExistsTask_Call{Call: _e.mock.On("ExistsTask", ctx, id)}
-}
-
-func (_c *MockManager_ExistsTask_Call) Run(run func(ctx context.Context, id string)) *MockManager_ExistsTask_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockManager_ExistsTask_Call) Return(b bool, err error) *MockManager_ExistsTask_Call {
-	_c.Call.Return(b, err)
-	return _c
-}
-
-func (_c *MockManager_ExistsTask_Call) RunAndReturn(run func(ctx context.Context, id string) (bool, error)) *MockManager_ExistsTask_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Migrate provides a mock function for the type MockManager
 func (_mock *MockManager) Migrate(ctx context.Context) error {
 	ret := _mock.Called(ctx)
@@ -312,6 +189,63 @@ func (_c *MockManager_Migrate_Call) Return(err error) *MockManager_Migrate_Call 
 }
 
 func (_c *MockManager_Migrate_Call) RunAndReturn(run func(ctx context.Context) error) *MockManager_Migrate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpsertTasks provides a mock function for the type MockManager
+func (_mock *MockManager) UpsertTasks(ctx context.Context, tasks []task.Task) error {
+	ret := _mock.Called(ctx, tasks)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpsertTasks")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []task.Task) error); ok {
+		r0 = returnFunc(ctx, tasks)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockManager_UpsertTasks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpsertTasks'
+type MockManager_UpsertTasks_Call struct {
+	*mock.Call
+}
+
+// UpsertTasks is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tasks []task.Task
+func (_e *MockManager_Expecter) UpsertTasks(ctx any, tasks any) *MockManager_UpsertTasks_Call {
+	return &MockManager_UpsertTasks_Call{Call: _e.mock.On("UpsertTasks", ctx, tasks)}
+}
+
+func (_c *MockManager_UpsertTasks_Call) Run(run func(ctx context.Context, tasks []task.Task)) *MockManager_UpsertTasks_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []task.Task
+		if args[1] != nil {
+			arg1 = args[1].([]task.Task)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_UpsertTasks_Call) Return(err error) *MockManager_UpsertTasks_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockManager_UpsertTasks_Call) RunAndReturn(run func(ctx context.Context, tasks []task.Task) error) *MockManager_UpsertTasks_Call {
 	_c.Call.Return(run)
 	return _c
 }

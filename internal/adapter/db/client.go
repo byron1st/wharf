@@ -3,26 +3,28 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/byron1st/wharf/internal/pkg/task"
 )
 
 var (
-	ErrNotConnected            = errors.New("db: not connected")
-	ErrFailedToBeginTx         = errors.New("db: failed to begin transaction")
-	ErrFailedToCreateTask      = errors.New("db: failed to create task")
-	ErrFailedToCommitTx        = errors.New("db: failed to commit transaction")
-	ErrFailedToCheckTaskExists = errors.New("db: failed to check task existence")
+	ErrNotConnected       = errors.New("db: not connected")
+	ErrFailedToBeginTx    = errors.New("db: failed to begin transaction")
+	ErrFailedToUpsertTask = errors.New("db: failed to upsert task")
+	ErrFailedToCommitTx   = errors.New("db: failed to commit transaction")
 )
 
 type Manager interface {
 	// DB Manager Methods
 
-	CreateTasks(ctx context.Context, tasks []Task) error
-	ExistsTask(ctx context.Context, id string) (bool, error)
+	UpsertTasks(ctx context.Context, tasks []task.Task) error
 
 	// DB Management
 
@@ -46,11 +48,11 @@ func NewManager(path string, migrations fs.FS) Manager {
 	return &manager{path: path, migrations: migrations}
 }
 
-// CreateTasks stores all tasks in one transaction: either every task is
+// UpsertTasks stores all tasks in one transaction: either every task is
 // stored or none is. A task whose ID is already stored has its other fields
-// overwritten. Empty ChildrenIds and LinkedIds are stored as "[]" so the
-// columns always hold a JSON array. An empty list is a no-op.
-func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
+// overwritten. Nil dates are stored as NULL and ID lists as JSON arrays, with
+// nil or empty lists stored as "[]". An empty list is a no-op.
+func (m *manager) UpsertTasks(ctx context.Context, tasks []task.Task) error {
 	if err := m.checkConnected(); err != nil {
 		return err
 	}
@@ -69,12 +71,9 @@ func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
 
 	queries := m.queries.WithTx(tx)
 
-	for _, task := range tasks {
-		task.ChildrenIds = orEmptyJSONArray(task.ChildrenIds)
-		task.LinkedIds = orEmptyJSONArray(task.LinkedIds)
-
-		if err := queries.UpsertTask(ctx, UpsertTaskParams(task)); err != nil {
-			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToCreateTask, err), task.ID)
+	for _, t := range tasks {
+		if err := queries.UpsertTask(ctx, toUpsertTaskParams(t)); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpsertTask, err), t.ID)
 		}
 	}
 
@@ -85,18 +84,38 @@ func (m *manager) CreateTasks(ctx context.Context, tasks []Task) error {
 	return nil
 }
 
-// ExistsTask reports whether a task with id is stored.
-func (m *manager) ExistsTask(ctx context.Context, id string) (bool, error) {
-	if err := m.checkConnected(); err != nil {
-		return false, err
+func toUpsertTaskParams(t task.Task) UpsertTaskParams {
+	return UpsertTaskParams{
+		ID:          t.ID,
+		Originated:  string(t.Originated),
+		Title:       t.Title,
+		Description: t.Description,
+		Status:      string(t.Status),
+		StartDate:   toNullTime(t.StartDate),
+		DueDate:     toNullTime(t.DueDate),
+		ParentID:    t.ParentID,
+		ChildrenIds: toJSONArray(t.ChildrenIDs),
+		LinkedIds:   toJSONArray(t.LinkedIDs),
+	}
+}
+
+func toNullTime(t *time.Time) sql.NullTime {
+	if t == nil {
+		return sql.NullTime{}
 	}
 
-	exists, err := m.queries.ExistsTask(ctx, id)
-	if err != nil {
-		return false, errors.Join(ErrFailedToCheckTaskExists, err)
+	return sql.NullTime{Time: *t, Valid: true}
+}
+
+func toJSONArray(ids []string) string {
+	if len(ids) == 0 {
+		return "[]"
 	}
 
-	return exists, nil
+	// Marshaling a []string cannot fail.
+	data, _ := json.Marshal(ids)
+
+	return string(data)
 }
 
 func (m *manager) checkConnected() error {
@@ -105,12 +124,4 @@ func (m *manager) checkConnected() error {
 	}
 
 	return nil
-}
-
-func orEmptyJSONArray(ids string) string {
-	if ids == "" {
-		return "[]"
-	}
-
-	return ids
 }
