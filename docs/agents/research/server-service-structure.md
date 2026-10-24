@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: internal/server·internal/service 뼈대의 TODO, db.Manager·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙, ExistsTask/CreateTasks 를 쓰는 테스트 위치, mockery·lint·에러·테스트 관례, AGENTS.md 의 internal/route 언급 위치를 정리한다.
+Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks) 의 구조와 main wiring, db.Manager·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
 ---
 
 # server / service 계층 구조 조사
@@ -23,26 +23,50 @@ flowchart LR
     db --> task
 ```
 
-- 현재 `cmd/wharf/main.go:5` 는 `fmt.Println("Hello world")` 뿐이며 wiring 이 전혀 없다.
-- 의존 간선은 `make deps-graph` (`Makefile:88`) 로 확인할 수 있다. `internal/...` 의 모듈 내부 import 간선만 출력한다.
+- 의존 간선은 `make deps-graph` (`Makefile:88`) 로 확인할 수 있다. `internal/...` 의 모듈 내부 import 간선만 출력한다. `server → service`, `service → atlassian·db` 만 있고 `server → adapter`, `service → server` 간선은 없다.
 
-## 뼈대 파일의 TODO
+## main wiring (`cmd/wharf/main.go`)
 
-- `internal/server/route.go:3-7` — route 정의, `GET /healthz` 포함, 기본적인 request body 검사, 검사 후 service 의 1:1 대응 함수 호출, service 반환값·에러를 HTTP status code 와 함께 반환.
-- `internal/server/server.go:3-6` — 기본 서버 구조체, 실행과 graceful shutdown, 기본 미들웨어(recover, request-id, request-logger), route 정의는 서버 객체 생성과 분리(테스트 용이성).
-- `internal/service/service.go:3` — adapter 함수를 호출해 비즈니스 로직 수행.
-- 세 파일 모두 `package` 선언과 TODO 주석만 있다.
+- `run() (code int)` (`main.go:24`) 이 실제 본체이고 `main` 은 `os.Exit(run())` 만 한다. defer 로 DB `Close` 를 보장하면서 exit code 를 돌려주기 위한 형태다.
+- 순서: `signal.NotifyContext(os.Interrupt, SIGTERM)` → `db.NewManager(WHARF_DB_PATH, scripts.Migrations())` → `Connect` → `Migrate` → acli 경로 해석 → `tool.NewTool` → `atlassian.NewClient` → `service.NewService` → `server.NewHandler` → `server.New` → `net.Listen(WHARF_ADDR)` → `Run`. 각 실패는 slog JSON 로그(stdout) 를 남기고 exit 1.
+- env 기본값은 `getenv` (`main.go:90`) 로 처리한다: `WHARF_ADDR` = `:8080`, `WHARF_DB_PATH` = `wharf.db`. `WHARF_ACLI_PATH` 가 비면 `exec.LookPath("acli")` 로 찾는데, `tool.NewTool` 이 PATH 를 탐색하지 않기 때문이다. 찾지 못하면 기동하지 않는다.
+
+## server / service 구현
+
+### service (`internal/service/service.go`)
+
+- `Service` 인터페이스는 `SyncJiraTasks(ctx) (SyncResult, error)` 하나다 (`service.go:19`). `POST /tasks/jira` 와 1:1 로 대응한다. 생성자 `NewService(jira atlassian.Client, db db.Manager) Service` (`:29`).
+- `SyncResult` (`:11`) 는 `Upserted int` 와 `Partial error` 를 갖는다. `Partial` 은 `GetMyTasks` 가 tasks 와 함께 돌려준 joined error 이고, 모두 성공하면 nil 이다.
+- `SyncJiraTasks` (`:37`) 는 `GetMyTasks` 의 반환 규칙을 그대로 따른다. tasks 가 nil 이면 저장하지 않고 에러를 반환한다. non-nil 이면 에러가 있어도 반환된 tasks 를 전부 `UpsertTasks` 하고 Jira 에러는 `Partial` 로 넘긴다. `UpsertTasks` 실패는 그대로 반환한다.
+- service 는 로그를 남기지 않는다. 로그는 server 쪽 handler 가 request id 와 함께 남긴다.
+
+### route (`internal/server/route.go`)
+
+- `NewHandler(svc, logger) http.Handler` (`route.go:22`) 가 표준 `ServeMux` method pattern 으로 `GET /healthz`, `POST /tasks/jira` 를 등록한다. 서버 객체 생성과 분리되어 있어 `MockService` + `httptest` 만으로 테스트할 수 있다.
+- `healthz` 는 200 `{"status":"ok"}`.
+- `syncJiraTasks` (`:36`) 는 service 에러를 모두 500 `{"error":"internal server error"}` 로 바꾸고 원인은 Error 로그에만 남긴다 (`writeInternalError` `:63`). 성공 시 200 `{"upserted":N,"partial":bool}` 이며, `Partial` 이 있으면 Warn 로그로 남긴다.
+- request id 는 요청 헤더 `X-Request-ID` 에서 읽는다. 그래서 handler 로그의 request id 는 `Server` 의 request-id 미들웨어가 먼저 돌았다는 전제에 의존한다.
+- request body 가 있는 endpoint 가 아직 없어 body 디코딩·검사 헬퍼는 없다.
+
+### server (`internal/server/server.go`)
+
+- `New(handler, logger) *Server` (`server.go:35`) 는 `*http.Server` 를 감싸고 미들웨어를 바깥부터 request-id → request-logger → recover 순으로 씌운다. `ReadHeaderTimeout` 은 10초이고, 동기화 요청이 CLI 를 항목마다 호출해 오래 걸릴 수 있으므로 `WriteTimeout` 은 두지 않는다.
+- `withRequestID` (`:68`): 들어온 `X-Request-ID` 를 재사용하고, 없으면 `crypto/rand.Text()` 로 만들어 요청을 Clone 한 뒤 헤더에 넣는다. 응답 헤더에도 같은 값을 넣는다.
+- `withRequestLog` (`:83`): `statusRecorder` (`:129`) 로 상태 코드를 잡아 method, path, status, request_id 를 Info 로그로 남긴다. `statusRecorder.Unwrap` 이 있어 `http.ResponseController` 가 원래 writer 에 닿는다.
+- `withRecover` (`:101`): panic 을 500 응답과 Error 로그(stack 포함) 로 바꾼다. `http.ErrAbortHandler` 는 다시 panic 해서 net/http 가 연결을 끊게 둔다. 이 경우 request-logger 의 로그 줄까지 실행되지 않는다.
+- `Run(ctx, ln net.Listener) error` (`:45`): goroutine 에서 `Serve(ln)` 을 돌리고, Serve 가 먼저 끝나면 `ErrFailedToServe` 를 반환한다. ctx 가 끝나면 `context.WithoutCancel(ctx)` 에 `shutdownTimeout`(30초) 을 건 컨텍스트로 `Shutdown` 하고 nil 을 반환한다. timeout 을 넘기면 `ErrFailedToShutdown` 이다. listener 를 인자로 받는 것은 테스트에서 `:0` 을 쓰기 위해서다.
+- sentinel 은 `ErrFailedToServe`, `ErrFailedToShutdown` 두 개로, 접두어는 `"server: "` 다.
 
 ## adapter 계약
 
 ### db.Manager (`internal/adapter/db/client.go`)
 
-- 인터페이스 `client.go:21-32`: `CreateTasks(ctx, []Task) error`, `ExistsTask(ctx, id) (bool, error)`, `Connect`, `Migrate`, `Close`. 여기의 `Task` 는 sqlc 생성 모델 `db.Task` (`internal/adapter/db/models.go:17-28`) 로, 날짜는 `sql.NullTime`, ID 목록은 JSON 배열 문자열(`ChildrenIds`, `LinkedIds`) 이다.
-- sentinel `client.go:13-19`: `ErrNotConnected`, `ErrFailedToBeginTx`, `ErrFailedToCreateTask`, `ErrFailedToCommitTx`, `ErrFailedToCheckTaskExists`. `ErrFailedToCheckTaskExists` 는 `ExistsTask` 에서만 쓰인다.
-- `CreateTasks` `client.go:53-86`: `checkConnected` → 빈 목록 no-op → `BeginTx` → `queries.WithTx(tx)` 로 단건 `UpsertTask` 반복 → `Commit`. defer Rollback. ID 목록 빈 문자열은 `orEmptyJSONArray` (`client.go:110-116`) 로 `"[]"` 가 된다. 실패는 `fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToCreateTask, err), task.ID)` 로 감싼다.
-- 생성 params 는 `UpsertTaskParams(task)` 타입 변환으로 만든다 (`client.go:76`). `UpsertTaskParams` 는 `internal/adapter/db/queries.sql.go:62` 에 생성되며 `db.Task` 와 필드가 같다.
-- `ExistsTask` `client.go:88-100`, 쿼리 `scripts/queries.sql:18-19`, 생성 코드 `internal/adapter/db/queries.sql.go:33-37`, mock `internal/pkg/mocks/db_manager.go:203`, `:236`.
-- `checkConnected` `client.go:102-108` 는 모든 비관리 메서드의 첫 줄이다.
+- 인터페이스 `client.go:24-34`: `UpsertTasks(ctx, []task.Task) error`, `Connect`, `Migrate`, `Close`. 인자는 도메인 타입 `task.Task` 이므로 호출하는 service 는 sqlc 생성 모델 `db.Task` (`internal/adapter/db/models.go:17-28`, 날짜 `sql.NullTime`, ID 목록 JSON 배열 문자열 `ChildrenIds`·`LinkedIds`) 를 알 필요가 없다.
+- sentinel `client.go:17-22`: `ErrNotConnected`, `ErrFailedToBeginTx`, `ErrFailedToUpsertTask`, `ErrFailedToCommitTx`.
+- `UpsertTasks` `client.go:55-85`: `checkConnected` → 빈 목록 no-op → `BeginTx` → `queries.WithTx(tx)` 로 단건 `UpsertTask` 반복 → `Commit`. defer Rollback 이라 하나라도 실패하면 아무것도 저장되지 않는다. 같은 ID 는 `ON CONFLICT (id) DO UPDATE` 로 덮어쓴다. 실패는 `fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpsertTask, err), t.ID)` 로 감싼다.
+- `task.Task` → `UpsertTaskParams` (`internal/adapter/db/queries.sql.go:51`) 변환은 db 패키지의 `toUpsertTaskParams` (`client.go:87`) 가 맡는다. `*time.Time` 은 `toNullTime` (`:102`) 으로 nil 이면 NULL, `[]string` 은 `toJSONArray` (`:110`) 로 nil·빈 목록이면 `"[]"`, 그 외에는 `json.Marshal` 결과가 된다. `Origin`/`Status` 는 `string(...)` 변환이다.
+- task 를 읽는 쿼리는 없다. `scripts/queries.sql` 에는 `UpsertTask` 와 마이그레이션용 `ExistsSchemaMigration`, `CreateSchemaMigration` 만 있다.
+- `checkConnected` `client.go:121-127` 는 모든 비관리 메서드의 첫 줄이다.
 - 마이그레이션 FS 는 `scripts.Migrations()` (`scripts/migrations.go:13`) 로 얻는다.
 
 ### atlassian.Client (`internal/adapter/atlassian/client.go`)
@@ -67,20 +91,20 @@ flowchart LR
 - `task.Task` `internal/pkg/task/task.go:5-16`: 날짜는 `*time.Time`, ID 목록은 `[]string`, `Originated task.Origin`, `Status task.Status`.
 - `Origin` / `Status` 는 `string` 기반 타입이며 상수는 untyped string 이다 (`origin.go:5-10`, `status.go:5-10`).
 
-## ExistsTask / CreateTasks 를 쓰는 테스트
+## db 테스트의 저장 확인 방식
 
+- Manager 에 task 를 읽는 메서드가 없으므로, 테스트는 파일 DB 에 별도 연결을 열어 직접 SQL 로 확인한다.
 - `internal/adapter/db/client_test.go`:
-  - `newManager` (`:19`) 는 `:memory:` DB 를 쓴다. 단일 연결(`SetMaxOpenConns(1)`, `client_management.go:68`) 이라 다른 연결로 같은 in-memory DB 를 읽을 수 없다.
-  - `newFileManager` (`:41`) 는 파일 DB 와 경로를 반환하고, `read` (`:89-103`) 가 별도 연결로 행을 읽는다.
-  - `requireExists` (`:105-111`) 가 `ExistsTask` 를 쓴다. 사용처: `:128-130`, `:158`, `:205-206`, `:217`. `TestExistsTaskFailure` (`:220`) 는 `ExistsTask` 전용이다.
-  - `newTask` (`:114`) 는 `db.Task` 를 만든다. `CreateTasks` 호출은 `:126` 이후 테스트 전반.
-- `internal/adapter/db/client_management_test.go`: `CreateTasks`·`requireExists` 사용 `:51`, `:59`, `:66-67`, `:228-230`, `:260-261`, `:266-270`. `TestMethodsRequireConnection` 은 `:243` 에서 `CreateTasks`, `:247` 에서 `ExistsTask` 의 `ErrNotConnected` 를 확인한다.
+  - `newManager` (`:21`) 는 `:memory:` DB 를 쓴다. 단일 연결(`SetMaxOpenConns(1)`, `client_management.go:68`) 이라 다른 연결로 같은 in-memory DB 를 읽을 수 없다. 저장 내용을 확인하지 않는 테스트만 이것을 쓴다.
+  - `newFileManager` (`:42`) 는 파일 DB 와 경로를 반환한다. `open` (`:120`) 이 그 경로로 별도 `*sql.DB` 를 열고, `read` (`:92`) 는 한 행의 컬럼을 `readTask` 로 읽으며, `requireExists` (`:109`) 는 `SELECT EXISTS (...)` 로 존재 여부를 확인한다.
+  - `newTask` (`:130`) 는 `task.Task` 를 만든다.
+- `internal/adapter/db/client_management_test.go` 도 재연결 후 데이터 유지 등을 같은 `newFileManager`·`requireExists` 조합으로 확인한다. `TestMethodsRequireConnection` (`:234`) 은 연결 전·종료 후의 `UpsertTasks`, `Migrate` 가 `ErrNotConnected` 인지 본다.
 
 ## mockery
 
-- `.mockery.yml:1-12`: template `testify`, `dir: internal/pkg/mocks`, `filename: "{{.SrcPackageName}}_{{.InterfaceName | lower}}.go"`, `structname: "{{.Mock}}{{.InterfaceName}}"`. 현재 등록은 `db.Manager`, `tool.Tool` 뿐이다.
-- 따라서 `service.Service` → `internal/pkg/mocks/service_service.go` / `MockService`, `atlassian.Client` → `internal/pkg/mocks/atlassian_client.go` / `MockClient` 가 된다.
-- 테스트는 `mocks.NewMockTool(t)` + `m.EXPECT().Run(...).Return(...).Once()` 형태로 쓴다 (`internal/adapter/atlassian/client_test.go:66-71`).
+- `.mockery.yml`: template `testify`, `dir: internal/pkg/mocks`, `filename: "{{.SrcPackageName}}_{{.InterfaceName | lower}}.go"`, `structname: "{{.Mock}}{{.InterfaceName}}"`. 등록된 인터페이스는 `db.Manager`, `tool.Tool`, `atlassian.Client`, `service.Service` 이다.
+- 따라서 `service.Service` → `internal/pkg/mocks/service_service.go` / `MockService`, `atlassian.Client` → `internal/pkg/mocks/atlassian_client.go` / `MockClient`, `db.Manager` → `db_manager.go` / `MockManager` 가 된다. service 테스트는 `MockClient`·`MockManager`, route 테스트는 `MockService` 를 쓴다.
+- 테스트는 `mocks.NewMockTool(t)` + `m.EXPECT().Run(...).Return(...).Once()` 형태로 쓴다 (`internal/adapter/atlassian/client_test.go` 의 `TestGetMyTasks`). 기대를 등록하지 않은 메서드가 호출되면 mock 이 테스트를 실패시키므로, "호출되지 않아야 한다" 는 기대를 등록하지 않는 것으로 표현한다.
 
 ## 코드 스타일 관례
 
@@ -90,9 +114,9 @@ flowchart LR
 - 문서 주석은 exported 함수·메서드에 이름으로 시작. unexported 는 의도가 불분명할 때만.
 - 테스트: `<package>_test` 외부 패키지, `require` 위주, `t.Context()` 또는 `context.Background()`, 헬퍼는 `t.Helper()` 로 시작.
 
-## AGENTS.md 의 internal/route 언급
+## AGENTS.md 의 계층 서술
 
-- `AGENTS.md:30` — Architecture Overview 의 `internal/route/` 항목.
-- `AGENTS.md:42` — Code Conventions 의 layering `route` → `service` → `adapter`.
-- `AGENTS.md:69` — Boundaries 의 `NEVER import internal/route ...`.
-- `AGENTS.md:29` 의 "routes" 는 일반 명사라 대상이 아니다.
+- `AGENTS.md:30` — Architecture Overview 의 `internal/server/` 항목 (HTTP server, middleware, handlers).
+- `AGENTS.md:42` — Code Conventions 의 layering `server` → `service` → `adapter`.
+- `AGENTS.md:69` — Boundaries 의 `NEVER import internal/server from internal/service or internal/adapter`.
+- `AGENTS.md:29` 의 "routes" 는 일반 명사로, 특정 패키지를 가리키지 않는다.
