@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/task"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -142,8 +142,74 @@ func (_c *MockManager_Connect_Call) RunAndReturn(run func(ctx context.Context) e
 	return _c
 }
 
+// CreateLocalTask provides a mock function for the type MockManager
+func (_mock *MockManager) CreateLocalTask(ctx context.Context, t task.Task) (string, error) {
+	ret := _mock.Called(ctx, t)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateLocalTask")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, task.Task) (string, error)); ok {
+		return returnFunc(ctx, t)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, task.Task) string); ok {
+		r0 = returnFunc(ctx, t)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, task.Task) error); ok {
+		r1 = returnFunc(ctx, t)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockManager_CreateLocalTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateLocalTask'
+type MockManager_CreateLocalTask_Call struct {
+	*mock.Call
+}
+
+// CreateLocalTask is a helper method to define mock.On call
+//   - ctx context.Context
+//   - t task.Task
+func (_e *MockManager_Expecter) CreateLocalTask(ctx any, t any) *MockManager_CreateLocalTask_Call {
+	return &MockManager_CreateLocalTask_Call{Call: _e.mock.On("CreateLocalTask", ctx, t)}
+}
+
+func (_c *MockManager_CreateLocalTask_Call) Run(run func(ctx context.Context, t task.Task)) *MockManager_CreateLocalTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 task.Task
+		if args[1] != nil {
+			arg1 = args[1].(task.Task)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_CreateLocalTask_Call) Return(s string, err error) *MockManager_CreateLocalTask_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockManager_CreateLocalTask_Call) RunAndReturn(run func(ctx context.Context, t task.Task) (string, error)) *MockManager_CreateLocalTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateTasks provides a mock function for the type MockManager
-func (_mock *MockManager) CreateTasks(ctx context.Context, tasks []db.Task) error {
+func (_mock *MockManager) CreateTasks(ctx context.Context, tasks []task.Task) error {
 	ret := _mock.Called(ctx, tasks)
 
 	if len(ret) == 0 {
@@ -151,7 +217,7 @@ func (_mock *MockManager) CreateTasks(ctx context.Context, tasks []db.Task) erro
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []db.Task) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []task.Task) error); ok {
 		r0 = returnFunc(ctx, tasks)
 	} else {
 		r0 = ret.Error(0)
@@ -166,20 +232,20 @@ type MockManager_CreateTasks_Call struct {
 
 // CreateTasks is a helper method to define mock.On call
 //   - ctx context.Context
-//   - tasks []db.Task
+//   - tasks []task.Task
 func (_e *MockManager_Expecter) CreateTasks(ctx any, tasks any) *MockManager_CreateTasks_Call {
 	return &MockManager_CreateTasks_Call{Call: _e.mock.On("CreateTasks", ctx, tasks)}
 }
 
-func (_c *MockManager_CreateTasks_Call) Run(run func(ctx context.Context, tasks []db.Task)) *MockManager_CreateTasks_Call {
+func (_c *MockManager_CreateTasks_Call) Run(run func(ctx context.Context, tasks []task.Task)) *MockManager_CreateTasks_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 []db.Task
+		var arg1 []task.Task
 		if args[1] != nil {
-			arg1 = args[1].([]db.Task)
+			arg1 = args[1].([]task.Task)
 		}
 		run(
 			arg0,
@@ -194,7 +260,7 @@ func (_c *MockManager_CreateTasks_Call) Return(err error) *MockManager_CreateTas
 	return _c
 }
 
-func (_c *MockManager_CreateTasks_Call) RunAndReturn(run func(ctx context.Context, tasks []db.Task) error) *MockManager_CreateTasks_Call {
+func (_c *MockManager_CreateTasks_Call) RunAndReturn(run func(ctx context.Context, tasks []task.Task) error) *MockManager_CreateTasks_Call {
 	_c.Call.Return(run)
 	return _c
 }

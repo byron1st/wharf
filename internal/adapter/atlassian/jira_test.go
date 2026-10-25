@@ -98,7 +98,7 @@ func TestToTask(t *testing.T) {
 	got, err := atlassian.ToTask(viewWorkItem(t, fixture(t, "view_done.json")))
 	require.NoError(t, err)
 	require.Equal(t, task.Task{
-		ID:          "WHF-3",
+		ID:          "jira-WHF-3",
 		Originated:  task.OriginJira,
 		Title:       "Fix flaky login test",
 		Description: "Retry is no longer needed.",
@@ -113,7 +113,7 @@ func TestToTaskWithoutOptionalFields(t *testing.T) {
 	got, err := atlassian.ToTask(viewWorkItem(t, fixture(t, "view_todo.json")))
 	require.NoError(t, err)
 	require.Equal(t, task.Task{
-		ID:         "WHF-1",
+		ID:         "jira-WHF-1",
 		Originated: task.OriginJira,
 		Title:      "Write onboarding guide",
 		Status:     task.StatusTodo,
@@ -132,7 +132,7 @@ func TestToTaskRelations(t *testing.T) {
 		{
 			name:         "parent key",
 			fields:       `"parent": {"id": "10100", "key": "WHF-10", "fields": {"summary": "Task sync"}}`,
-			wantParentID: "WHF-10",
+			wantParentID: "jira-WHF-10",
 		},
 		{
 			name: "subtask keys keep their order",
@@ -140,12 +140,12 @@ func TestToTaskRelations(t *testing.T) {
 				{"id": "10106", "key": "WHF-6", "fields": {"summary": "Store synced tasks"}},
 				{"id": "10105", "key": "WHF-5", "fields": {"summary": "Add sync scheduler"}}
 			]`,
-			wantChildrenIDs: []string{"WHF-6", "WHF-5"},
+			wantChildrenIDs: []string{"jira-WHF-6", "jira-WHF-5"},
 		},
 		{
 			name:            "subtasks without a key are skipped",
 			fields:          `"subtasks": [{"id": "10105"}, {"id": "10106", "key": "WHF-6"}]`,
-			wantChildrenIDs: []string{"WHF-6"},
+			wantChildrenIDs: []string{"jira-WHF-6"},
 		},
 		{
 			name: "links in both directions keep their order",
@@ -153,7 +153,7 @@ func TestToTaskRelations(t *testing.T) {
 				{"id": "1", "type": {"name": "Blocks"}, "outwardIssue": {"key": "WHF-3"}},
 				{"id": "2", "type": {"name": "Relates"}, "inwardIssue": {"key": "WHF-2"}}
 			]`,
-			wantLinkedIDs: []string{"WHF-3", "WHF-2"},
+			wantLinkedIDs: []string{"jira-WHF-3", "jira-WHF-2"},
 		},
 		{
 			name: "links without a key are skipped",
@@ -162,7 +162,7 @@ func TestToTaskRelations(t *testing.T) {
 				{"id": "2", "type": {"name": "Relates"}, "inwardIssue": {"key": ""}},
 				{"id": "3", "type": {"name": "Relates"}, "inwardIssue": {"key": "WHF-2"}}
 			]`,
-			wantLinkedIDs: []string{"WHF-2"},
+			wantLinkedIDs: []string{"jira-WHF-2"},
 		},
 	}
 
@@ -187,7 +187,7 @@ func TestToTaskRelations(t *testing.T) {
 func TestToTaskInvalidFields(t *testing.T) {
 	got, err := atlassian.ToTask(viewWorkItem(t, fixture(t, "view_invalid_fields.json")))
 	require.Equal(t, task.Task{
-		ID:         "WHF-1",
+		ID:         "jira-WHF-1",
 		Originated: task.OriginJira,
 		Title:      "Write onboarding guide",
 	}, got)

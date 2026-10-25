@@ -33,9 +33,11 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, Task �
 | `Status Status` | `status` | `TEXT NOT NULL` | `string` |
 | `StartDate *time.Time` | `start_date` | `DATETIME` (nullable) | `sql.NullTime` |
 | `DueDate *time.Time` | `due_date` | `DATETIME` (nullable) | `sql.NullTime` |
-| `ParentID string` | `parent_id` | `TEXT NOT NULL` | `string` |
-| `ChildrenIDs []string` | `children_ids` | `TEXT NOT NULL` (JSON 배열) | `string` |
-| `LinkedIDs []string` | `linked_ids` | `TEXT NOT NULL` (JSON 배열) | `string` |
+| `ParentID string` | `task_parents(child_id, parent_id)` 행 | 별도 테이블 (`0002_task_relations.sql`) | `TaskParent` |
+| `ChildrenIDs []string` | 자식마다 `task_parents(child_id=자식, parent_id=task)` 행 | 별도 테이블 | `TaskParent` |
+| `LinkedIDs []string` | `task_links(task_id, linked_id)` 행 | 별도 테이블 | `TaskLink` |
+
+- DEV-17 이후 `parent_id`·`children_ids`·`linked_ids` 컬럼은 `0002_task_relations.sql` 에서 삭제되었다. 관계 저장 규칙은 [task-db-relations](./task-db-relations.md) 참고.
 
 - `Origin`/`Status` 는 `string` 기반 타입이고 상수는 untyped string 이다 (`internal/pkg/task/origin.go`, `internal/pkg/task/status.go`). 저장 시 `string(...)` 변환이면 된다.
 - 생성 struct 필드명은 `ChildrenIds`, `LinkedIds` 처럼 sqlc 기본 규칙을 따른다 (rename 은 필요 시 sqlc.yaml `rename` 으로).

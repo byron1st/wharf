@@ -22,7 +22,19 @@ type Task struct {
 	Status      string
 	StartDate   sql.NullTime
 	DueDate     sql.NullTime
-	ParentID    string
-	ChildrenIds string
-	LinkedIds   string
+}
+
+type TaskCounter struct {
+	Origin string
+	Value  int64
+}
+
+type TaskLink struct {
+	TaskID   string
+	LinkedID string
+}
+
+type TaskParent struct {
+	ChildID  string
+	ParentID string
 }

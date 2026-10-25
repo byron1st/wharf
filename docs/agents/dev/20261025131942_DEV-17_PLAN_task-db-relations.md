@@ -8,6 +8,8 @@ Title: task-db-relations
 
 # Task DB 개선: 관계 테이블 분리, `{originated}-{key}` ID, local ID 카운터
 
+Report: [20261025131942_DEV-17_IMPL_task-db-relations.md](./20261025131942_DEV-17_IMPL_task-db-relations.md)
+
 Notion 개발 이슈 보드 DEV-17. `tasks` 의 JSON 배열 관계 컬럼을 별도 테이블로 옮기고, task ID 를 출처 접두어가 붙은 형식으로 바꾸며, local task 에 증가 번호 ID 를 할당하는 경로를 만든다.
 
 ## Non-goals
@@ -64,8 +66,8 @@ Notion 개발 이슈 보드 DEV-17. `tasks` 의 JSON 배열 관계 컬럼을 별
 
 ## TODOs
 
-- [ ] `0002` migration 과 `scripts/queries.sql` 쿼리(task upsert, 부모 upsert/삭제, link 삭제/추가, 카운터 증가)를 작성하고 `make gen` (AC-1, AC-2) (mechanical) (→ research: task-db-relations)
-- [ ] `internal/pkg/task` 에 `{origin}-{key}` 조합과 local key(`WHF-%03d`) 규칙을 추가 (AC-5, AC-6) (mechanical)
-- [ ] `CreateTasks` 를 `[]task.Task` 입력으로 바꾸고 관계 테이블 저장을 Key decisions 의 규칙대로 구현, local task 생성 메서드 추가, `make gen` 으로 mock 갱신 (AC-3, AC-4, AC-5) (design-bearing) (→ research: task-db-relations)
-- [ ] db 테스트를 새 스키마·입력 타입에 맞게 고치고 AC-1~AC-5 테스트 추가 (AC-1, AC-2, AC-3, AC-4, AC-5) (mechanical) (→ research: task-db-relations)
-- [ ] `atlassian.ToTask` 의 ID·관계 ID 에 `jira-` 접두를 적용하고 adapter 테스트 기대값 갱신 (AC-6) (mechanical) (→ research: task-db-relations)
+- [x] `0002` migration 과 `scripts/queries.sql` 쿼리(task upsert, 부모 upsert/삭제, link 삭제/추가, 카운터 증가)를 작성하고 `make gen` (AC-1, AC-2) (mechanical) (→ research: task-db-relations)
+- [x] `internal/pkg/task` 에 `{origin}-{key}` 조합과 local key(`WHF-%03d`) 규칙을 추가 (AC-5, AC-6) (mechanical)
+- [x] `CreateTasks` 를 `[]task.Task` 입력으로 바꾸고 관계 테이블 저장을 Key decisions 의 규칙대로 구현, local task 생성 메서드 추가, `make gen` 으로 mock 갱신 (AC-3, AC-4, AC-5) (design-bearing) (→ research: task-db-relations)
+- [x] db 테스트를 새 스키마·입력 타입에 맞게 고치고 AC-1~AC-5 테스트 추가 (AC-1, AC-2, AC-3, AC-4, AC-5) (mechanical) (→ research: task-db-relations)
+- [x] `atlassian.ToTask` 의 ID·관계 ID 에 `jira-` 접두를 적용하고 adapter 테스트 기대값 갱신 (AC-6) (mechanical) (→ research: task-db-relations)

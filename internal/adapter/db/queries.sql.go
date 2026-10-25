@@ -19,6 +19,39 @@ func (q *Queries) CreateSchemaMigration(ctx context.Context, version string) err
 	return err
 }
 
+const createTaskLink = `-- name: CreateTaskLink :exec
+INSERT INTO task_links (task_id, linked_id) VALUES (?, ?)
+ON CONFLICT DO NOTHING
+`
+
+type CreateTaskLinkParams struct {
+	TaskID   string
+	LinkedID string
+}
+
+func (q *Queries) CreateTaskLink(ctx context.Context, arg CreateTaskLinkParams) error {
+	_, err := q.db.ExecContext(ctx, createTaskLink, arg.TaskID, arg.LinkedID)
+	return err
+}
+
+const deleteTaskLinks = `-- name: DeleteTaskLinks :exec
+DELETE FROM task_links WHERE task_id = ?
+`
+
+func (q *Queries) DeleteTaskLinks(ctx context.Context, taskID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTaskLinks, taskID)
+	return err
+}
+
+const deleteTaskParent = `-- name: DeleteTaskParent :exec
+DELETE FROM task_parents WHERE child_id = ?
+`
+
+func (q *Queries) DeleteTaskParent(ctx context.Context, childID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTaskParent, childID)
+	return err
+}
+
 const existsSchemaMigration = `-- name: ExistsSchemaMigration :one
 SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = ?)
 `
@@ -41,22 +74,30 @@ func (q *Queries) ExistsTask(ctx context.Context, id string) (bool, error) {
 	return exists, err
 }
 
+const nextTaskNumber = `-- name: NextTaskNumber :one
+UPDATE task_counters SET value = value + 1 WHERE origin = ? RETURNING value
+`
+
+func (q *Queries) NextTaskNumber(ctx context.Context, origin string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, nextTaskNumber, origin)
+	var value int64
+	err := row.Scan(&value)
+	return value, err
+}
+
 const upsertTask = `-- name: UpsertTask :exec
 INSERT INTO tasks (
-    id, originated, title, description, status, start_date, due_date, parent_id, children_ids, linked_ids
+    id, originated, title, description, status, start_date, due_date
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?
 )
 ON CONFLICT (id) DO UPDATE SET
-    originated   = excluded.originated,
-    title        = excluded.title,
-    description  = excluded.description,
-    status       = excluded.status,
-    start_date   = excluded.start_date,
-    due_date     = excluded.due_date,
-    parent_id    = excluded.parent_id,
-    children_ids = excluded.children_ids,
-    linked_ids   = excluded.linked_ids
+    originated  = excluded.originated,
+    title       = excluded.title,
+    description = excluded.description,
+    status      = excluded.status,
+    start_date  = excluded.start_date,
+    due_date    = excluded.due_date
 `
 
 type UpsertTaskParams struct {
@@ -67,9 +108,6 @@ type UpsertTaskParams struct {
 	Status      string
 	StartDate   sql.NullTime
 	DueDate     sql.NullTime
-	ParentID    string
-	ChildrenIds string
-	LinkedIds   string
 }
 
 func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) error {
@@ -81,9 +119,21 @@ func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) error {
 		arg.Status,
 		arg.StartDate,
 		arg.DueDate,
-		arg.ParentID,
-		arg.ChildrenIds,
-		arg.LinkedIds,
 	)
+	return err
+}
+
+const upsertTaskParent = `-- name: UpsertTaskParent :exec
+INSERT INTO task_parents (child_id, parent_id) VALUES (?, ?)
+ON CONFLICT (child_id) DO UPDATE SET parent_id = excluded.parent_id
+`
+
+type UpsertTaskParentParams struct {
+	ChildID  string
+	ParentID string
+}
+
+func (q *Queries) UpsertTaskParent(ctx context.Context, arg UpsertTaskParentParams) error {
+	_, err := q.db.ExecContext(ctx, upsertTaskParent, arg.ChildID, arg.ParentID)
 	return err
 }

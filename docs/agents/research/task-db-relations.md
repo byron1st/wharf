@@ -6,6 +6,8 @@ Description: tasks 테이블의 현재 스키마(JSON 배열 관계 컬럼), db.
 
 # Task DB 구조와 ID 생성 위치
 
+> DEV-17 구현 후 상태: `0002_task_relations.sql` 이 관계 컬럼을 `task_parents`·`task_links` 로 옮기고 `task_counters` 를 추가했다. `CreateTasks` 는 `[]task.Task` 를 받고 `CreateLocalTask` 가 `local-WHF-NNN` 을 할당한다. Jira ID 는 `task.NewID` 로 `jira-{key}` 가 된다(`internal/pkg/task/id.go`). 아래 "현재 스키마"·"ID 가 만들어지는 곳" 절은 구현 전 상태 기록이다.
+
 ## 현재 스키마
 
 - `scripts/migrations/0001_initial_migration.sql:1-12` — `tasks` 단일 테이블. `parent_id TEXT NOT NULL DEFAULT ''`, `children_ids`/`linked_ids` 는 JSON 배열 문자열(`DEFAULT '[]'`). 관계 테이블·카운터 테이블은 없다.

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/scripts"
 )
 
@@ -48,7 +49,7 @@ func TestMigrateKeepsDataAcrossReconnect(t *testing.T) {
 	first := db.NewManager(path, scripts.Migrations())
 	require.NoError(t, first.Connect(context.Background()))
 	require.NoError(t, first.Migrate(context.Background()))
-	require.NoError(t, first.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
+	require.NoError(t, first.CreateTasks(context.Background(), []task.Task{newTask("jira-WHF-1")}))
 	require.NoError(t, first.Close())
 
 	// Re-applying 0001 would fail on the existing tasks table.
@@ -56,15 +57,15 @@ func TestMigrateKeepsDataAcrossReconnect(t *testing.T) {
 	require.NoError(t, second.Connect(context.Background()))
 	t.Cleanup(func() { _ = second.Close() })
 	require.NoError(t, second.Migrate(context.Background()))
-	requireExists(t, second, "WHF-1", true)
+	requireExists(t, second, "jira-WHF-1", true)
 }
 
 func TestMigrateIsIdempotent(t *testing.T) {
 	manager := newManager(t)
 
 	require.NoError(t, manager.Migrate(context.Background()))
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
-	requireExists(t, manager, "WHF-1", true)
+	require.NoError(t, manager.CreateTasks(context.Background(), []task.Task{newTask("jira-WHF-1")}))
+	requireExists(t, manager, "jira-WHF-1", true)
 }
 
 func TestMigrateAppliesInVersionOrder(t *testing.T) {
@@ -225,9 +226,9 @@ func TestConnectWaitsForLockHeldByAnotherConnection(t *testing.T) {
 	}()
 
 	// Without a busy timeout this fails immediately with SQLITE_BUSY.
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
+	require.NoError(t, manager.CreateTasks(context.Background(), []task.Task{newTask("jira-WHF-1")}))
 	require.NoError(t, <-released)
-	requireExists(t, manager, "WHF-1", true)
+	requireExists(t, manager, "jira-WHF-1", true)
 }
 
 func TestMethodsRequireConnection(t *testing.T) {
@@ -240,11 +241,14 @@ func TestMethodsRequireConnection(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			require.ErrorIs(
 				t,
-				manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}),
+				manager.CreateTasks(context.Background(), []task.Task{newTask("jira-WHF-1")}),
 				db.ErrNotConnected,
 			)
 
-			_, err := manager.ExistsTask(context.Background(), "WHF-1")
+			_, err := manager.CreateLocalTask(context.Background(), newTask(""))
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			_, err = manager.ExistsTask(context.Background(), "jira-WHF-1")
 			require.ErrorIs(t, err, db.ErrNotConnected)
 
 			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
@@ -257,15 +261,15 @@ func TestConnectTwiceKeepsExistingConnection(t *testing.T) {
 	manager := newManager(t)
 
 	require.ErrorIs(t, manager.Connect(context.Background()), db.ErrAlreadyConnected)
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
-	requireExists(t, manager, "WHF-1", true)
+	require.NoError(t, manager.CreateTasks(context.Background(), []task.Task{newTask("jira-WHF-1")}))
+	requireExists(t, manager, "jira-WHF-1", true)
 }
 
 func TestConnectAfterClose(t *testing.T) {
 	manager, _ := newFileManager(t, scripts.Migrations())
-	require.NoError(t, manager.CreateTasks(context.Background(), []db.Task{newTask("WHF-1")}))
+	require.NoError(t, manager.CreateTasks(context.Background(), []task.Task{newTask("jira-WHF-1")}))
 	require.NoError(t, manager.Close())
 
 	require.NoError(t, manager.Connect(context.Background()))
-	requireExists(t, manager, "WHF-1", true)
+	requireExists(t, manager, "jira-WHF-1", true)
 }
