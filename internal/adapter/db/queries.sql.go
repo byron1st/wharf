@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const createSchemaMigration = `-- name: CreateSchemaMigration :exec
@@ -34,12 +35,60 @@ func (q *Queries) CreateTaskLink(ctx context.Context, arg CreateTaskLinkParams) 
 	return err
 }
 
+const deleteTask = `-- name: DeleteTask :execrows
+DELETE FROM tasks WHERE id = ?
+`
+
+func (q *Queries) DeleteTask(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteTask, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteTaskChildren = `-- name: DeleteTaskChildren :exec
+DELETE FROM task_hierarchies WHERE parent_id = ?
+`
+
+func (q *Queries) DeleteTaskChildren(ctx context.Context, parentID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTaskChildren, parentID)
+	return err
+}
+
+const deleteTaskHierarchies = `-- name: DeleteTaskHierarchies :exec
+DELETE FROM task_hierarchies WHERE child_id = ?1 OR parent_id = ?1
+`
+
+func (q *Queries) DeleteTaskHierarchies(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteTaskHierarchies, id)
+	return err
+}
+
 const deleteTaskLinks = `-- name: DeleteTaskLinks :exec
 DELETE FROM task_links WHERE task_id = ?
 `
 
 func (q *Queries) DeleteTaskLinks(ctx context.Context, taskID string) error {
 	_, err := q.db.ExecContext(ctx, deleteTaskLinks, taskID)
+	return err
+}
+
+const deleteTaskLinksOf = `-- name: DeleteTaskLinksOf :exec
+DELETE FROM task_links WHERE task_id = ?1 OR linked_id = ?1
+`
+
+func (q *Queries) DeleteTaskLinksOf(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteTaskLinksOf, id)
+	return err
+}
+
+const deleteTaskNonLocalParent = `-- name: DeleteTaskNonLocalParent :exec
+DELETE FROM task_hierarchies WHERE child_id = ? AND parent_id NOT LIKE 'local-%'
+`
+
+func (q *Queries) DeleteTaskNonLocalParent(ctx context.Context, childID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTaskNonLocalParent, childID)
 	return err
 }
 
@@ -63,6 +112,34 @@ func (q *Queries) ExistsSchemaMigration(ctx context.Context, version string) (bo
 	return exists, err
 }
 
+const getTask = `-- name: GetTask :one
+SELECT tasks.id, tasks.originated, tasks.title, tasks.description, tasks.status, tasks.start_date, tasks.due_date, task_hierarchies.parent_id
+FROM tasks
+LEFT JOIN task_hierarchies ON task_hierarchies.child_id = tasks.id
+WHERE tasks.id = ?
+`
+
+type GetTaskRow struct {
+	Task     Task
+	ParentID sql.NullString
+}
+
+func (q *Queries) GetTask(ctx context.Context, id string) (GetTaskRow, error) {
+	row := q.db.QueryRowContext(ctx, getTask, id)
+	var i GetTaskRow
+	err := row.Scan(
+		&i.Task.ID,
+		&i.Task.Originated,
+		&i.Task.Title,
+		&i.Task.Description,
+		&i.Task.Status,
+		&i.Task.StartDate,
+		&i.Task.DueDate,
+		&i.ParentID,
+	)
+	return i, err
+}
+
 const incrementCounter = `-- name: IncrementCounter :one
 UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value
 `
@@ -72,6 +149,177 @@ func (q *Queries) IncrementCounter(ctx context.Context, name string) (int64, err
 	var value int64
 	err := row.Scan(&value)
 	return value, err
+}
+
+const listTaskChildren = `-- name: ListTaskChildren :many
+SELECT child_id FROM task_hierarchies WHERE parent_id = ? ORDER BY child_id
+`
+
+func (q *Queries) ListTaskChildren(ctx context.Context, parentID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskChildren, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var child_id string
+		if err := rows.Scan(&child_id); err != nil {
+			return nil, err
+		}
+		items = append(items, child_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskLinks = `-- name: ListTaskLinks :many
+SELECT linked_id AS id FROM task_links WHERE task_links.task_id = ?1
+UNION
+SELECT task_links.task_id AS id FROM task_links WHERE task_links.linked_id = ?1
+ORDER BY id
+`
+
+func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskLinks, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTasks = `-- name: ListTasks :many
+SELECT id, originated, title, description, status, start_date, due_date FROM tasks ORDER BY id
+`
+
+func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Task
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.Originated,
+			&i.Title,
+			&i.Description,
+			&i.Status,
+			&i.StartDate,
+			&i.DueDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTasksByIDs = `-- name: ListTasksByIDs :many
+SELECT id, originated, title, description, status, start_date, due_date FROM tasks WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+`
+
+func (q *Queries) ListTasksByIDs(ctx context.Context, ids []string) ([]Task, error) {
+	query := listTasksByIDs
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Task
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.Originated,
+			&i.Title,
+			&i.Description,
+			&i.Status,
+			&i.StartDate,
+			&i.DueDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateLocalTask = `-- name: UpdateLocalTask :execrows
+UPDATE tasks SET
+    title       = ?,
+    description = ?,
+    status      = ?,
+    start_date  = ?,
+    due_date    = ?
+WHERE id = ? AND originated = 'local'
+`
+
+type UpdateLocalTaskParams struct {
+	Title       string
+	Description string
+	Status      string
+	StartDate   sql.NullTime
+	DueDate     sql.NullTime
+	ID          string
+}
+
+func (q *Queries) UpdateLocalTask(ctx context.Context, arg UpdateLocalTaskParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateLocalTask,
+		arg.Title,
+		arg.Description,
+		arg.Status,
+		arg.StartDate,
+		arg.DueDate,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const upsertTask = `-- name: UpsertTask :exec

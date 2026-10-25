@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/service"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -45,6 +46,257 @@ type MockService_Expecter struct {
 
 func (_m *MockService) EXPECT() *MockService_Expecter {
 	return &MockService_Expecter{mock: &_m.Mock}
+}
+
+// CreateTask provides a mock function for the type MockService
+func (_mock *MockService) CreateTask(ctx context.Context, t task.Task) (string, error) {
+	ret := _mock.Called(ctx, t)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateTask")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, task.Task) (string, error)); ok {
+		return returnFunc(ctx, t)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, task.Task) string); ok {
+		r0 = returnFunc(ctx, t)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, task.Task) error); ok {
+		r1 = returnFunc(ctx, t)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_CreateTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateTask'
+type MockService_CreateTask_Call struct {
+	*mock.Call
+}
+
+// CreateTask is a helper method to define mock.On call
+//   - ctx context.Context
+//   - t task.Task
+func (_e *MockService_Expecter) CreateTask(ctx any, t any) *MockService_CreateTask_Call {
+	return &MockService_CreateTask_Call{Call: _e.mock.On("CreateTask", ctx, t)}
+}
+
+func (_c *MockService_CreateTask_Call) Run(run func(ctx context.Context, t task.Task)) *MockService_CreateTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 task.Task
+		if args[1] != nil {
+			arg1 = args[1].(task.Task)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_CreateTask_Call) Return(s string, err error) *MockService_CreateTask_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockService_CreateTask_Call) RunAndReturn(run func(ctx context.Context, t task.Task) (string, error)) *MockService_CreateTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteTask provides a mock function for the type MockService
+func (_mock *MockService) DeleteTask(ctx context.Context, id string) error {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteTask")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockService_DeleteTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteTask'
+type MockService_DeleteTask_Call struct {
+	*mock.Call
+}
+
+// DeleteTask is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockService_Expecter) DeleteTask(ctx any, id any) *MockService_DeleteTask_Call {
+	return &MockService_DeleteTask_Call{Call: _e.mock.On("DeleteTask", ctx, id)}
+}
+
+func (_c *MockService_DeleteTask_Call) Run(run func(ctx context.Context, id string)) *MockService_DeleteTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_DeleteTask_Call) Return(err error) *MockService_DeleteTask_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockService_DeleteTask_Call) RunAndReturn(run func(ctx context.Context, id string) error) *MockService_DeleteTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetTask provides a mock function for the type MockService
+func (_mock *MockService) GetTask(ctx context.Context, id string) (service.TaskDetail, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTask")
+	}
+
+	var r0 service.TaskDetail
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (service.TaskDetail, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) service.TaskDetail); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		r0 = ret.Get(0).(service.TaskDetail)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_GetTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTask'
+type MockService_GetTask_Call struct {
+	*mock.Call
+}
+
+// GetTask is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockService_Expecter) GetTask(ctx any, id any) *MockService_GetTask_Call {
+	return &MockService_GetTask_Call{Call: _e.mock.On("GetTask", ctx, id)}
+}
+
+func (_c *MockService_GetTask_Call) Run(run func(ctx context.Context, id string)) *MockService_GetTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_GetTask_Call) Return(taskDetail service.TaskDetail, err error) *MockService_GetTask_Call {
+	_c.Call.Return(taskDetail, err)
+	return _c
+}
+
+func (_c *MockService_GetTask_Call) RunAndReturn(run func(ctx context.Context, id string) (service.TaskDetail, error)) *MockService_GetTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListTasks provides a mock function for the type MockService
+func (_mock *MockService) ListTasks(ctx context.Context) ([]task.Task, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListTasks")
+	}
+
+	var r0 []task.Task
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]task.Task, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []task.Task); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]task.Task)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_ListTasks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListTasks'
+type MockService_ListTasks_Call struct {
+	*mock.Call
+}
+
+// ListTasks is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockService_Expecter) ListTasks(ctx any) *MockService_ListTasks_Call {
+	return &MockService_ListTasks_Call{Call: _e.mock.On("ListTasks", ctx)}
+}
+
+func (_c *MockService_ListTasks_Call) Run(run func(ctx context.Context)) *MockService_ListTasks_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_ListTasks_Call) Return(tasks []task.Task, err error) *MockService_ListTasks_Call {
+	_c.Call.Return(tasks, err)
+	return _c
+}
+
+func (_c *MockService_ListTasks_Call) RunAndReturn(run func(ctx context.Context) ([]task.Task, error)) *MockService_ListTasks_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // SyncJiraTasks provides a mock function for the type MockService
@@ -103,6 +355,63 @@ func (_c *MockService_SyncJiraTasks_Call) Return(syncResult service.SyncResult, 
 }
 
 func (_c *MockService_SyncJiraTasks_Call) RunAndReturn(run func(ctx context.Context) (service.SyncResult, error)) *MockService_SyncJiraTasks_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateTask provides a mock function for the type MockService
+func (_mock *MockService) UpdateTask(ctx context.Context, t task.Task) error {
+	ret := _mock.Called(ctx, t)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateTask")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, task.Task) error); ok {
+		r0 = returnFunc(ctx, t)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockService_UpdateTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTask'
+type MockService_UpdateTask_Call struct {
+	*mock.Call
+}
+
+// UpdateTask is a helper method to define mock.On call
+//   - ctx context.Context
+//   - t task.Task
+func (_e *MockService_Expecter) UpdateTask(ctx any, t any) *MockService_UpdateTask_Call {
+	return &MockService_UpdateTask_Call{Call: _e.mock.On("UpdateTask", ctx, t)}
+}
+
+func (_c *MockService_UpdateTask_Call) Run(run func(ctx context.Context, t task.Task)) *MockService_UpdateTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 task.Task
+		if args[1] != nil {
+			arg1 = args[1].(task.Task)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_UpdateTask_Call) Return(err error) *MockService_UpdateTask_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockService_UpdateTask_Call) RunAndReturn(run func(ctx context.Context, t task.Task) error) *MockService_UpdateTask_Call {
 	_c.Call.Return(run)
 	return _c
 }

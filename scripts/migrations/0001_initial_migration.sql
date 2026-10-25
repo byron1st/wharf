@@ -15,6 +15,8 @@ CREATE TABLE task_hierarchies (
     parent_id TEXT NOT NULL
 );
 
+CREATE INDEX task_hierarchies_parent_id ON task_hierarchies (parent_id);
+
 -- Links are directed by the task that declared them; read both directions to
 -- find every task linked to a task.
 CREATE TABLE task_links (
@@ -22,6 +24,8 @@ CREATE TABLE task_links (
     linked_id TEXT NOT NULL,
     PRIMARY KEY (task_id, linked_id)
 );
+
+CREATE INDEX task_links_linked_id ON task_links (linked_id);
 
 -- Named counters incremented with UPDATE ... RETURNING. local_task numbers
 -- local task keys.

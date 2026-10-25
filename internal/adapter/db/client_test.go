@@ -489,3 +489,250 @@ func TestCreateLocalTaskCounterFailure(t *testing.T) {
 	require.ErrorIs(t, err, sql.ErrNoRows)
 	require.Empty(t, id)
 }
+
+func TestInitialMigrationIndexes(t *testing.T) {
+	_, path := newFileManager(t, scripts.Migrations())
+
+	rows, err := open(t, path).QueryContext(
+		context.Background(),
+		"SELECT tbl_name || '(' || name || ')' FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY 1",
+	)
+	require.NoError(t, err)
+
+	defer func() { _ = rows.Close() }()
+
+	var got []string
+
+	for rows.Next() {
+		var index string
+		require.NoError(t, rows.Scan(&index))
+		got = append(got, index)
+	}
+
+	require.NoError(t, rows.Err())
+	require.Equal(
+		t,
+		[]string{"task_hierarchies(task_hierarchies_parent_id)", "task_links(task_links_linked_id)"},
+		got,
+	)
+}
+
+func TestUpsertTasksKeepsLocalParentOfJiraTask(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	local := newTask("ignored")
+	local.ChildrenIDs = []string{"jira-J"}
+
+	id, err := manager.CreateLocalTask(context.Background(), local)
+	require.NoError(t, err)
+
+	// J declares no parent, so the local parent that claimed it stays.
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("jira-J")}))
+	require.Equal(t, []string{"jira-J<" + id}, relations(t, path))
+
+	// A declared parent still replaces the local one.
+	child := newTask("jira-J")
+	child.ParentID = "jira-P"
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{child}))
+	require.Equal(t, []string{"jira-J<jira-P"}, relations(t, path))
+
+	// A non-local parent is dropped as before once J stops declaring it.
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("jira-J")}))
+	require.Equal(t, []string{}, relations(t, path))
+}
+
+func TestListTasks(t *testing.T) {
+	manager := newManager(t)
+
+	got, err := manager.ListTasks(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []task.Task{}, got)
+
+	due := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
+
+	second := newTask("T2")
+	second.Description = "details"
+	second.Status = task.StatusDone
+	second.DueDate = &due
+	second.ParentID = "T1"
+	second.LinkedIDs = []string{"T1"}
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{second, newTask("T1")}))
+
+	got, err = manager.ListTasks(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, newTask("T1"), got[0])
+	require.NotNil(t, got[1].DueDate)
+	require.True(t, due.Equal(*got[1].DueDate))
+
+	got[1].DueDate = nil
+	require.Equal(
+		t,
+		task.Task{ID: "T2", Originated: task.OriginJira, Title: "T2", Description: "details", Status: task.StatusDone},
+		got[1],
+	)
+}
+
+func TestListTasksByIDs(t *testing.T) {
+	manager := newManager(t)
+	require.NoError(
+		t,
+		manager.UpsertTasks(context.Background(), []task.Task{newTask("T1"), newTask("T2"), newTask("T3")}),
+	)
+
+	got, err := manager.ListTasksByIDs(context.Background(), []string{"T3", "MISSING", "T1"})
+	require.NoError(t, err)
+	require.Equal(t, []task.Task{newTask("T1"), newTask("T3")}, got)
+
+	got, err = manager.ListTasksByIDs(context.Background(), nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
+func TestGetTask(t *testing.T) {
+	manager := newManager(t)
+
+	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+
+	target := newTask("T1")
+	target.Description = "full description"
+	target.StartDate = &start
+	target.ParentID = "P"
+	target.ChildrenIDs = []string{"C2", "C1"}
+	target.LinkedIDs = []string{"L1", "L2"}
+
+	// L2 links back to T1 and L3 links only to T1, so both directions count
+	// and L2 is listed once.
+	back := newTask("L2")
+	back.LinkedIDs = []string{"T1"}
+
+	other := newTask("L3")
+	other.LinkedIDs = []string{"T1"}
+
+	// C1 is stored and C2 is not; both stay children.
+	child := newTask("C1")
+	child.ParentID = "T1"
+
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{target, back, other, child}))
+
+	got, err := manager.GetTask(context.Background(), "T1")
+	require.NoError(t, err)
+	require.NotNil(t, got.StartDate)
+	require.True(t, start.Equal(*got.StartDate))
+	require.Nil(t, got.DueDate)
+
+	got.StartDate = nil
+	require.Equal(t, task.Task{
+		ID:          "T1",
+		Originated:  task.OriginJira,
+		Title:       "T1",
+		Description: "full description",
+		Status:      task.StatusTodo,
+		ParentID:    "P",
+		ChildrenIDs: []string{"C1", "C2"},
+		LinkedIDs:   []string{"L1", "L2", "L3"},
+	}, got)
+
+	got, err = manager.GetTask(context.Background(), "C1")
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		task.Task{ID: "C1", Originated: task.OriginJira, Title: "C1", Status: task.StatusTodo, ParentID: "T1"},
+		got,
+	)
+
+	_, err = manager.GetTask(context.Background(), "MISSING")
+	require.ErrorIs(t, err, db.ErrTaskNotFound)
+	require.ErrorContains(t, err, "id=MISSING")
+}
+
+func TestUpdateLocalTask(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	created := newTask("ignored")
+	created.Title = "old"
+	created.ParentID = "P1"
+	created.ChildrenIDs = []string{"C1", "C2"}
+	created.LinkedIDs = []string{"L1"}
+
+	id, err := manager.CreateLocalTask(context.Background(), created)
+	require.NoError(t, err)
+
+	// C3 moves from its Jira parent to the local task.
+	jira := newTask("J1")
+	jira.ChildrenIDs = []string{"C3"}
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{jira}))
+
+	due := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
+
+	updated := task.Task{
+		ID:          id,
+		Originated:  task.OriginJira,
+		Title:       "new",
+		Status:      task.StatusInProgress,
+		DueDate:     &due,
+		ParentID:    "P2",
+		ChildrenIDs: []string{"C3"},
+		LinkedIDs:   []string{"L2"},
+	}
+	require.NoError(t, manager.UpdateLocalTask(context.Background(), updated))
+
+	got := read(t, path, id)
+	require.True(t, got.dueDate.Valid)
+	require.True(t, due.Equal(got.dueDate.Time))
+
+	got.dueDate = sql.NullTime{}
+	require.Equal(t, readTask{originated: "local", title: "new", status: "in-progress"}, got)
+	require.Equal(t, []string{"C3<" + id, id + "<P2", id + ">L2"}, relations(t, path))
+}
+
+func TestUpdateLocalTaskRejectsMissingOrNonLocalTask(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	jira := newTask("J1")
+	jira.Title = "old"
+	jira.ChildrenIDs = []string{"C1"}
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{jira}))
+
+	for _, id := range []string{"J1", "local-WHF-404"} {
+		err := manager.UpdateLocalTask(context.Background(), task.Task{ID: id, Title: "new", ParentID: "P"})
+		require.ErrorIs(t, err, db.ErrLocalTaskToUpdateNotFound)
+		require.ErrorContains(t, err, "id="+id)
+	}
+
+	require.Equal(t, "old", read(t, path, "J1").title)
+	requireExists(t, path, "local-WHF-404", false)
+	require.Equal(t, []string{"C1<J1"}, relations(t, path))
+}
+
+func TestDeleteTask(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	target := newTask("T1")
+	target.ParentID = "P"
+	target.ChildrenIDs = []string{"C1"}
+	target.LinkedIDs = []string{"L1"}
+
+	back := newTask("L2")
+	back.LinkedIDs = []string{"T1", "L1"}
+
+	sibling := newTask("S1")
+	sibling.ParentID = "P"
+
+	child := newTask("C1")
+	child.ParentID = "T1"
+
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{target, back, sibling, child}))
+	require.Equal(t, []string{"C1<T1", "L2>L1", "L2>T1", "S1<P", "T1<P", "T1>L1"}, relations(t, path))
+	require.NoError(t, manager.DeleteTask(context.Background(), "T1"))
+
+	requireExists(t, path, "T1", false)
+	requireExists(t, path, "C1", true)
+	requireExists(t, path, "L2", true)
+	requireExists(t, path, "S1", true)
+	require.Equal(t, []string{"L2>L1", "S1<P"}, relations(t, path))
+
+	err := manager.DeleteTask(context.Background(), "T1")
+	require.ErrorIs(t, err, db.ErrTaskToDeleteNotFound)
+	require.ErrorContains(t, err, "id=T1")
+}
