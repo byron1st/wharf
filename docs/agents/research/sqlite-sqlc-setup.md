@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, Task 구조체→tasks 컬럼 매핑, sqlc SQLite 의 bulk insert 제약과 생성 코드 형태를 정리한다.
+Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks·task_hierarchies·task_links·counters 스키마와 Task 구조체 매핑, sqlc SQLite 의 bulk insert 제약과 생성 코드 형태(UPDATE ... RETURNING, ON CONFLICT)를 정리한다.
 ---
 
 # sqlc + SQLite 초기 설정 현황
@@ -20,30 +20,35 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, Task �
 - sqlc.yaml 내부의 상대 경로(`schema`, `queries`, `out`)는 **sqlc.yaml 파일 위치(`scripts/`) 기준**이다. 따라서 `schema: ["schema_migrations.sql", "migrations"]`, `queries: queries.sql`, `out: ../internal/adapter/db`.
 - `Makefile:8` — coverage EXCLUDE 는 `(mocks|cmd)` 로, `internal/adapter/db` 는 coverage 대상에 포함된다.
 
-## Task 구조체 → tasks 컬럼 매핑
+## Task 구조체 → 테이블 매핑
 
-`internal/pkg/task/task.go:5-16` 의 필드와 sqlc 가 생성하는 Go 타입 (sqlc v1.31.1 로 /tmp 에서 prototype 검증):
+스키마는 `scripts/migrations/0001_initial_migration.sql` 하나다. 첫 배포 전까지는 소유자 결정에 따라 모든 스키마 변경을 새 마이그레이션 대신 0001 에 직접 반영하며(AGENTS.md 의 예외), 이미 0001 을 적용한 로컬 `wharf.db` 는 지우고 다시 만들어야 한다(`Migrate` 는 적용된 0001 을 다시 실행하지 않는다). `internal/pkg/task/task.go:5-16` 의 필드와 sqlc 가 생성하는 Go 타입 (`internal/adapter/db/models.go`):
 
-| Task 필드 | 컬럼 | SQLite 선언 | 생성 Go 타입 |
+| Task 필드 | 테이블.컬럼 | SQLite 선언 | 생성 Go 타입 |
 | --- | --- | --- | --- |
-| `ID string` | `id` | `TEXT PRIMARY KEY` | `string` |
-| `Originated Origin` | `originated` | `TEXT NOT NULL` | `string` |
-| `Title string` | `title` | `TEXT NOT NULL` | `string` |
-| `Description string` | `description` | `TEXT NOT NULL` | `string` |
-| `Status Status` | `status` | `TEXT NOT NULL` | `string` |
-| `StartDate *time.Time` | `start_date` | `DATETIME` (nullable) | `sql.NullTime` |
-| `DueDate *time.Time` | `due_date` | `DATETIME` (nullable) | `sql.NullTime` |
-| `ParentID string` | `parent_id` | `TEXT NOT NULL` | `string` |
-| `ChildrenIDs []string` | `children_ids` | `TEXT NOT NULL` (JSON 배열) | `string` |
-| `LinkedIDs []string` | `linked_ids` | `TEXT NOT NULL` (JSON 배열) | `string` |
+| `ID string` | `tasks.id` | `TEXT PRIMARY KEY` | `string` |
+| `Originated Origin` | `tasks.originated` | `TEXT NOT NULL` | `string` |
+| `Title string` | `tasks.title` | `TEXT NOT NULL` | `string` |
+| `Description string` | `tasks.description` | `TEXT NOT NULL` | `string` |
+| `Status Status` | `tasks.status` | `TEXT NOT NULL` | `string` |
+| `StartDate *time.Time` | `tasks.start_date` | `DATETIME` (nullable) | `sql.NullTime` |
+| `DueDate *time.Time` | `tasks.due_date` | `DATETIME` (nullable) | `sql.NullTime` |
+| `ParentID string` | `task_hierarchies(child_id = ID, parent_id)` | `child_id TEXT PRIMARY KEY` | `TaskHierarchy` |
+| `ChildrenIDs []string` | `task_hierarchies(child_id, parent_id = ID)` | 같은 테이블 | `TaskHierarchy` |
+| `LinkedIDs []string` | `task_links(task_id = ID, linked_id)` | `PRIMARY KEY (task_id, linked_id)` | `TaskLink` |
 
+- `task.Task.ID` 는 `{originated}-{key}` 다 (`task.NewID`, `internal/pkg/task/id.go:10`). Jira 는 `jira-WHF-1`, local 은 `local-WHF-001` (`task.LocalKey`, `id.go:16`, `%03d` 이고 999 를 넘으면 자리수가 는다).
+- `task_hierarchies` 는 `child_id` 가 PK 라 task 의 parent 는 하나다. 관계는 저장되지 않은 task 를 가리킬 수 있어서 `tasks(id)` FK 는 없다.
+- `task_links` 는 선언한 task 기준의 방향 있는 행이다. 양방향 조회는 `task_id = ? UNION linked_id = ?` 로 읽어야 한다(읽는 쿼리는 아직 없다).
+- `counters (name TEXT PK, value INTEGER)` 는 이름 붙은 번호 카운터이고 0001 이 `('local_task', 0)` 을 seed 한다. 행이 없으면 `IncrementCounter` 가 `sql.ErrNoRows` 를 돌려준다.
 - `Origin`/`Status` 는 `string` 기반 타입이고 상수는 untyped string 이다 (`internal/pkg/task/origin.go`, `internal/pkg/task/status.go`). 저장 시 `string(...)` 변환이면 된다.
-- 이 변환은 db 패키지의 `toUpsertTaskParams` (`internal/adapter/db/client.go:87`) 가 한다. 날짜는 nil 이면 NULL 인 `sql.NullTime`, ID 목록은 `json.Marshal` 한 문자열이며 nil·빈 목록은 `"[]"` 로 저장한다. 그래서 `db.Manager.UpsertTasks` 는 sqlc 모델이 아니라 `[]task.Task` 를 받는다.
-- 생성 struct 필드명은 `ChildrenIds`, `LinkedIds` 처럼 sqlc 기본 규칙을 따른다 (rename 은 필요 시 sqlc.yaml `rename` 으로).
+- tasks 컬럼 변환은 db 패키지의 `toUpsertTaskParams` (`internal/adapter/db/client.go:177`) 가, 관계 행 쓰기는 `storeTask` (`client.go:140`) 가 한다. 날짜는 nil 이면 NULL 인 `sql.NullTime` 이다. 그래서 `db.Manager.UpsertTasks` 는 sqlc 모델이 아니라 `[]task.Task` 를 받는다.
 
 ## sqlc SQLite 엔진 제약
 
 - `:copyfrom` 은 PostgreSQL(pgx)·MySQL 전용이다 (sqlc 공식 문서 howto/insert). SQLite 에서는 bulk insert 를 위한 생성 코드가 없다.
 - 가변 길이 multi-row `VALUES` 도 생성할 수 없다. `json_each(?)` 기반 단일 문장은 생성은 되지만 파라미터가 `interface{}` 로 나와 타입 안전성이 없다 (prototype 확인, 채택하지 않음).
-- `SELECT EXISTS (...)` + `:one` 은 `bool` 을 반환하는 메서드로 생성된다. 현재는 마이그레이션 적용 여부 확인용 `ExistsSchemaMigration(ctx, version string) (bool, error)` (`internal/adapter/db/queries.sql.go:26`) 만 이 형태이고, task 를 읽는 쿼리는 없다.
-- 생성 `db.go` 는 `DBTX` 인터페이스, `New(db DBTX) *Queries`, `(*Queries).WithTx(tx *sql.Tx) *Queries` 를 제공한다. 여러 건 저장은 `*sql.DB.BeginTx` → `WithTx` → 단건 `UpsertTask` (`INSERT ... ON CONFLICT (id) DO UPDATE`) 반복 → `Commit` 으로 구성되며, `db.Manager.UpsertTasks` 가 이 방식이다.
+- `SELECT EXISTS (...)` + `:one` 은 `bool` 을 반환하는 메서드로 생성된다. 현재는 마이그레이션 적용 여부 확인용 `ExistsSchemaMigration(ctx, version string) (bool, error)` (`internal/adapter/db/queries.sql.go:59`) 만 이 형태이고, task 를 읽는 쿼리는 없다.
+- `UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value` + `:one` 은 `IncrementCounter(ctx, name string) (int64, error)` (`queries.sql.go:70`) 로 생성된다.
+- `ON CONFLICT (...) DO UPDATE` / `DO NOTHING` 도 그대로 생성된다: `UpsertTaskHierarchy` (child 의 parent 재지정), `CreateTaskLink` (중복 링크 무시).
+- 생성 `db.go` 는 `DBTX` 인터페이스, `New(db DBTX) *Queries`, `(*Queries).WithTx(tx *sql.Tx) *Queries` 를 제공한다. 여러 건 저장은 `*sql.DB.BeginTx` → `WithTx` → task 마다 `UpsertTask` (`INSERT ... ON CONFLICT (id) DO UPDATE`) 와 관계 쿼리(`DeleteTaskParent`, `UpsertTaskHierarchy`, `DeleteTaskLinks`, `CreateTaskLink`) 반복 → `Commit` 으로 구성되며, `db.Manager.UpsertTasks`·`CreateLocalTask` 가 공유하는 `inTx` (`client.go:119`) 가 begin/commit 을 맡는다.

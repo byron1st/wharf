@@ -245,6 +245,9 @@ func TestMethodsRequireConnection(t *testing.T) {
 				db.ErrNotConnected,
 			)
 
+			_, err := manager.CreateLocalTask(context.Background(), newTask("WHF-1"))
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
 			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
 			require.NoError(t, manager.Close())
 		})
