@@ -3,6 +3,7 @@ module github.com/byron1st/wharf
 go 1.27.3
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/stretchr/testify v1.12.1
 	modernc.org/sqlite v1.61.0
 )

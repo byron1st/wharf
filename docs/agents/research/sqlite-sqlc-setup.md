@@ -9,8 +9,8 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, Task �
 ## 현재 코드 상태
 
 - sqlc 설정·스키마·쿼리는 `scripts/` (`sqlc.yaml`, `schema_migrations.sql`, `migrations/`, `queries.sql`) 에 있고, 생성 코드(`db.go`, `models.go`, `queries.sql.go`) 는 손으로 쓴 `db.Manager` (`client.go`, `client_management.go`) 와 함께 `internal/adapter/db/` 에 있다.
-- `cmd/wharf/main.go` 가 `db.NewManager(WHARF_DB_PATH, scripts.Migrations())` 로 Manager 를 만들고 `Connect` → `Migrate` 후 service 에 넘긴다.
-- `go.mod` 의 직접 의존성은 `github.com/stretchr/testify` 와 SQLite 드라이버 `modernc.org/sqlite` (cgo 없는 순수 Go) 이다.
+- `cmd/wharf/main.go` 가 `db.NewManager(cfg.DBPath, scripts.Migrations())` 로 Manager 를 만들고 `Connect` → `Migrate` 후 service 에 넘긴다. `cfg.DBPath` 는 설정 파일의 `db_path` 이고, 비어 있으면 `internal/config` 가 `<os.UserConfigDir()>/wharf/wharf.db` 로 채우면서 디렉터리를 만든다.
+- `go.mod` 의 직접 의존성은 `github.com/stretchr/testify`, SQLite 드라이버 `modernc.org/sqlite` (cgo 없는 순수 Go), 설정 파일 파서 `github.com/BurntSushi/toml` 이다.
 
 ## Makefile 의 sqlc 연동
 

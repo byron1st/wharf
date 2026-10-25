@@ -1,0 +1,15 @@
+# wharf config example.
+# Default location: <os.UserConfigDir()>/wharf/config.toml
+#   (macOS: ~/Library/Application Support/wharf/config.toml, Linux: ~/.config/wharf/config.toml)
+# Override the location with the WHARF_CONFIG environment variable.
+# Every key is optional; unknown keys are rejected.
+
+# TCP address the server listens on. Default: ":8080"
+# addr = ":8080"
+
+# SQLite database file path.
+# Default: <os.UserConfigDir()>/wharf/wharf.db (its directory is created when missing)
+# db_path = "/path/to/wharf.db"
+
+# acli executable path. A bare name is searched in PATH. Default: "acli"
+# acli_path = "/opt/homebrew/bin/acli"

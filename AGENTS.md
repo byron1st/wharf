@@ -27,6 +27,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 ## Architecture Overview
 
 - `cmd/wharf/`: Entry point; wires config, adapters, services, and routes only.
+- `internal/config/`: Loads the TOML config file (`config.Path`, `config.Load`), fills defaults, and resolves the `acli` executable. `config.example.toml` at the repo root documents every key.
 - `internal/server/`: HTTP server, middleware, and handlers; translates requests/responses and calls services.
 - `internal/service/`: Business logic; depends on adapter interfaces, never on HTTP types.
 - `internal/adapter/`: External I/O (database, third-party APIs). `internal/adapter/db/` holds sqlc output (`db.go`, `models.go`, `queries.sql.go`) next to the hand-written `db.Manager` (`client.go`, `client_management.go`).
@@ -65,6 +66,6 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 
 - NEVER hand-edit generated code (`internal/pkg/mocks/`, sqlc output `internal/adapter/db/{db,models,queries.sql}.go`); change the source (interface, SQL) and run `make gen`.
 - NEVER run raw `go test`, `go build`, or `golangci-lint` commands; use the matching `make` target so tooling stays consistent.
-- NEVER commit secrets or `.env` files; read configuration from environment variables at startup in `cmd/wharf`.
+- NEVER commit secrets or `.env` files; read configuration through `internal/config` at startup in `cmd/wharf`. The only environment variable is `WHARF_CONFIG` (config file path); add new settings as TOML keys, not environment variables.
 - NEVER import `internal/server` from `internal/service` or `internal/adapter`; pass plain domain types down the layers instead.
 - NEVER add a third-party dependency when the standard library covers the need; justify any new module in the PR description.

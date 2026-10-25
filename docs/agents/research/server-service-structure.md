@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks) 의 구조와 main wiring, db.Manager·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
+Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks) 의 구조와 main wiring, internal/config 의 TOML 설정 로딩(경로·기본값·acli 해석), db.Manager·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
 ---
 
 # server / service 계층 구조 조사
@@ -10,7 +10,8 @@ Description: internal/server(route·미들웨어·Run)·internal/service(SyncJir
 
 ```mermaid
 flowchart LR
-    main[cmd/wharf/main.go] --> server[internal/server]
+    main[cmd/wharf/main.go] --> config[internal/config]
+    main --> server[internal/server]
     main --> service[internal/service]
     main --> atlassian[internal/adapter/atlassian]
     main --> db[internal/adapter/db]
@@ -28,8 +29,21 @@ flowchart LR
 ## main wiring (`cmd/wharf/main.go`)
 
 - `run() (code int)` (`main.go:24`) 이 실제 본체이고 `main` 은 `os.Exit(run())` 만 한다. defer 로 DB `Close` 를 보장하면서 exit code 를 돌려주기 위한 형태다.
-- 순서: `signal.NotifyContext(os.Interrupt, SIGTERM)` → `db.NewManager(WHARF_DB_PATH, scripts.Migrations())` → `Connect` → `Migrate` → acli 경로 해석 → `tool.NewTool` → `atlassian.NewClient` → `service.NewService` → `server.NewHandler` → `server.New` → `net.Listen(WHARF_ADDR)` → `Run`. 각 실패는 slog JSON 로그(stdout) 를 남기고 exit 1.
-- env 기본값은 `getenv` (`main.go:90`) 로 처리한다: `WHARF_ADDR` = `:8080`, `WHARF_DB_PATH` = `wharf.db`. `WHARF_ACLI_PATH` 가 비면 `exec.LookPath("acli")` 로 찾는데, `tool.NewTool` 이 PATH 를 탐색하지 않기 때문이다. 찾지 못하면 기동하지 않는다.
+- 순서: `signal.NotifyContext(os.Interrupt, SIGTERM)` → `config.Path` → `config.Load` → `db.NewManager(cfg.DBPath, scripts.Migrations())` → `Connect` → `Migrate` → `tool.NewTool(cfg.ACLIPath)` → `atlassian.NewClient` → `service.NewService` → `server.NewHandler` → `server.New` → `net.Listen(cfg.Addr)` → `Run`. 각 실패는 slog JSON 로그(stdout) 를 남기고 exit 1.
+- main 은 환경변수를 직접 읽지 않는다. 설정값은 모두 `internal/config` 가 돌려준 `Config` 에서 온다.
+
+## 설정 로딩 (`internal/config/config.go`)
+
+- 설정은 TOML 파일 하나이고, 파서는 `github.com/BurntSushi/toml` 이다 (표준 라이브러리에 TOML 파서가 없다). 키 목록과 기본값은 저장소 루트의 `config.example.toml` 에 정리되어 있다.
+- `Path()` (`config.go:45`): `WHARF_CONFIG` (`PathEnv`, `:15`) 가 있으면 그 값을, 없으면 `<os.UserConfigDir()>/wharf/config.toml` 을 돌려준다. `WHARF_CONFIG` 가 프로그램 전체에서 유일한 환경변수다.
+- `Load(path)` (`:67`) 순서: `os.ReadFile` → `toml.Decode` → `MetaData.Undecoded()` 로 모르는 키가 있으면 실패 → 기본값 채움 → `exec.LookPath` 로 acli 해석.
+  - 설정 파일이 없으면 실패한다. 모든 키가 선택이므로 빈 파일은 유효하다.
+  - `Config` (`:33`) 필드와 기본값: `addr` = `:8080`, `db_path` = `<os.UserConfigDir()>/wharf/wharf.db`, `acli_path` = `acli`.
+  - `db_path` 를 기본값으로 채울 때만 그 디렉터리를 `os.MkdirAll(..., 0o700)` 로 만든다. `WHARF_CONFIG` 로 설정 파일을 다른 곳에 두면 기본 DB 디렉터리가 없을 수 있고, SQLite 는 상위 디렉터리를 만들지 않기 때문이다. `db_path` 를 직접 지정하면 아무것도 만들지 않는다.
+  - acli 는 `acli_path` 가 있든 없든 `exec.LookPath(cmp.Or(cfg.ACLIPath, "acli"))` 를 거친다. bare name 은 PATH 에서 찾고, `/` 가 들어간 경로는 그 파일이 실행 가능한지만 본다. `tool.NewTool` 이 PATH 를 탐색하지 않으므로 `Load` 이후의 `ACLIPath` 는 항상 해석된 경로다.
+- sentinel 은 `"config: "` 접두어로 `ErrFailedToFindUserConfigDir`, `ErrFailedToReadConfigFile`, `ErrFailedToParseConfigFile`, `ErrUnknownConfigKeys`, `ErrFailedToCreateDBDir`, `ErrFailedToFindACLI` 다 (`:23-30`). `UserConfigDir` 조회는 `Path` 와 `Load` 가 공유하는 `defaultFilePath` (`:54`) 한 곳에서만 실패한다.
+- 파일 하나를 읽을 뿐 막히는 작업이 없어서 `Load` 는 `context.Context` 를 받지 않는다 (`tool.NewTool` 의 `os.Stat` 과 같은 취급).
+- 테스트 (`internal/config/config_test.go`) 는 `isolateUserConfigDir` 로 `HOME`·`XDG_CONFIG_HOME` 을 임시 디렉터리로 돌린다. 기본 DB 디렉터리 생성이 실제 사용자 설정 디렉터리에 닿지 않게 하려는 것이다. acli 는 임시 디렉터리에 실행 스크립트를 만들고 `PATH` 를 그쪽으로 바꿔 찾게 한다.
 
 ## server / service 구현
 
@@ -116,7 +130,9 @@ flowchart LR
 
 ## AGENTS.md 의 계층 서술
 
-- `AGENTS.md:30` — Architecture Overview 의 `internal/server/` 항목 (HTTP server, middleware, handlers).
-- `AGENTS.md:42` — Code Conventions 의 layering `server` → `service` → `adapter`.
-- `AGENTS.md:69` — Boundaries 의 `NEVER import internal/server from internal/service or internal/adapter`.
+- `AGENTS.md:30` — Architecture Overview 의 `internal/config/` 항목 (TOML 설정 로딩, `config.example.toml`).
+- `AGENTS.md:31` — Architecture Overview 의 `internal/server/` 항목 (HTTP server, middleware, handlers).
+- `AGENTS.md:43` — Code Conventions 의 layering `server` → `service` → `adapter`.
+- `AGENTS.md:69` — Boundaries 의 설정 규칙: `internal/config` 로 읽고, 환경변수는 `WHARF_CONFIG` 하나뿐이다.
+- `AGENTS.md:70` — Boundaries 의 `NEVER import internal/server from internal/service or internal/adapter`.
 - `AGENTS.md:29` 의 "routes" 는 일반 명사로, 특정 패키지를 가리키지 않는다.

@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 
 	"github.com/byron1st/wharf/internal/adapter/atlassian"
 	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/config"
 	"github.com/byron1st/wharf/internal/pkg/tool"
 	"github.com/byron1st/wharf/internal/server"
 	"github.com/byron1st/wharf/internal/service"
@@ -27,7 +27,19 @@ func run() (code int) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	manager := db.NewManager(getenv("WHARF_DB_PATH", "wharf.db"), scripts.Migrations())
+	cfgPath, err := config.Path()
+	if err != nil {
+		logger.Error("failed to find config file", "error", err)
+		return 1
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		logger.Error("failed to load config", "error", err)
+		return 1
+	}
+
+	manager := db.NewManager(cfg.DBPath, scripts.Migrations())
 	if err := manager.Connect(ctx); err != nil {
 		logger.Error("failed to connect database", "error", err)
 		return 1
@@ -46,19 +58,7 @@ func run() (code int) {
 		return 1
 	}
 
-	acliPath := os.Getenv("WHARF_ACLI_PATH")
-	if acliPath == "" {
-		// tool.NewTool does not search PATH, so resolve the bare name here.
-		path, err := exec.LookPath("acli")
-		if err != nil {
-			logger.Error("failed to find acli; set WHARF_ACLI_PATH", "error", err)
-			return 1
-		}
-
-		acliPath = path
-	}
-
-	acli, err := tool.NewTool(acliPath)
+	acli, err := tool.NewTool(cfg.ACLIPath)
 	if err != nil {
 		logger.Error("failed to create acli tool", "error", err)
 		return 1
@@ -67,11 +67,9 @@ func run() (code int) {
 	svc := service.NewService(atlassian.NewClient(acli), manager)
 	srv := server.New(server.NewHandler(svc, logger), logger)
 
-	addr := getenv("WHARF_ADDR", ":8080")
-
-	ln, err := net.Listen("tcp", addr)
+	ln, err := net.Listen("tcp", cfg.Addr)
 	if err != nil {
-		logger.Error("failed to listen", "addr", addr, "error", err)
+		logger.Error("failed to listen", "addr", cfg.Addr, "error", err)
 		return 1
 	}
 
@@ -85,12 +83,4 @@ func run() (code int) {
 	logger.Info("server stopped")
 
 	return 0
-}
-
-func getenv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-
-	return fallback
 }
