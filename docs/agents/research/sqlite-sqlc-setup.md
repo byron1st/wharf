@@ -22,7 +22,7 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks�
 
 ## Task 구조체 → 테이블 매핑
 
-스키마는 `scripts/migrations/0001_initial_migration.sql` 하나다. `internal/pkg/task/task.go:5-16` 의 필드와 sqlc 가 생성하는 Go 타입 (`internal/adapter/db/models.go`):
+스키마는 `scripts/migrations/0001_initial_migration.sql` 하나다. 첫 배포 전까지는 소유자 결정에 따라 모든 스키마 변경을 새 마이그레이션 대신 0001 에 직접 반영하며(AGENTS.md 의 예외), 이미 0001 을 적용한 로컬 `wharf.db` 는 지우고 다시 만들어야 한다(`Migrate` 는 적용된 0001 을 다시 실행하지 않는다). `internal/pkg/task/task.go:5-16` 의 필드와 sqlc 가 생성하는 Go 타입 (`internal/adapter/db/models.go`):
 
 | Task 필드 | 테이블.컬럼 | SQLite 선언 | 생성 Go 타입 |
 | --- | --- | --- | --- |
