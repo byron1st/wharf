@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+type Counter struct {
+	Name  string
+	Value int64
+}
+
 type SchemaMigration struct {
 	Version   string
 	AppliedAt time.Time
@@ -22,7 +27,14 @@ type Task struct {
 	Status      string
 	StartDate   sql.NullTime
 	DueDate     sql.NullTime
-	ParentID    string
-	ChildrenIds string
-	LinkedIds   string
+}
+
+type TaskHierarchy struct {
+	ChildID  string
+	ParentID string
+}
+
+type TaskLink struct {
+	TaskID   string
+	LinkedID string
 }

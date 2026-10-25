@@ -52,6 +52,8 @@ type IssueLink struct {
 
 // ToTask converts a work item even when some fields are invalid: invalid
 // fields are left empty and their errors are joined into the returned error.
+// The task ID and the related task IDs are "jira-{key}", while error messages
+// keep the raw key.
 func ToTask(item ViewWorkItem) (task.Task, error) {
 	f := item.Fields
 
@@ -71,15 +73,15 @@ func ToTask(item ViewWorkItem) (task.Task, error) {
 	}
 
 	var parentID string
-	if f.Parent != nil {
-		parentID = f.Parent.Key
+	if f.Parent != nil && f.Parent.Key != "" {
+		parentID = task.NewID(task.OriginJira, f.Parent.Key)
 	}
 
 	var childrenIDs []string
 
 	for _, subtask := range f.Subtasks {
 		if subtask.Key != "" {
-			childrenIDs = append(childrenIDs, subtask.Key)
+			childrenIDs = append(childrenIDs, task.NewID(task.OriginJira, subtask.Key))
 		}
 	}
 
@@ -88,13 +90,13 @@ func ToTask(item ViewWorkItem) (task.Task, error) {
 	for _, link := range f.IssueLinks {
 		for _, linked := range []*LinkedItem{link.InwardIssue, link.OutwardIssue} {
 			if linked != nil && linked.Key != "" {
-				linkedIDs = append(linkedIDs, linked.Key)
+				linkedIDs = append(linkedIDs, task.NewID(task.OriginJira, linked.Key))
 			}
 		}
 	}
 
 	return task.Task{
-		ID:          item.Key,
+		ID:          task.NewID(task.OriginJira, item.Key),
 		Originated:  task.OriginJira,
 		Title:       f.Summary,
 		Description: f.Description.plainText(),

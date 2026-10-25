@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks) 의 구조와 main wiring, internal/config 의 TOML 설정 로딩(경로·기본값·acli 해석), db.Manager·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
+Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks) 의 구조와 main wiring, internal/config 의 TOML 설정 로딩(경로·기본값·acli 해석), db.Manager(관계 테이블 쓰기 규칙·CreateLocalTask 포함)·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
 ---
 
 # server / service 계층 구조 조사
@@ -75,12 +75,18 @@ flowchart LR
 
 ### db.Manager (`internal/adapter/db/client.go`)
 
-- 인터페이스 `client.go:24-34`: `UpsertTasks(ctx, []task.Task) error`, `Connect`, `Migrate`, `Close`. 인자는 도메인 타입 `task.Task` 이므로 호출하는 service 는 sqlc 생성 모델 `db.Task` (`internal/adapter/db/models.go:17-28`, 날짜 `sql.NullTime`, ID 목록 JSON 배열 문자열 `ChildrenIds`·`LinkedIds`) 를 알 필요가 없다.
-- sentinel `client.go:17-22`: `ErrNotConnected`, `ErrFailedToBeginTx`, `ErrFailedToUpsertTask`, `ErrFailedToCommitTx`.
-- `UpsertTasks` `client.go:55-85`: `checkConnected` → 빈 목록 no-op → `BeginTx` → `queries.WithTx(tx)` 로 단건 `UpsertTask` 반복 → `Commit`. defer Rollback 이라 하나라도 실패하면 아무것도 저장되지 않는다. 같은 ID 는 `ON CONFLICT (id) DO UPDATE` 로 덮어쓴다. 실패는 `fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpsertTask, err), t.ID)` 로 감싼다.
-- `task.Task` → `UpsertTaskParams` (`internal/adapter/db/queries.sql.go:51`) 변환은 db 패키지의 `toUpsertTaskParams` (`client.go:87`) 가 맡는다. `*time.Time` 은 `toNullTime` (`:102`) 으로 nil 이면 NULL, `[]string` 은 `toJSONArray` (`:110`) 로 nil·빈 목록이면 `"[]"`, 그 외에는 `json.Marshal` 결과가 된다. `Origin`/`Status` 는 `string(...)` 변환이다.
-- task 를 읽는 쿼리는 없다. `scripts/queries.sql` 에는 `UpsertTask` 와 마이그레이션용 `ExistsSchemaMigration`, `CreateSchemaMigration` 만 있다.
-- `checkConnected` `client.go:121-127` 는 모든 비관리 메서드의 첫 줄이다.
+- 인터페이스 `client.go:32-43`: `UpsertTasks(ctx, []task.Task) error`, `CreateLocalTask(ctx, task.Task) (string, error)`, `Connect`, `Migrate`, `Close`. 인자는 도메인 타입 `task.Task` 이므로 호출하는 service 는 sqlc 생성 모델(`internal/adapter/db/models.go` 의 `Task`·`TaskHierarchy`·`TaskLink`·`Counter`) 을 알 필요가 없다.
+- sentinel `client.go:16-27`: `ErrNotConnected`, `ErrFailedToBeginTx`, `ErrFailedToUpsertTask`, `ErrFailedToDeleteTaskParent`, `ErrFailedToStoreTaskParent`, `ErrFailedToStoreTaskChild`, `ErrFailedToDeleteTaskLinks`, `ErrFailedToStoreTaskLink`, `ErrFailedToIncrementLocalTaskCounter`, `ErrFailedToCommitTx`. 관계 쓰기 실패는 `fmt.Errorf("%w: id=%s, ...", errors.Join(ErrX, err), ...)` 로 task ID 와 상대 ID 를 붙인다.
+- 트랜잭션은 `inTx` (`client.go:119`) 한 곳에서 `BeginTx` → `queries.WithTx(tx)` → fn → `Commit` 한다. defer Rollback 이라 fn 이 실패하면 아무것도 저장되지 않는다. begin/commit sentinel 은 두 메서드가 공유한다(return site 가 `inTx` 하나).
+- `UpsertTasks` `client.go:69`: `checkConnected` → 빈 목록 no-op → `inTx` 안에서 task 마다 `storeTask` (`client.go:140`). 같은 ID 는 `ON CONFLICT (id) DO UPDATE` 로 덮어쓴다.
+- `storeTask` 의 관계 소유 규칙:
+  - parent 는 task 소유: `task_hierarchies` 의 `child_id = T` 행을 지우고 `ParentID` 가 있으면 다시 넣는다.
+  - children 은 추가·재지정만: `(child, T)` 를 `ON CONFLICT(child_id) DO UPDATE` 로 넣는다. 목록에 없는 기존 children 행은 남는다(Jira Epic 은 Story 를 subtasks 로 나열하지 않으므로).
+  - linked 는 task 소유: `task_links` 의 `task_id = T` 행을 지우고 `LinkedIDs` 를 `ON CONFLICT DO NOTHING` 으로 넣는다. 다른 task 가 T 로 선언한 행은 건드리지 않는다.
+- `CreateLocalTask` `client.go:93`: 같은 트랜잭션에서 `IncrementCounter("local_task")` (첫 문장이 쓰기라 SQLITE_BUSY 회피 규칙을 지킨다) → `task.NewID(OriginLocal, task.LocalKey(n))` 로 `local-WHF-001` 형식 ID 생성 → `Originated = local` 로 `storeTask` → ID 반환. 입력의 `ID`·`Originated` 는 무시한다. 실패하면 카운터 증가도 롤백되어 번호가 소모되지 않는다. 아직 이를 호출하는 service/API 는 없다.
+- `task.Task` → `UpsertTaskParams` 변환은 `toUpsertTaskParams` (`client.go:177`) 가 맡는다. `*time.Time` 은 `toNullTime` (`:189`) 으로 nil 이면 NULL 이다. `Origin`/`Status` 는 `string(...)` 변환이다.
+- task·관계를 읽는 쿼리는 없다. `scripts/queries.sql` 에는 `UpsertTask`, 관계 쓰기 쿼리, `IncrementCounter`, 마이그레이션용 `ExistsSchemaMigration`, `CreateSchemaMigration` 만 있다.
+- `checkConnected` `client.go:197` 는 모든 비관리 메서드의 첫 줄이다.
 - 마이그레이션 FS 는 `scripts.Migrations()` (`scripts/migrations.go:13`) 로 얻는다.
 
 ### atlassian.Client (`internal/adapter/atlassian/client.go`)
@@ -90,7 +96,7 @@ flowchart LR
   - 검색 자체 실패(`searchKeys` 에러) → `nil, err` (`client.go:39`).
   - 루프 중 ctx 취소 → `nil, errors.Join(..., ErrGetMyTasksCanceled, ctx.Err())` (`client.go:46`).
   - 개별 항목 view 실패 → 해당 항목은 건너뛰고 에러만 누적 (`client.go:49-53`).
-  - 변환(`ToTask`) 에러가 있어도 task 는 결과에 포함된다 (`client.go:55-57`). `ToTask` 는 잘못된 필드를 빈 값으로 두고 에러를 join 한다 (`internal/adapter/atlassian/jira.go:53-108`).
+  - 변환(`ToTask`) 에러가 있어도 task 는 결과에 포함된다 (`client.go:55-57`). `ToTask` 는 잘못된 필드를 빈 값으로 두고 에러를 join 한다 (`internal/adapter/atlassian/jira.go:57-110`). task ID 와 관계 ID 는 `jira-{key}` 이고, CLI 호출과 에러 메시지의 `key=` 는 raw key 다.
   - 그 외에는 `tasks` (항상 non-nil, `make(..., 0, len(keys))` `client.go:42`) 와 `errors.Join(errs...)` 를 함께 반환한다.
   - 즉 "tasks 가 nil 이면 전체 실패, non-nil 이면 부분 결과(에러가 있을 수 있음)" 가 현재 코드의 규칙이다. view 실패와 검색 실행 실패는 둘 다 `tool.ErrFailedToExecuteCmd` 를 포함할 수 있어 `errors.Is` 로는 구분되지 않는다.
 - CLI 옵션: `JiraSearchOption` (`jira.go:165`), `JiraViewOption` (`jira.go:183`) 의 `Cmd` 는 `"jira"`, 실행 파일은 Atlassian CLI(`acli`) 를 전제로 한다.
@@ -103,6 +109,7 @@ flowchart LR
 ### 도메인 타입 (`internal/pkg/task`)
 
 - `task.Task` `internal/pkg/task/task.go:5-16`: 날짜는 `*time.Time`, ID 목록은 `[]string`, `Originated task.Origin`, `Status task.Status`.
+- ID 는 `{originated}-{key}` 이며 `task.NewID` (`internal/pkg/task/id.go:10`) 로 만든다. local key 는 `task.LocalKey(n)` (`id.go:16`) 가 `WHF-%03d` 로 만든다.
 - `Origin` / `Status` 는 `string` 기반 타입이며 상수는 untyped string 이다 (`origin.go:5-10`, `status.go:5-10`).
 
 ## db 테스트의 저장 확인 방식
@@ -110,9 +117,10 @@ flowchart LR
 - Manager 에 task 를 읽는 메서드가 없으므로, 테스트는 파일 DB 에 별도 연결을 열어 직접 SQL 로 확인한다.
 - `internal/adapter/db/client_test.go`:
   - `newManager` (`:21`) 는 `:memory:` DB 를 쓴다. 단일 연결(`SetMaxOpenConns(1)`, `client_management.go:68`) 이라 다른 연결로 같은 in-memory DB 를 읽을 수 없다. 저장 내용을 확인하지 않는 테스트만 이것을 쓴다.
-  - `newFileManager` (`:42`) 는 파일 DB 와 경로를 반환한다. `open` (`:120`) 이 그 경로로 별도 `*sql.DB` 를 열고, `read` (`:92`) 는 한 행의 컬럼을 `readTask` 로 읽으며, `requireExists` (`:109`) 는 `SELECT EXISTS (...)` 로 존재 여부를 확인한다.
-  - `newTask` (`:130`) 는 `task.Task` 를 만든다.
-- `internal/adapter/db/client_management_test.go` 도 재연결 후 데이터 유지 등을 같은 `newFileManager`·`requireExists` 조합으로 확인한다. `TestMethodsRequireConnection` (`:234`) 은 연결 전·종료 후의 `UpsertTasks`, `Migrate` 가 `ErrNotConnected` 인지 본다.
+  - `newFileManager` (`:42`) 는 파일 DB 와 경로를 반환한다. `open` (`:145`) 이 그 경로로 별도 `*sql.DB` 를 열고, `read` (`:90`) 는 tasks 한 행의 컬럼을 `readTask` 로 읽으며, `requireExists` (`:107`) 는 `SELECT EXISTS (...)` 로 존재 여부를 확인한다. `relations` (`:120`) 는 `task_hierarchies` 를 `child<parent`, `task_links` 를 `task>linked` 문자열로 모아 정렬해 돌려준다.
+  - 실패 유도는 `projectMigrationsWith` (`:57`) 로 `RAISE(ABORT)` trigger 마이그레이션을 덧붙여 한다(`TestUpsertTasksRollsBackOnFailure` 는 쓰기 지점마다 trigger 하나).
+  - `newTask` (`:155`) 는 `task.Task` 를 만든다.
+- `internal/adapter/db/client_management_test.go` 도 재연결 후 데이터 유지 등을 같은 `newFileManager`·`requireExists` 조합으로 확인한다. `TestMethodsRequireConnection` (`:234`) 은 연결 전·종료 후의 `UpsertTasks`, `CreateLocalTask`, `Migrate` 가 `ErrNotConnected` 인지 본다.
 
 ## mockery
 

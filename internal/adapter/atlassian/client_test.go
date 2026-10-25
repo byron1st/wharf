@@ -76,13 +76,13 @@ func TestGetMyTasks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []task.Task{
 		{
-			ID:         "WHF-1",
+			ID:         "jira-WHF-1",
 			Originated: task.OriginJira,
 			Title:      "Write onboarding guide",
 			Status:     task.StatusTodo,
 		},
 		{
-			ID:         "WHF-2",
+			ID:         "jira-WHF-2",
 			Originated: task.OriginJira,
 			Title:      "Implement Jira sync",
 			Description: "Goal\n" +
@@ -97,12 +97,12 @@ func TestGetMyTasks(t *testing.T) {
 			Status:      task.StatusInProgress,
 			StartDate:   date(t, "2026-10-01"),
 			DueDate:     date(t, "2026-10-31"),
-			ParentID:    "WHF-10",
-			ChildrenIDs: []string{"WHF-5", "WHF-6"},
-			LinkedIDs:   []string{"WHF-1", "WHF-3"},
+			ParentID:    "jira-WHF-10",
+			ChildrenIDs: []string{"jira-WHF-5", "jira-WHF-6"},
+			LinkedIDs:   []string{"jira-WHF-1", "jira-WHF-3"},
 		},
 		{
-			ID:          "WHF-3",
+			ID:          "jira-WHF-3",
 			Originated:  task.OriginJira,
 			Title:       "Fix flaky login test",
 			Description: "Retry is no longer needed.",
@@ -111,7 +111,7 @@ func TestGetMyTasks(t *testing.T) {
 			DueDate:     date(t, "2026-09-05"),
 		},
 		{
-			ID:          "WHF-4",
+			ID:          "jira-WHF-4",
 			Originated:  task.OriginJira,
 			Title:       "Migrate legacy cron jobs",
 			Description: "Superseded by WHF-2.",
@@ -214,14 +214,14 @@ func TestGetMyTasksCollectsFieldErrors(t *testing.T) {
 		{
 			name:     "status category is unknown",
 			out:      fixture(t, "view_unknown_status.json"),
-			want:     task.Task{ID: "WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
+			want:     task.Task{ID: "jira-WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
 			wantErrs: []error{atlassian.ErrUnknownStatusCategory},
 		},
 		{
 			name: "start date is invalid",
 			out:  fixture(t, "view_invalid_start_date.json"),
 			want: task.Task{
-				ID:         "WHF-1",
+				ID:         "jira-WHF-1",
 				Originated: task.OriginJira,
 				Title:      "Write onboarding guide",
 				Status:     task.StatusTodo,
@@ -232,7 +232,7 @@ func TestGetMyTasksCollectsFieldErrors(t *testing.T) {
 			name: "due date is invalid",
 			out:  fixture(t, "view_invalid_due_date.json"),
 			want: task.Task{
-				ID:         "WHF-1",
+				ID:         "jira-WHF-1",
 				Originated: task.OriginJira,
 				Title:      "Write onboarding guide",
 				Status:     task.StatusTodo,
@@ -242,7 +242,7 @@ func TestGetMyTasksCollectsFieldErrors(t *testing.T) {
 		{
 			name: "every field is invalid",
 			out:  fixture(t, "view_invalid_fields.json"),
-			want: task.Task{ID: "WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
+			want: task.Task{ID: "jira-WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
 			wantErrs: []error{
 				atlassian.ErrUnknownStatusCategory,
 				atlassian.ErrFailedToParseStartDate,
@@ -275,7 +275,7 @@ func TestGetMyTasksCollectsErrorsAcrossWorkItems(t *testing.T) {
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 	require.Equal(t, []task.Task{
-		{ID: "WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
+		{ID: "jira-WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
 	}, tasks)
 	require.ErrorIs(t, err, atlassian.ErrMissingWorkItemKey)
 	require.ErrorContains(t, err, "index=0")
@@ -336,9 +336,9 @@ func TestGetMyTasksKeepsOtherTasksWhenViewFails(t *testing.T) {
 
 	tasks, err := atlassian.NewClient(m).GetMyTasks(t.Context())
 	require.Equal(t, []task.Task{
-		{ID: "WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
+		{ID: "jira-WHF-1", Originated: task.OriginJira, Title: "Write onboarding guide"},
 		{
-			ID:          "WHF-4",
+			ID:          "jira-WHF-4",
 			Originated:  task.OriginJira,
 			Title:       "Migrate legacy cron jobs",
 			Description: "Superseded by WHF-2.",
