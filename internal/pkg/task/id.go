@@ -2,9 +2,8 @@ package task
 
 import "fmt"
 
-// localKeyPrefix is the project key of local tasks.
-//
-// TODO: Decide in the task API issue whether this moves to the TOML config.
+// localKeyPrefix is the project key of local tasks. It is not configurable:
+// changing it would mix prefixes among stored tasks that share one counter.
 const localKeyPrefix = "WHF"
 
 // NewID returns the task ID "{originated}-{key}", which keeps keys from

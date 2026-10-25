@@ -24,6 +24,20 @@ var (
 	ErrFailedToStoreTaskLink             = errors.New("db: failed to store task link")
 	ErrFailedToIncrementLocalTaskCounter = errors.New("db: failed to increment local task counter")
 	ErrFailedToCommitTx                  = errors.New("db: failed to commit transaction")
+	ErrFailedToListTasks                 = errors.New("db: failed to list tasks")
+	ErrFailedToListTasksByIDs            = errors.New("db: failed to list tasks by ids")
+	ErrTaskNotFound                      = errors.New("db: task not found")
+	ErrFailedToGetTask                   = errors.New("db: failed to get task")
+	ErrFailedToListTaskChildren          = errors.New("db: failed to list task children")
+	ErrFailedToListTaskLinks             = errors.New("db: failed to list task links")
+	ErrFailedToUpdateLocalTask           = errors.New("db: failed to update local task")
+	ErrLocalTaskToUpdateNotFound         = errors.New("db: local task to update not found")
+	ErrFailedToDeleteTaskChildren        = errors.New("db: failed to delete task children")
+	ErrFailedToDeleteLocalTaskLinks      = errors.New("db: failed to delete links of local task")
+	ErrFailedToDeleteTask                = errors.New("db: failed to delete task")
+	ErrTaskToDeleteNotFound              = errors.New("db: task to delete not found")
+	ErrFailedToDeleteTaskHierarchies     = errors.New("db: failed to delete task hierarchies")
+	ErrFailedToDeleteTaskLinksOf         = errors.New("db: failed to delete links of task")
 )
 
 // localTaskCounter is the counters row seeded by the initial migration.
@@ -34,6 +48,11 @@ type Manager interface {
 
 	UpsertTasks(ctx context.Context, tasks []task.Task) error
 	CreateLocalTask(ctx context.Context, t task.Task) (string, error)
+	ListTasks(ctx context.Context) ([]task.Task, error)
+	ListTasksByIDs(ctx context.Context, ids []string) ([]task.Task, error)
+	GetTask(ctx context.Context, id string) (task.Task, error)
+	UpdateLocalTask(ctx context.Context, t task.Task) error
+	DeleteTask(ctx context.Context, id string) error
 
 	// DB Management
 
@@ -66,6 +85,10 @@ func NewManager(path string, migrations fs.FS) Manager {
 // the links it declared before. Its children are only added or moved to it,
 // since a parent may not list every child (a Jira Epic does not list its
 // Stories). Duplicate children and links are stored once.
+//
+// The exception is a local parent: a non-local task that declares no parent
+// keeps a local parent, so a local task can hold a Jira task as its child
+// across syncs. A declared parent still replaces it.
 func (m *manager) UpsertTasks(ctx context.Context, tasks []task.Task) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -115,6 +138,139 @@ func (m *manager) CreateLocalTask(ctx context.Context, t task.Task) (string, err
 	return t.ID, nil
 }
 
+// ListTasks returns every stored task in ID order, without relations.
+func (m *manager) ListTasks(ctx context.Context) ([]task.Task, error) {
+	if err := m.checkConnected(); err != nil {
+		return nil, err
+	}
+
+	rows, err := m.queries.ListTasks(ctx)
+	if err != nil {
+		return nil, errors.Join(ErrFailedToListTasks, err)
+	}
+
+	return fromTasks(rows), nil
+}
+
+// ListTasksByIDs returns the stored tasks among ids in ID order, without
+// relations. IDs that are not stored are skipped.
+func (m *manager) ListTasksByIDs(ctx context.Context, ids []string) ([]task.Task, error) {
+	if err := m.checkConnected(); err != nil {
+		return nil, err
+	}
+
+	rows, err := m.queries.ListTasksByIDs(ctx, ids)
+	if err != nil {
+		return nil, errors.Join(ErrFailedToListTasksByIDs, err)
+	}
+
+	return fromTasks(rows), nil
+}
+
+// GetTask returns the task with id and its relations: its parent, the tasks
+// stored as its children, and the tasks linked to or from it, in ID order.
+// Related IDs may not be stored. It fails with ErrTaskNotFound when no task
+// has id.
+func (m *manager) GetTask(ctx context.Context, id string) (task.Task, error) {
+	if err := m.checkConnected(); err != nil {
+		return task.Task{}, err
+	}
+
+	row, err := m.queries.GetTask(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return task.Task{}, fmt.Errorf("%w: id=%s", ErrTaskNotFound, id)
+	}
+
+	if err != nil {
+		return task.Task{}, fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToGetTask, err), id)
+	}
+
+	t := fromTask(row.Task)
+	t.ParentID = row.ParentID.String
+
+	if t.ChildrenIDs, err = m.queries.ListTaskChildren(ctx, id); err != nil {
+		return task.Task{}, fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToListTaskChildren, err), id)
+	}
+
+	if t.LinkedIDs, err = m.queries.ListTaskLinks(ctx, id); err != nil {
+		return task.Task{}, fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToListTaskLinks, err), id)
+	}
+
+	return t, nil
+}
+
+// UpdateLocalTask replaces every field of the stored local task t.ID except
+// its ID and origin, together with its relations: its parent, and unlike
+// UpsertTasks all of its children and its links in both directions, which is
+// how GetTask reads them. A link another task declared to t.ID is dropped
+// unless t.LinkedIDs lists it; a Jira task declares it again on its next sync.
+// It fails with ErrLocalTaskToUpdateNotFound when no local task has t.ID.
+func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	t.Originated = task.OriginLocal
+
+	return m.inTx(ctx, func(queries *Queries) error {
+		updated, err := queries.UpdateLocalTask(ctx, UpdateLocalTaskParams{
+			Title:       t.Title,
+			Description: t.Description,
+			Status:      string(t.Status),
+			StartDate:   toNullTime(t.StartDate),
+			DueDate:     toNullTime(t.DueDate),
+			ID:          t.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpdateLocalTask, err), t.ID)
+		}
+
+		if updated == 0 {
+			return fmt.Errorf("%w: id=%s", ErrLocalTaskToUpdateNotFound, t.ID)
+		}
+
+		if err := queries.DeleteTaskChildren(ctx, t.ID); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskChildren, err), t.ID)
+		}
+
+		if err := queries.DeleteTaskLinksOf(ctx, t.ID); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteLocalTaskLinks, err), t.ID)
+		}
+
+		return storeRelations(ctx, queries, t)
+	})
+}
+
+// DeleteTask deletes the task with id and every relation it is part of, as
+// child, parent, or either side of a link. Other tasks are kept. It fails
+// with ErrTaskToDeleteNotFound when no task has id.
+func (m *manager) DeleteTask(ctx context.Context, id string) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	return m.inTx(ctx, func(queries *Queries) error {
+		deleted, err := queries.DeleteTask(ctx, id)
+		if err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTask, err), id)
+		}
+
+		if deleted == 0 {
+			return fmt.Errorf("%w: id=%s", ErrTaskToDeleteNotFound, id)
+		}
+
+		if err := queries.DeleteTaskHierarchies(ctx, id); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskHierarchies, err), id)
+		}
+
+		if err := queries.DeleteTaskLinksOf(ctx, id); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskLinksOf, err), id)
+		}
+
+		return nil
+	})
+}
+
 // inTx runs fn in a transaction and commits it when fn succeeds.
 func (m *manager) inTx(ctx context.Context, fn func(*Queries) error) error {
 	tx, err := m.db.BeginTx(ctx, nil)
@@ -142,7 +298,18 @@ func storeTask(ctx context.Context, queries *Queries, t task.Task) error {
 		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpsertTask, err), t.ID)
 	}
 
-	if err := queries.DeleteTaskParent(ctx, t.ID); err != nil {
+	return storeRelations(ctx, queries, t)
+}
+
+// storeRelations replaces the parent and links of t and adds its children, as
+// UpsertTasks describes.
+func storeRelations(ctx context.Context, queries *Queries, t task.Task) error {
+	deleteParent := queries.DeleteTaskParent
+	if t.Originated != task.OriginLocal && t.ParentID == "" {
+		deleteParent = queries.DeleteTaskNonLocalParent
+	}
+
+	if err := deleteParent(ctx, t.ID); err != nil {
 		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskParent, err), t.ID)
 	}
 
@@ -184,6 +351,35 @@ func toUpsertTaskParams(t task.Task) UpsertTaskParams {
 		StartDate:   toNullTime(t.StartDate),
 		DueDate:     toNullTime(t.DueDate),
 	}
+}
+
+func fromTasks(rows []Task) []task.Task {
+	tasks := make([]task.Task, 0, len(rows))
+	for _, row := range rows {
+		tasks = append(tasks, fromTask(row))
+	}
+
+	return tasks
+}
+
+func fromTask(row Task) task.Task {
+	return task.Task{
+		ID:          row.ID,
+		Originated:  task.Origin(row.Originated),
+		Title:       row.Title,
+		Description: row.Description,
+		Status:      task.Status(row.Status),
+		StartDate:   fromNullTime(row.StartDate),
+		DueDate:     fromNullTime(row.DueDate),
+	}
+}
+
+func fromNullTime(t sql.NullTime) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+
+	return &t.Time
 }
 
 func toNullTime(t *time.Time) sql.NullTime {
