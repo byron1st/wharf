@@ -15,6 +15,7 @@ import (
 var (
 	ErrEmptyTaskTitle       = errors.New("service: task title is empty")
 	ErrUnknownTaskStatus    = errors.New("service: unknown task status")
+	ErrEmptyRelatedTaskID   = errors.New("service: related task id is empty")
 	ErrTaskReferencesItself = errors.New("service: task cannot reference itself")
 	ErrTaskNotFound         = errors.New("service: task not found")
 	ErrTaskToUpdateNotFound = errors.New("service: task to update not found")
@@ -78,17 +79,25 @@ func (s *service) GetTask(ctx context.Context, id string) (TaskDetail, error) {
 		return TaskDetail{}, err
 	}
 
-	ids := append([]string{t.ParentID}, t.ChildrenIDs...)
-	ids = append(ids, t.LinkedIDs...)
-
-	related, err := s.db.ListTasksByIDs(ctx, ids)
-	if err != nil {
-		return TaskDetail{}, err
+	var ids []string
+	if t.ParentID != "" {
+		ids = append(ids, t.ParentID)
 	}
 
-	stored := make(map[string]task.Task, len(related))
-	for _, r := range related {
-		stored[r.ID] = r
+	ids = append(ids, t.ChildrenIDs...)
+	ids = append(ids, t.LinkedIDs...)
+
+	stored := map[string]task.Task{}
+
+	if len(ids) > 0 {
+		related, err := s.db.ListTasksByIDs(ctx, ids)
+		if err != nil {
+			return TaskDetail{}, err
+		}
+
+		for _, r := range related {
+			stored[r.ID] = r
+		}
 	}
 
 	detail := TaskDetail{Task: t, Children: pick(stored, t.ChildrenIDs), Linked: pick(stored, t.LinkedIDs)}
@@ -163,10 +172,17 @@ func (s *service) DeleteTask(ctx context.Context, id string) error {
 }
 
 // normalize checks the fields a client sets and defaults an empty status to
-// todo.
+// todo. An empty ParentID means no parent, but a blank one, like any blank
+// child or linked ID, is rejected.
 func normalize(t task.Task) (task.Task, error) {
-	if strings.TrimSpace(t.Title) == "" {
+	if isBlank(t.Title) {
 		return task.Task{}, ErrEmptyTaskTitle
+	}
+
+	if t.ParentID != "" && isBlank(t.ParentID) ||
+		slices.ContainsFunc(t.ChildrenIDs, isBlank) ||
+		slices.ContainsFunc(t.LinkedIDs, isBlank) {
+		return task.Task{}, ErrEmptyRelatedTaskID
 	}
 
 	switch t.Status {
@@ -191,4 +207,8 @@ func pick(stored map[string]task.Task, ids []string) []task.Task {
 	}
 
 	return picked
+}
+
+func isBlank(s string) bool {
+	return strings.TrimSpace(s) == ""
 }

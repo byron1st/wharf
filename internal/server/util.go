@@ -17,8 +17,10 @@ var errorStatuses = []struct {
 }{
 	{err: ErrFailedToDecodeTaskRequest, status: http.StatusBadRequest},
 	{err: ErrTaskRequestHasTrailingData, status: http.StatusBadRequest},
+	{err: ErrTaskRequestTooLarge, status: http.StatusRequestEntityTooLarge},
 	{err: service.ErrEmptyTaskTitle, status: http.StatusBadRequest},
 	{err: service.ErrUnknownTaskStatus, status: http.StatusBadRequest},
+	{err: service.ErrEmptyRelatedTaskID, status: http.StatusBadRequest},
 	{err: service.ErrTaskReferencesItself, status: http.StatusBadRequest},
 	{err: service.ErrTaskNotFound, status: http.StatusNotFound},
 	{err: service.ErrTaskToUpdateNotFound, status: http.StatusNotFound},

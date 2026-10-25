@@ -658,9 +658,11 @@ func TestUpdateLocalTask(t *testing.T) {
 	id, err := manager.CreateLocalTask(context.Background(), created)
 	require.NoError(t, err)
 
-	// C3 moves from its Jira parent to the local task.
+	// C3 moves from its Jira parent to the local task, and the link J1 declared
+	// to it is dropped since the update does not list J1.
 	jira := newTask("J1")
 	jira.ChildrenIDs = []string{"C3"}
+	jira.LinkedIDs = []string{id}
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{jira}))
 
 	due := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)

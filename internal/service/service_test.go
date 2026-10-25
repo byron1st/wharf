@@ -124,12 +124,24 @@ func TestGetTaskWithoutStoredRelations(t *testing.T) {
 	require.Equal(t, service.TaskDetail{Task: stored, Children: []task.Task{}, Linked: []task.Task{}}, got)
 }
 
+func TestGetTaskWithoutRelations(t *testing.T) {
+	stored := task.Task{ID: "T1"}
+
+	// No ListTasksByIDs expectation: there is nothing to look up.
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().GetTask(mock.Anything, "T1").Return(stored, nil).Once()
+
+	got, err := service.NewService(mocks.NewMockClient(t), manager).GetTask(t.Context(), "T1")
+	require.NoError(t, err)
+	require.Equal(t, service.TaskDetail{Task: stored, Children: []task.Task{}, Linked: []task.Task{}}, got)
+}
+
 func TestGetTaskFailures(t *testing.T) {
 	failure := errors.New("list failed")
 
 	manager := mocks.NewMockManager(t)
 	manager.EXPECT().GetTask(mock.Anything, "MISSING").Return(task.Task{}, db.ErrTaskNotFound).Once()
-	manager.EXPECT().GetTask(mock.Anything, "T1").Return(task.Task{ID: "T1"}, nil).Once()
+	manager.EXPECT().GetTask(mock.Anything, "T1").Return(task.Task{ID: "T1", ParentID: "P"}, nil).Once()
 	manager.EXPECT().ListTasksByIDs(mock.Anything, mock.Anything).Return(nil, failure).Once()
 
 	svc := service.NewService(mocks.NewMockClient(t), manager)
@@ -173,6 +185,17 @@ func TestCreateTaskRejectsInvalidInput(t *testing.T) {
 		{name: "empty title", task: task.Task{}, wantErr: service.ErrEmptyTaskTitle},
 		{name: "blank title", task: task.Task{Title: " \t\n"}, wantErr: service.ErrEmptyTaskTitle},
 		{name: "unknown status", task: task.Task{Title: "x", Status: "blocked"}, wantErr: service.ErrUnknownTaskStatus},
+		{name: "blank parent", task: task.Task{Title: "x", ParentID: " "}, wantErr: service.ErrEmptyRelatedTaskID},
+		{
+			name:    "empty child",
+			task:    task.Task{Title: "x", ChildrenIDs: []string{"C", ""}},
+			wantErr: service.ErrEmptyRelatedTaskID,
+		},
+		{
+			name:    "blank link",
+			task:    task.Task{Title: "x", LinkedIDs: []string{"\t"}},
+			wantErr: service.ErrEmptyRelatedTaskID,
+		},
 	}
 
 	for _, tt := range tests {

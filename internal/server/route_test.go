@@ -240,7 +240,6 @@ func TestCreateTaskRejectsInvalidBody(t *testing.T) {
 		"id":            `{"title":"x","id":"local-WHF-009"}`,
 		"originated":    `{"title":"x","originated":"jira"}`,
 		"bad date":      `{"title":"x","due_date":"2026-10-31"}`,
-		"too large":     `{"title":"` + strings.Repeat("x", 1<<20) + `"}`,
 	}
 
 	for name, body := range bodies {
@@ -253,6 +252,16 @@ func TestCreateTaskRejectsInvalidBody(t *testing.T) {
 			require.Contains(t, logs, `"request_id":"req-1"`)
 		})
 	}
+}
+
+func TestCreateTaskRejectsTooLargeBody(t *testing.T) {
+	body := `{"title":"` + strings.Repeat("x", 1<<20) + `"}`
+
+	// No CreateTask expectation: the mock fails the test if it is called.
+	rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPost, "/tasks", strings.NewReader(body))
+
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	require.Contains(t, rec.Body.String(), "server: task request is too large")
 }
 
 func TestCreateTaskRejectsTrailingData(t *testing.T) {
@@ -303,6 +312,7 @@ func TestTaskRoutesMapServiceErrors(t *testing.T) {
 			status: http.StatusBadRequest,
 		},
 		{name: "self reference", err: service.ErrTaskReferencesItself, status: http.StatusBadRequest},
+		{name: "empty related id", err: service.ErrEmptyRelatedTaskID, status: http.StatusBadRequest},
 		{name: "not found", err: service.ErrTaskNotFound, status: http.StatusNotFound},
 		{name: "update not found", err: service.ErrTaskToUpdateNotFound, status: http.StatusNotFound},
 		{name: "local update not found", err: service.ErrLocalTaskToUpdateNotFound, status: http.StatusNotFound},

@@ -33,6 +33,7 @@ var (
 	ErrFailedToUpdateLocalTask           = errors.New("db: failed to update local task")
 	ErrLocalTaskToUpdateNotFound         = errors.New("db: local task to update not found")
 	ErrFailedToDeleteTaskChildren        = errors.New("db: failed to delete task children")
+	ErrFailedToDeleteLocalTaskLinks      = errors.New("db: failed to delete links of local task")
 	ErrFailedToDeleteTask                = errors.New("db: failed to delete task")
 	ErrTaskToDeleteNotFound              = errors.New("db: task to delete not found")
 	ErrFailedToDeleteTaskHierarchies     = errors.New("db: failed to delete task hierarchies")
@@ -199,9 +200,11 @@ func (m *manager) GetTask(ctx context.Context, id string) (task.Task, error) {
 }
 
 // UpdateLocalTask replaces every field of the stored local task t.ID except
-// its ID and origin, together with its relations: its parent, its links, and
-// unlike UpsertTasks all of its children. It fails with
-// ErrLocalTaskToUpdateNotFound when no local task has t.ID.
+// its ID and origin, together with its relations: its parent, and unlike
+// UpsertTasks all of its children and its links in both directions, which is
+// how GetTask reads them. A link another task declared to t.ID is dropped
+// unless t.LinkedIDs lists it; a Jira task declares it again on its next sync.
+// It fails with ErrLocalTaskToUpdateNotFound when no local task has t.ID.
 func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -228,6 +231,10 @@ func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 
 		if err := queries.DeleteTaskChildren(ctx, t.ID); err != nil {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskChildren, err), t.ID)
+		}
+
+		if err := queries.DeleteTaskLinksOf(ctx, t.ID); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteLocalTaskLinks, err), t.ID)
 		}
 
 		return storeRelations(ctx, queries, t)

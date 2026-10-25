@@ -14,11 +14,12 @@ import (
 var (
 	ErrFailedToDecodeTaskRequest  = errors.New("server: failed to decode task request")
 	ErrTaskRequestHasTrailingData = errors.New("server: task request has trailing data")
+	ErrTaskRequestTooLarge        = errors.New("server: task request is too large")
 )
 
 const (
-	// maxTaskRequestBytes bounds a task request body; a larger one fails to
-	// decode.
+	// maxTaskRequestBytes bounds a task request body; a larger one fails
+	// with ErrTaskRequestTooLarge.
 	maxTaskRequestBytes = 1 << 20
 	// summaryDescriptionRunes is how much of a description a summary keeps.
 	summaryDescriptionRunes = 100
@@ -171,7 +172,13 @@ func decodeTask(w http.ResponseWriter, r *http.Request) (task.Task, error) {
 	decoder.DisallowUnknownFields()
 
 	var req taskRequest
-	if err := decoder.Decode(&req); err != nil {
+
+	err := decoder.Decode(&req)
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		return task.Task{}, errors.Join(ErrTaskRequestTooLarge, err)
+	}
+
+	if err != nil {
 		return task.Task{}, errors.Join(ErrFailedToDecodeTaskRequest, err)
 	}
 

@@ -50,7 +50,7 @@ flowchart LR
 - children 은 추가·재지정만: 각 child 에 `(child, T)` 를 upsert 해 다른 parent 에 있던 child 를 T 로 옮긴다. T 의 다른 children 행은 지우지 않는다.
 - links 는 T 가 선언한 행만 교체: `task_id = T` 행을 지우고 `LinkedIDs` 를 넣는다. 다른 task 가 T 로 선언한 행은 남는다.
 - 중복된 children/links 는 한 행으로 저장된다.
-- `UpdateLocalTask`(PUT) 는 예외로 children 을 전체 교체한다: `parent_id = T` 행을 모두 지운 뒤 선언한 children 을 넣는다.
+- `UpdateLocalTask`(PUT) 는 예외로 children 을 전체 교체한다: `parent_id = T` 행을 모두 지운 뒤 선언한 children 을 넣는다. links 도 양방향 전체 교체다: `DeleteTaskLinksOf` 로 `task_id = T`·`linked_id = T` 행을 모두 지운 뒤 `T > linked` 로 넣는다. `GetTask` 가 links 를 양방향 합집합으로 읽으므로, GET 결과를 그대로 PUT 해도 역방향 행이 복제되지 않고 PUT 으로 역방향 링크도 지울 수 있다. 지워진 Jira 쪽 선언 링크는 그 Jira task 의 다음 동기화에서 다시 생긴다. PUT 은 빠진 필드를 빈 값으로 보는 전체 교체이므로, 클라이언트는 GET 의 `parent_id`·`children_ids`·`linked_ids` 를 모두 다시 보내야 관계가 유지된다(부분 수정이 필요해지면 별도 PATCH 로 다룬다).
 - `DeleteTask` 는 T 의 행과 T 가 child·parent·선언자·대상인 관계 행을 지우고 다른 task 는 건드리지 않는다.
 
 근거:
