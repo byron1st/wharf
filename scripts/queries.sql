@@ -16,7 +16,12 @@ ON CONFLICT (id) DO UPDATE SET
 DELETE FROM task_hierarchies WHERE child_id = ?;
 
 -- name: DeleteTaskNonLocalParent :exec
-DELETE FROM task_hierarchies WHERE child_id = ? AND parent_id NOT LIKE 'local-%';
+-- 'local' is task.OriginLocal. A local parent of a non-local task is always
+-- stored, since only CreateLocalTask and UpdateLocalTask declare one and
+-- DeleteTask removes its rows.
+DELETE FROM task_hierarchies
+WHERE child_id = ?
+  AND parent_id NOT IN (SELECT id FROM tasks WHERE originated = 'local');
 
 -- name: DeleteTaskChildren :exec
 DELETE FROM task_hierarchies WHERE parent_id = ?;

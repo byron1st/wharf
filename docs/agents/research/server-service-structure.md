@@ -84,7 +84,7 @@ flowchart LR
 - 트랜잭션은 `inTx` (`client.go:268`) 한 곳에서 `BeginTx` → `queries.WithTx(tx)` → fn → `Commit` 한다. defer Rollback 이라 fn 이 실패하면 아무것도 저장되지 않는다. begin/commit sentinel 은 두 메서드가 공유한다(return site 가 `inTx` 하나).
 - `UpsertTasks` `client.go:91`: `checkConnected` → 빈 목록 no-op → `inTx` 안에서 task 마다 `storeTask` (`client.go:289`, upsert 후 `storeRelations` `:299`). 같은 ID 는 `ON CONFLICT (id) DO UPDATE` 로 덮어쓴다.
 - `storeTask` 의 관계 소유 규칙:
-  - parent 는 task 소유: `task_hierarchies` 의 `child_id = T` 행을 지우고 `ParentID` 가 있으면 다시 넣는다. 단 local 이 아닌 T 가 parent 를 선언하지 않으면 local parent(`local-` 접두어) 행은 남긴다(`DeleteTaskNonLocalParent`).
+  - parent 는 task 소유: `task_hierarchies` 의 `child_id = T` 행을 지우고 `ParentID` 가 있으면 다시 넣는다. 단 local 이 아닌 T 가 parent 를 선언하지 않으면 local parent(`tasks.originated = 'local'`) 행은 남긴다(`DeleteTaskNonLocalParent`).
   - children 은 추가·재지정만: `(child, T)` 를 `ON CONFLICT(child_id) DO UPDATE` 로 넣는다. 목록에 없는 기존 children 행은 남는다(Jira Epic 은 Story 를 subtasks 로 나열하지 않으므로).
   - linked 는 task 소유: `task_links` 의 `task_id = T` 행을 지우고 `LinkedIDs` 를 `ON CONFLICT DO NOTHING` 으로 넣는다. 다른 task 가 T 로 선언한 행은 건드리지 않는다.
 - `CreateLocalTask` `client.go:115`: 같은 트랜잭션에서 `IncrementCounter("local_task")` (첫 문장이 쓰기라 SQLITE_BUSY 회피 규칙을 지킨다) → `task.NewID(OriginLocal, task.LocalKey(n))` 로 `local-WHF-001` 형식 ID 생성 → `Originated = local` 로 `storeTask` → ID 반환. 입력의 `ID`·`Originated` 는 무시한다. 실패하면 카운터 증가도 롤백되어 번호가 소모되지 않는다. `service.CreateTask` 가 호출한다.

@@ -31,7 +31,7 @@ flowchart LR
   - `counters (name PK, value)`: `('local_task', 0)` 을 seed 한다. 이름 문자열은 `internal/adapter/db/client.go:30` 의 `localTaskCounter` 와 같아야 한다.
   - 관계는 DB 에 없는 task 를 가리킬 수 있어 `tasks(id)` FK 가 없다. 조회용 인덱스 `task_hierarchies_parent_id`(`task_hierarchies(parent_id)`), `task_links_linked_id`(`task_links(linked_id)`) 가 있다(DEV-16, 0001 에 직접 추가 — 기존 로컬 `wharf.db` 는 다시 만들어야 한다).
 - 쿼리 `scripts/queries.sql`:
-  - 쓰기: `UpsertTask`, `DeleteTaskParent`, `DeleteTaskNonLocalParent` (`parent_id NOT LIKE 'local-%'` 행만), `DeleteTaskChildren` (`parent_id = ?`), `UpsertTaskHierarchy` (`ON CONFLICT(child_id) DO UPDATE`), `DeleteTaskLinks`, `CreateTaskLink` (`ON CONFLICT DO NOTHING`), `UpdateLocalTask` (`:execrows`, `WHERE id = ? AND originated = 'local'`), `DeleteTask` (`:execrows`), `DeleteTaskHierarchies` (child·parent 양쪽), `DeleteTaskLinksOf` (선언자·대상 양쪽), `IncrementCounter` (`UPDATE ... RETURNING value`, `:one`), 마이그레이션용 2개.
+  - 쓰기: `UpsertTask`, `DeleteTaskParent`, `DeleteTaskNonLocalParent` (parent 가 `tasks.originated = 'local'` 인 행은 남김), `DeleteTaskChildren` (`parent_id = ?`), `UpsertTaskHierarchy` (`ON CONFLICT(child_id) DO UPDATE`), `DeleteTaskLinks`, `CreateTaskLink` (`ON CONFLICT DO NOTHING`), `UpdateLocalTask` (`:execrows`, `WHERE id = ? AND originated = 'local'`), `DeleteTask` (`:execrows`), `DeleteTaskHierarchies` (child·parent 양쪽), `DeleteTaskLinksOf` (선언자·대상 양쪽), `IncrementCounter` (`UPDATE ... RETURNING value`, `:one`), 마이그레이션용 2개.
   - 읽기: `ListTasks` (id 순), `ListTasksByIDs` (`sqlc.slice`, 빈 slice 는 `IN (NULL)` 로 0행), `GetTask` (`sqlc.embed(tasks)` + `LEFT JOIN task_hierarchies` 로 parent 를 함께, `GetTaskRow{Task, ParentID sql.NullString}`), `ListTaskChildren`, `ListTaskLinks` (`task_id = ?` 와 `linked_id = ?` 의 `UNION`, 중복 제거·id 순. sqlc 가 `ORDER BY 1` 과 테이블 미지정 컬럼에서 "ambiguous" 로 실패해서 `AS id` 별칭과 `task_links.` 한정이 필요했다).
 - sqlc 생성 코드는 `make gen` 으로만 재생성한다. `make modelgen` 은 sqlc 를 설치하지 않으므로 `go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1` 이 필요할 수 있다. Go 1.27 모듈이라 mockery·golangci-lint 도 go1.27 이상으로 빌드된 것이어야 한다(`GOTOOLCHAIN=go1.27.3 go install ...`).
 
@@ -46,7 +46,7 @@ flowchart LR
 
 `UpsertTasks` 와 `CreateLocalTask` 는 `storeTask`(upsert + `storeRelations`), `UpdateLocalTask` 는 `storeRelations` 를 쓴다. task T 를 저장할 때:
 
-- parent 는 T(child) 소유: `child_id = T` 행을 지우고 `ParentID` 가 있으면 `(T, ParentID)` 를 넣는다. 예외(DEV-16): T 가 local 이 아니고 parent 를 선언하지 않으면 `DeleteTaskNonLocalParent` 로 local parent(`local-` 접두어) 행은 남긴다. 그래서 local task 가 Jira task 를 child 로 묶은 관계가 동기화에도 유지된다. Jira task 가 parent 를 선언하면 그 parent 로 교체된다(parent 는 하나, Jira 가 이긴다).
+- parent 는 T(child) 소유: `child_id = T` 행을 지우고 `ParentID` 가 있으면 `(T, ParentID)` 를 넣는다. 예외(DEV-16): T 가 local 이 아니고 parent 를 선언하지 않으면 `DeleteTaskNonLocalParent` 로 local parent(`tasks.originated = 'local'` 인 parent) 행은 남긴다. local parent 는 `CreateLocalTask`·`UpdateLocalTask` 만 선언하고 `DeleteTask` 가 그 행을 지우므로 항상 저장되어 있다. 그래서 local task 가 Jira task 를 child 로 묶은 관계가 동기화에도 유지된다. Jira task 가 parent 를 선언하면 그 parent 로 교체된다(parent 는 하나, Jira 가 이긴다).
 - children 은 추가·재지정만: 각 child 에 `(child, T)` 를 upsert 해 다른 parent 에 있던 child 를 T 로 옮긴다. T 의 다른 children 행은 지우지 않는다.
 - links 는 T 가 선언한 행만 교체: `task_id = T` 행을 지우고 `LinkedIDs` 를 넣는다. 다른 task 가 T 로 선언한 행은 남는다.
 - 중복된 children/links 는 한 행으로 저장된다.
@@ -63,7 +63,7 @@ flowchart LR
 
 - 동기화되지 않는 task 쪽의 오래된 관계는 정리되지 않는다.
 - 같은 배치 안에서 `[P(children=[C]), C(parent 없음)]` 와 `[C, P]` 의 결과가 순서에 따라 다르다(나중 선언이 이긴다).
-- (DEV-16 에서 해소) local task 가 Jira task 를 child 로 선언한 행은 위 예외로 동기화 후에도 남는다. 다만 local parent 판별은 ID 접두어 `local-` 에 의존한다.
+- (DEV-16 에서 해소) local task 가 Jira task 를 child 로 선언한 행은 위 예외로 동기화 후에도 남는다. local parent 판별은 ID 접두어가 아니라 `tasks.originated` 컬럼으로 한다.
 - 관계 cycle·`parent_id` 와 `children_ids` 의 모순은 검증하지 않는다. 자기 참조만 `service.UpdateTask` 가 막는다.
 
 ## SQLite 트랜잭션 제약

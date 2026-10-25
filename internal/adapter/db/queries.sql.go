@@ -84,9 +84,14 @@ func (q *Queries) DeleteTaskLinksOf(ctx context.Context, id string) error {
 }
 
 const deleteTaskNonLocalParent = `-- name: DeleteTaskNonLocalParent :exec
-DELETE FROM task_hierarchies WHERE child_id = ? AND parent_id NOT LIKE 'local-%'
+DELETE FROM task_hierarchies
+WHERE child_id = ?
+  AND parent_id NOT IN (SELECT id FROM tasks WHERE originated = 'local')
 `
 
+// 'local' is task.OriginLocal. A local parent of a non-local task is always
+// stored, since only CreateLocalTask and UpdateLocalTask declare one and
+// DeleteTask removes its rows.
 func (q *Queries) DeleteTaskNonLocalParent(ctx context.Context, childID string) error {
 	_, err := q.db.ExecContext(ctx, deleteTaskNonLocalParent, childID)
 	return err
