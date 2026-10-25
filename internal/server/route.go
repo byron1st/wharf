@@ -1,21 +1,11 @@
 package server
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
 	"github.com/byron1st/wharf/internal/service"
 )
-
-type syncResponse struct {
-	Upserted int  `json:"upserted"`
-	Partial  bool `json:"partial"`
-}
-
-type errorResponse struct {
-	Error string `json:"error"`
-}
 
 // NewHandler returns the API routes backed by svc. It expects the request ID
 // middleware of Server to run first so logs carry the request ID.
@@ -40,7 +30,7 @@ func syncJiraTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 		result, err := svc.SyncJiraTasks(r.Context())
 		if err != nil {
 			logger.ErrorContext(r.Context(), "failed to sync jira tasks", "request_id", requestID, "error", err)
-			writeInternalError(w)
+			writeInternalError(w, err)
 
 			return
 		}
@@ -57,18 +47,4 @@ func syncJiraTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, syncResponse{Upserted: result.Upserted, Partial: result.Partial != nil})
 	}
-}
-
-// writeInternalError hides the cause from the client; it is logged instead.
-func writeInternalError(w http.ResponseWriter) {
-	writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal server error"})
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	// The status is already sent, so an encoding or write failure, such as a
-	// closed connection, cannot be reported to the client.
-	_ = json.NewEncoder(w).Encode(body)
 }

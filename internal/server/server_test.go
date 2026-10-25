@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -116,6 +117,37 @@ func TestMiddleware(t *testing.T) {
 		logs.String(),
 		`"msg":"request","method":"GET","path":"/ok","status":418,"request_id":"`+generated+`"`,
 	)
+}
+
+func TestRecoverWritesPanicValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{name: "error", value: errors.New("boom error"), want: `{"error":"boom error"}`},
+		{name: "string", value: "boom string", want: `{"error":"boom string"}`},
+		{name: "other", value: 42, want: `{"error":"internal server error"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url, _, _, _ := start(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic(tt.value) }))
+
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+
+			defer func() { _ = resp.Body.Close() }()
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			require.JSONEq(t, tt.want, string(body))
+		})
+	}
 }
 
 func TestRunWaitsForInFlightRequest(t *testing.T) {

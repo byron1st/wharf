@@ -106,6 +106,9 @@ func withRecover(logger *slog.Logger, next http.Handler) http.Handler {
 				return
 			}
 
+			// http.ErrAbortHandler는 핸들러가 응답을 의도적으로 중단하려고 던지는
+			// panic이므로 500 응답으로 바꾸지 않고 다시 던진다. 그러면 net/http가
+			// stack trace 로그 없이 연결을 끊어 핸들러의 의도대로 응답을 중단한다.
 			if v == http.ErrAbortHandler {
 				panic(v)
 			}
@@ -117,7 +120,17 @@ func withRecover(logger *slog.Logger, next http.Handler) http.Handler {
 				"panic", v,
 				"stack", string(debug.Stack()),
 			)
-			writeInternalError(w)
+
+			var err error
+
+			switch pv := v.(type) {
+			case error:
+				err = pv
+			case string:
+				err = errors.New(pv)
+			}
+
+			writeInternalError(w, err)
 		}()
 
 		next.ServeHTTP(w, r)

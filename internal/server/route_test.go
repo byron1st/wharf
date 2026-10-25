@@ -74,7 +74,7 @@ func TestSyncJiraTasksFailure(t *testing.T) {
 	rec, logs := serve(t, svc, http.MethodPost, "/tasks/jira")
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
-	require.JSONEq(t, `{"error":"internal server error"}`, rec.Body.String())
+	require.JSONEq(t, `{"error":"secret detail"}`, rec.Body.String())
 	require.Contains(t, logs, `"request_id":"req-1"`)
 	require.Contains(t, logs, "secret detail")
 }
