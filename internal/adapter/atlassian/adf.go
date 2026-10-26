@@ -3,10 +3,13 @@ package atlassian
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // adfNode is a node of the Atlassian Document Format that Jira uses for rich
@@ -17,14 +20,15 @@ type adfNode struct {
 	Attrs struct {
 		Text      string `json:"text"`
 		URL       string `json:"url"`
-		Level     int    `json:"level"`
-		Order     *int   `json:"order"`
 		State     string `json:"state"`
 		Language  string `json:"language"`
 		Title     string `json:"title"`
 		ShortName string `json:"shortName"`
-		// Timestamp is epoch milliseconds, kept raw so that a malformed value
-		// drops the date instead of failing to decode the whole work item.
+		// Level, Order and Timestamp (epoch milliseconds) are kept raw so that
+		// a malformed value falls back to a default instead of failing to
+		// decode the whole work item.
+		Level     json.RawMessage `json:"level"`
+		Order     json.RawMessage `json:"order"`
 		Timestamp json.RawMessage `json:"timestamp"`
 	} `json:"attrs"`
 	Marks   []adfMark `json:"marks"`
@@ -38,12 +42,13 @@ type adfMark struct {
 	} `json:"attrs"`
 }
 
-// mdBlock is a rendered Markdown block; list marks list blocks that may follow
+// mdBlock is a rendered Markdown block. list marks list blocks that may follow
 // the previous block on the next line, so that a list directly inside a list
-// item can stay tight. An ordered list starting at a number other than 1 cannot
-// interrupt a paragraph in CommonMark, so it is not marked. family and alt record the list
-// marker family ("bullet" or "ordered") and whether the alternate marker was
-// used, so an adjacent sibling list of the same family can switch markers.
+// item can stay tight; an ordered list starting at a number other than 1
+// cannot interrupt a paragraph in CommonMark, so it is not marked. family and
+// alt record the list marker family ("bullet" or "ordered") and whether the
+// alternate marker was used, so an adjacent sibling list of the same family
+// can switch markers.
 type mdBlock struct {
 	text   string
 	list   bool
@@ -53,8 +58,10 @@ type mdBlock struct {
 
 // markdown renders the document as CommonMark with GFM tables and task lists.
 // It never fails: unknown nodes render their children so their text survives.
-// Text is not escaped (only `|` in table cells), so Markdown-like characters in
-// the original text may be interpreted as formatting.
+// Text is not escaped except `<` (so it never becomes raw HTML) and `|` in
+// table cells, so other Markdown-like characters in the original text may be
+// interpreted as formatting. Link and card URLs are kept only for http, https
+// and mailto. The result is still untrusted input for whoever renders it.
 func (n *adfNode) markdown() string {
 	if n == nil {
 		return ""
@@ -100,7 +107,7 @@ func renderBlocks(nodes []adfNode) []mdBlock {
 			}
 
 			alt := prev.family == family && !prev.alt
-			interrupts := node.Type != "orderedList" || node.Attrs.Order == nil || *node.Attrs.Order == 1
+			interrupts := node.Type != "orderedList" || attrInt(node.Attrs.Order, 1) == 1
 			add(mdBlock{text: renderList(node, alt), list: interrupts, family: family, alt: alt})
 
 			continue
@@ -144,7 +151,7 @@ func renderBlock(n adfNode) mdBlock {
 			return mdBlock{}
 		}
 
-		return mdBlock{text: strings.Repeat("#", min(max(n.Attrs.Level, 1), 6)) + " " + text}
+		return mdBlock{text: strings.Repeat("#", min(max(attrInt(n.Attrs.Level, 1), 1), 6)) + " " + text}
 	case "codeBlock":
 		return mdBlock{text: renderCodeBlock(n)}
 	case "blockquote", "panel":
@@ -157,7 +164,7 @@ func renderBlock(n adfNode) mdBlock {
 	case "expand", "nestedExpand":
 		blocks := renderBlocks(n.Content)
 		if n.Attrs.Title != "" {
-			blocks = append([]mdBlock{{text: "**" + n.Attrs.Title + "**"}}, blocks...)
+			blocks = append([]mdBlock{{text: "**" + escapeHTML(n.Attrs.Title) + "**"}}, blocks...)
 		}
 
 		return mdBlock{text: joinBlocks(blocks, false)}
@@ -193,23 +200,33 @@ func isInline(nodeType string) bool {
 func renderInline(nodes []adfNode) string {
 	var b strings.Builder
 
-	for _, n := range mergeText(nodes) {
+	nodes = mergeText(nodes)
+
+	for i, n := range nodes {
 		switch n.Type {
 		case "text":
-			b.WriteString(applyMarks(n.Text, n.Marks))
+			before, _ := utf8.DecodeLastRuneInString(b.String())
+
+			var after rune
+			if i+1 < len(nodes) {
+				after, _ = utf8.DecodeRuneInString(renderInline(nodes[i+1 : i+2]))
+			}
+
+			b.WriteString(applyMarks(n.Text, n.Marks, before, after))
 		case "hardBreak":
 			b.WriteString("\\\n")
 		case "mention":
-			b.WriteString(n.Attrs.Text)
+			b.WriteString(escapeHTML(n.Attrs.Text))
 		case "emoji":
 			if n.Attrs.Text != "" {
-				b.WriteString(n.Attrs.Text)
+				b.WriteString(escapeHTML(n.Attrs.Text))
 			} else {
-				b.WriteString(n.Attrs.ShortName)
+				b.WriteString(escapeHTML(n.Attrs.ShortName))
 			}
 		case "status":
+			// Escaped brackets so that a following "(...)" does not make a link.
 			if n.Attrs.Text != "" {
-				b.WriteString("[" + n.Attrs.Text + "]")
+				b.WriteString(`\[` + escapeHTML(n.Attrs.Text) + `\]`)
 			}
 		case "date":
 			if ms, err := strconv.ParseInt(strings.Trim(string(n.Attrs.Timestamp), `"`), 10, 64); err == nil {
@@ -218,7 +235,7 @@ func renderInline(nodes []adfNode) string {
 		case "inlineCard":
 			b.WriteString(autolink(n.Attrs.URL))
 		default:
-			b.WriteString(n.Text)
+			b.WriteString(escapeHTML(n.Text))
 			b.WriteString(renderInline(n.Content))
 		}
 	}
@@ -270,12 +287,15 @@ func sameMarks(a, b []adfMark) bool {
 
 // applyMarks nests marks as link > strike > strong > em > code and keeps
 // surrounding spaces outside the delimiters, which CommonMark requires for
-// emphasis. Marks without a Markdown equivalent keep the text only.
-func applyMarks(text string, marks []adfMark) string {
+// emphasis. before and after are the characters around the text (0 for none).
+// An emphasis delimiter that CommonMark would not treat as opening or closing
+// there (as in `**API(v2)**는`) is dropped rather than shown literally. Marks
+// without a Markdown equivalent keep the text only.
+func applyMarks(text string, marks []adfMark, before, after rune) string {
 	trimmed := strings.TrimSpace(text)
 	core := trimmed
 
-	if core == "" || len(marks) == 0 {
+	if core == "" {
 		return text
 	}
 
@@ -285,28 +305,103 @@ func applyMarks(text string, marks []adfMark) string {
 
 	for _, m := range marks {
 		has[m.Type] = true
-		if m.Type == "link" {
+		if m.Type == "link" && safeURL(m.Attrs.Href) {
 			href = m.Attrs.Href
 		}
 	}
 
 	if has["code"] {
 		core = codeSpan(core)
+	} else {
+		core = escapeHTML(core)
+	}
+
+	start := strings.Index(text, trimmed)
+	end := start + len(trimmed)
+
+	if href != "" {
+		// Inside a link the delimiters sit next to the brackets.
+		before, after = '[', ']'
+	} else {
+		if start > 0 {
+			before = ' '
+		}
+
+		if end < len(text) {
+			after = ' '
+		}
 	}
 
 	for _, d := range []struct{ mark, delim string }{{"em", "*"}, {"strong", "**"}, {"strike", "~~"}} {
-		if has[d.mark] {
+		if has[d.mark] && canEmphasize(core, before, after) {
 			core = d.delim + core + d.delim
 		}
 	}
 
 	if href != "" {
+		if strings.ContainsAny(href, " ()") {
+			href = "<" + href + ">"
+		}
+
 		core = "[" + core + "](" + href + ")"
 	}
 
-	start := strings.Index(text, trimmed)
+	return text[:start] + core + text[end:]
+}
 
-	return text[:start] + core + text[start+len(trimmed):]
+// canEmphasize reports whether delimiters around core would be left-flanking
+// at the start and right-flanking at the end, given the characters outside.
+func canEmphasize(core string, before, after rune) bool {
+	first, _ := utf8.DecodeRuneInString(core)
+	last, _ := utf8.DecodeLastRuneInString(core)
+
+	return !unicode.IsSpace(first) && (!isPunct(first) || isSpaceOrPunct(before)) &&
+		!unicode.IsSpace(last) && (!isPunct(last) || isSpaceOrPunct(after))
+}
+
+func isPunct(r rune) bool {
+	return unicode.IsPunct(r) || unicode.IsSymbol(r)
+}
+
+// isSpaceOrPunct treats 0 (the start or end of the text) as whitespace.
+func isSpaceOrPunct(r rune) bool {
+	return r == 0 || unicode.IsSpace(r) || isPunct(r)
+}
+
+// escapeHTML escapes `<` so that text never becomes raw HTML or an autolink.
+func escapeHTML(text string) string {
+	return strings.ReplaceAll(text, "<", `\<`)
+}
+
+// safeURL reports whether u is an http, https or mailto URL that can be put in
+// a link destination or an autolink.
+func safeURL(u string) bool {
+	if u == "" || strings.ContainsAny(u, "<>\n") {
+		return false
+	}
+
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return false
+	}
+
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https", "mailto":
+		return true
+	}
+
+	return false
+}
+
+// attrInt parses a numeric attribute such as 2, 2.0 or "2", returning def when
+// it is missing or not a whole number.
+func attrInt(raw json.RawMessage, def int) int {
+	f, err := strconv.ParseFloat(strings.Trim(string(raw), `"`), 64)
+	if err != nil || f != float64(int(f)) {
+		return def
+	}
+
+	return int(f)
 }
 
 // codeSpan wraps text in a backtick run longer than any run inside it.
@@ -332,7 +427,7 @@ func renderCodeBlock(n adfNode) string {
 
 	fence := strings.Repeat("`", max(3, longestRun(code, '`')+1))
 
-	return fence + n.Attrs.Language + "\n" + code + "\n" + fence
+	return fence + infoString(n.Attrs.Language) + "\n" + code + "\n" + fence
 }
 
 // renderList renders a tight list. Items are rendered with their marker and
@@ -340,10 +435,7 @@ func renderCodeBlock(n adfNode) string {
 // in a list (as ADF does for nested task lists) is indented under the previous
 // item. alt selects the alternate marker (`*` or `N)`) instead of `-` / `N.`.
 func renderList(n adfNode, alt bool) string {
-	number := 1
-	if n.Attrs.Order != nil {
-		number = *n.Attrs.Order
-	}
+	number := attrInt(n.Attrs.Order, 1)
 
 	var (
 		lines  []string
@@ -461,12 +553,30 @@ func renderCell(cell adfNode) string {
 	return strings.ReplaceAll(text, "|", `\|`)
 }
 
-func autolink(url string) string {
-	if url == "" {
+// infoString keeps only the characters a code block language may use, so the
+// fence line cannot be broken.
+func infoString(language string) string {
+	return strings.Map(func(r rune) rune {
+		if r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("_+#.-", r)) {
+			return r
+		}
+
+		return -1
+	}, language)
+}
+
+// autolink links a safe URL and shows any other URL as code, so that it is
+// never followed.
+func autolink(u string) string {
+	if u == "" {
 		return ""
 	}
 
-	return "<" + url + ">"
+	if !safeURL(u) || strings.Contains(u, " ") {
+		return codeSpan(u)
+	}
+
+	return "<" + u + ">"
 }
 
 // prefixLines prefixes every line with prefix, and empty lines with emptyPrefix.

@@ -136,3 +136,12 @@ See the change: `git diff c1a793d5e` (+ 새 파일 `internal/adapter/atlassian/a
 
 - 반영: 1 이 아닌 번호로 시작하는 ordered list 는 CommonMark 에서 문단을 끊지 못하므로 list item 안에서도 앞에 빈 줄을 두게 했다(`mdBlock.list` 를 그런 목록에는 세우지 않음). `renderList` 의 목록 타입 나열을 `listFamily` 로 바꿨다. `mergeText` 의 줄바꿈된 조건문을 읽기 쉽게 정리했다. `make check`·`make test` 통과.
 - 유지(PR 기록): 텍스트 미이스케이프(plan Key decisions 의 수용 위험), link href·autolink URL 미검증, 표 셀 안 목록·코드블록의 구조 손실, heading 안 hardBreak, 서로 다른 mark 가 맞닿은 구분자, `level`/`order` 정수 디코딩(ADF 스키마상 숫자), 테스트를 `jira_test.go` 에 둔 것(`markdown()` 이 unexported 라 `ToTask` 로만 검증), family 문자열 상수화, `renderList` 분리.
+
+## PR 리뷰 대응 (byron1st/wharf#6, Grok Bot: Wharf Verifier)
+
+- Blocker 1: link href·inlineCard·blockCard·embedCard URL 을 `safeURL`(`http`/`https`/`mailto` 만, `<`·`>`·개행 거부)로 거른다. 안전하지 않은 link 는 텍스트만, 카드는 URL 을 code span 으로 보여 따라가지 못하게 한다. 공백·괄호가 있는 href 는 `<href>` 형태로 넣는다. text·mention·emoji·status·expand 제목의 `<` 를 `\<` 로 이스케이프한다(code span 제외). research 에 "description 은 신뢰할 수 없는 Markdown 이므로 소비자가 sanitize 해야 함" 을 적었다.
+- Should fix 2: `level`·`order` 를 `json.RawMessage` 로 받고 `attrInt` 가 `2`·`2.0`·`"2"` 를 읽으며 실패 시 기본값 1 로 떨어진다.
+- Should fix 3: status 는 `\[TEXT\]` 로 써서 뒤의 `(...)` 와 링크가 되지 않는다.
+- Should fix 4: `canEmphasize` 가 CommonMark left/right-flanking 조건을 앞뒤 문자로 확인해, 성립하지 않는 강조 delimiter(`**API(v2)**는`)는 생략한다. 테스트와 research 에 고정했다.
+- Nit 5: codeBlock info string 은 ASCII 영숫자·`_+#.-` 만 남긴다. Nit 6: `mdBlock` doc comment 를 다시 감쌌다.
+- `make check` 0 issues, `make test` 통과. 회귀 테스트 6건 추가.

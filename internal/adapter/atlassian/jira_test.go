@@ -488,7 +488,7 @@ func TestToTaskDescription(t *testing.T) {
 				{"type": "text", "text": " "},
 				{"type": "inlineCard", "attrs": {"url": "https://example.atlassian.net/browse/WHF-2"}}
 			]}]}`,
-			want: "@Jane Doe 😄:custom: [IN REVIEW] 2025-10-26/2025-10-26 <https://example.atlassian.net/browse/WHF-2>",
+			want: "@Jane Doe 😄:custom: \\[IN REVIEW\\] 2025-10-26/2025-10-26 <https://example.atlassian.net/browse/WHF-2>",
 		},
 		{
 			name: "block and embed cards are autolink blocks",
@@ -525,6 +525,71 @@ func TestToTaskDescription(t *testing.T) {
 				{"type": "paragraph"}
 			]}`,
 			want: "before\n\nafter",
+		},
+		{
+			name: "unsafe link and card urls are not linked",
+			description: `{"type": "doc", "content": [
+				{"type": "paragraph", "content": [
+					{"type": "text", "text": "click", "marks": [{"type": "link", "attrs": {"href": "javascript:alert(1)"}}]},
+					{"type": "text", "text": " "},
+					{"type": "inlineCard", "attrs": {"url": "javascript:alert(2)"}},
+					{"type": "text", "text": " "},
+					{"type": "text", "text": "mail", "marks": [{"type": "link", "attrs": {"href": "mailto:a@example.com"}}]},
+					{"type": "text", "text": " "},
+					{"type": "text", "text": "wiki", "marks": [{"type": "link", "attrs": {"href": "https://example.com/a (b)"}}]}
+				]},
+				{"type": "blockCard", "attrs": {"url": "data:text/html,x"}}
+			]}`,
+			want: "click `javascript:alert(2)` [mail](mailto:a@example.com) [wiki](<https://example.com/a (b)>)\n\n`data:text/html,x`",
+		},
+		{
+			name: "less-than is escaped outside code",
+			description: `{"type": "doc", "content": [{"type": "paragraph", "content": [
+				{"type": "text", "text": "List<String> <img src=x onerror=alert(3)> "},
+				{"type": "text", "text": "<b>", "marks": [{"type": "code"}]},
+				{"type": "mention", "attrs": {"text": "<@x>"}}
+			]}]}`,
+			want: "List\\<String> \\<img src=x onerror=alert(3)> `<b>`\\<@x>",
+		},
+		{
+			name: "status brackets are escaped so they never form a link",
+			description: `{"type": "doc", "content": [{"type": "paragraph", "content": [
+				{"type": "status", "attrs": {"text": "DONE"}},
+				{"type": "text", "text": "(2026-10-01)"}
+			]}]}`,
+			want: "\\[DONE\\](2026-10-01)",
+		},
+		{
+			name: "emphasis that cannot open or close is dropped",
+			description: `{"type": "doc", "content": [{"type": "paragraph", "content": [
+				{"type": "text", "text": "API(v2)", "marks": [{"type": "strong"}]},
+				{"type": "text", "text": "는 중요하고 "},
+				{"type": "text", "text": "굵게", "marks": [{"type": "strong"}]},
+				{"type": "text", "text": "는 유지, 앞"},
+				{"type": "text", "text": "(v3)", "marks": [{"type": "strike"}]},
+				{"type": "text", "text": " 그리고 "},
+				{"type": "text", "text": "(링크)", "marks": [{"type": "strong"}, {"type": "link", "attrs": {"href": "https://example.com"}}]},
+				{"type": "text", "text": "도"}
+			]}]}`,
+			want: "API(v2)는 중요하고 **굵게**는 유지, 앞(v3) 그리고 [**(링크)**](https://example.com)도",
+		},
+		{
+			name: "non-integer level and order fall back or round-trip",
+			description: `{"type": "doc", "content": [
+				{"type": "heading", "attrs": {"level": 2.0}, "content": [{"type": "text", "text": "float"}]},
+				{"type": "heading", "attrs": {"level": "3"}, "content": [{"type": "text", "text": "string"}]},
+				{"type": "heading", "attrs": {"level": 2.5}, "content": [{"type": "text", "text": "fraction"}]},
+				{"type": "orderedList", "attrs": {"order": "x"}, "content": [
+					{"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "a"}]}]}
+				]}
+			]}`,
+			want: "## float\n\n### string\n\n# fraction\n\n1. a",
+		},
+		{
+			name: "code block language keeps only safe characters",
+			description: `{"type": "doc", "content": [{"type": "codeBlock", "attrs": {"language": "go\n<script>` + "`" + `"},
+				"content": [{"type": "text", "text": "x"}]}]}`,
+			want: "```goscript\nx\n```",
 		},
 	}
 
