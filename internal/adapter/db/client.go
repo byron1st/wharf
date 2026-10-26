@@ -11,6 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
 )
 
 var (
@@ -38,6 +39,9 @@ var (
 	ErrTaskToDeleteNotFound              = errors.New("db: task to delete not found")
 	ErrFailedToDeleteTaskHierarchies     = errors.New("db: failed to delete task hierarchies")
 	ErrFailedToDeleteTaskLinksOf         = errors.New("db: failed to delete links of task")
+	ErrFailedToDeleteTodoRemindersOfTask = errors.New("db: failed to delete todo reminders of task")
+	ErrFailedToDeleteTodosOfTask         = errors.New("db: failed to delete todos of task")
+	ErrFailedToDeleteTaskTodosOfTask     = errors.New("db: failed to delete task todos of task")
 )
 
 // localTaskCounter is the counters row seeded by the initial migration.
@@ -53,6 +57,10 @@ type Manager interface {
 	GetTask(ctx context.Context, id string) (task.Task, error)
 	UpdateLocalTask(ctx context.Context, t task.Task) error
 	DeleteTask(ctx context.Context, id string) error
+	CreateTodo(ctx context.Context, t todo.Todo) (int64, error)
+	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
+	UpdateTodo(ctx context.Context, t todo.Todo) error
+	DeleteTodo(ctx context.Context, id int64) error
 
 	// DB Management
 
@@ -242,7 +250,8 @@ func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 }
 
 // DeleteTask deletes the task with id and every relation it is part of, as
-// child, parent, or either side of a link. Other tasks are kept. It fails
+// child, parent, or either side of a link, together with its todos and their
+// reminders. Other tasks and their todos are kept. It fails
 // with ErrTaskToDeleteNotFound when no task has id.
 func (m *manager) DeleteTask(ctx context.Context, id string) error {
 	if err := m.checkConnected(); err != nil {
@@ -265,6 +274,19 @@ func (m *manager) DeleteTask(ctx context.Context, id string) error {
 
 		if err := queries.DeleteTaskLinksOf(ctx, id); err != nil {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskLinksOf, err), id)
+		}
+
+		// Reminders and todos are found through task_todos, so it goes last.
+		if err := queries.DeleteTodoRemindersOfTask(ctx, id); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTodoRemindersOfTask, err), id)
+		}
+
+		if err := queries.DeleteTodosOfTask(ctx, id); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTodosOfTask, err), id)
+		}
+
+		if err := queries.DeleteTaskTodosOfTask(ctx, id); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskTodosOfTask, err), id)
 		}
 
 		return nil

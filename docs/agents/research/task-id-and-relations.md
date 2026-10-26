@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: Task ID `{originated}-{key}` 가 만들어지는 곳(task.NewID·atlassian ToTask·db CreateLocalTask)과 local key(WHF-001) 카운터, parent/children(task_hierarchies)·linked(task_links) 관계 테이블의 쓰기 소유 규칙과 그 근거(Jira subtasks/issuelinks 특성, cross-origin 관계·local parent 유지 예외)·읽기 쿼리(양방향 links·조회 인덱스)·중복·FK 제약, SQLite 쓰기 우선 트랜잭션 제약, ID 와 관계 테이블에 의존하는 테스트 위치를 정리한다.
+Description: Task ID `{originated}-{key}` 가 만들어지는 곳(task.NewID·atlassian ToTask·db CreateLocalTask)과 local key(WHF-001) 카운터, parent/children(task_hierarchies)·linked(task_links) 관계 테이블의 쓰기 소유 규칙과 그 근거(Jira subtasks/issuelinks 특성, cross-origin 관계·local parent 유지 예외)·읽기 쿼리(양방향 links·조회 인덱스)·중복·FK 제약, SQLite 쓰기 우선 트랜잭션 제약, task 삭제 시 todo cascade, ID 와 관계 테이블에 의존하는 테스트 위치를 정리한다.
 ---
 
 # Task ID 와 관계(parent/children/linked) 저장 구조
@@ -70,7 +70,12 @@ flowchart LR
 
 - `db.Connect` 는 `busy_timeout(5000)` 을 붙이고 연결을 1개로 제한한다 (`internal/adapter/db/client_management.go`, `busyTimeoutPragma` 주석). `BeginTx` 는 DEFERRED 라 "읽고 나서 쓰는" 트랜잭션은 다른 프로세스와 경합 시 즉시 SQLITE_BUSY 가 난다. 그래서 트랜잭션은 쓰기로 시작한다.
 - `CreateLocalTask` 는 `IncrementCounter`, `UpdateLocalTask` 는 `UpdateLocalTask` 쿼리, `DeleteTask` 는 `DeleteTask` 쿼리를 첫 문장으로 실행해 이 규칙을 지키고, 존재 여부는 영향 행 수(0 이면 `ErrLocalTaskToUpdateNotFound`/`ErrTaskToDeleteNotFound`)로 판별한다. 읽기(`ListTasks`, `GetTask` 등)는 트랜잭션 없이 실행한다. `SELECT MAX(...)+1` 은 읽기로 시작하고, 마지막 task 삭제 시 번호를 재사용하므로 쓰지 않았다.
+- todo 쓰기(DEV-18)도 같은 규칙이다: `CreateTodo` 는 `INSERT ... SELECT ... WHERE EXISTS (SELECT 1 FROM tasks ...)` 로 task 확인과 쓰기를 한 문장에서 하고, `UpdateTodo`·`DeleteTodo` 는 todos 의 `UPDATE`/`DELETE` 영향 행 수로 존재를 판별한 뒤 읽는다(`ExistsTask`, `CountTaskTodos`).
 - 카운터 행이 없으면 `RETURNING` 이 행을 돌려주지 않아 `sql.ErrNoRows` 가 되고 `ErrFailedToIncrementLocalTaskCounter` 로 드러난다.
+
+## task 삭제와 todo (DEV-18)
+
+- todo 는 `task_todos.task_id` 로 task 에 귀속된다(`todo_id` PK 라 task 하나). `DeleteTask` 는 관계 행 삭제 뒤 같은 트랜잭션에서 `DeleteTodoRemindersOfTask`·`DeleteTodosOfTask`(둘 다 `task_todos` 를 subquery 로 참조) → `DeleteTaskTodosOfTask` 순으로 지운다. `UpsertTasks` 는 task 를 지우지 않으므로 Jira 동기화 후에도 todo 가 남는다(`TestDeleteTaskDeletesItsTodos`, `internal/adapter/db/todo_test.go`).
 
 ## ID 와 관계 테이블에 의존하는 테스트
 

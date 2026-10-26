@@ -35,3 +35,30 @@ CREATE TABLE counters (
 );
 
 INSERT INTO counters (name, value) VALUES ('local_task', 0);
+
+-- Todos belong to one task through task_todos. Dates are "YYYY-MM-DD" text so
+-- text comparison is date comparison. Like the task relations, there are no
+-- foreign keys; db.Manager keeps the tables consistent in transactions.
+CREATE TABLE todos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    description TEXT NOT NULL,
+    is_done     BOOLEAN NOT NULL DEFAULT 0,
+    start_date  TEXT,
+    end_date    TEXT
+);
+
+-- position orders the todos of a task as 0..n-1 without gaps. It is not
+-- unique so shifting positions with one UPDATE cannot collide midway.
+CREATE TABLE task_todos (
+    todo_id  INTEGER PRIMARY KEY NOT NULL,
+    task_id  TEXT NOT NULL,
+    position INTEGER NOT NULL
+);
+
+CREATE INDEX task_todos_task_id_position ON task_todos (task_id, position);
+
+CREATE TABLE todo_reminders (
+    todo_id   INTEGER NOT NULL,
+    remind_at DATETIME NOT NULL,
+    PRIMARY KEY (todo_id, remind_at)
+);

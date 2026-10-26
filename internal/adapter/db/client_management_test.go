@@ -13,6 +13,7 @@ import (
 
 	"github.com/byron1st/wharf/internal/adapter/db"
 	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
 	"github.com/byron1st/wharf/scripts"
 )
 
@@ -259,6 +260,15 @@ func TestMethodsRequireConnection(t *testing.T) {
 
 			require.ErrorIs(t, manager.UpdateLocalTask(context.Background(), newTask("WHF-1")), db.ErrNotConnected)
 			require.ErrorIs(t, manager.DeleteTask(context.Background(), "WHF-1"), db.ErrNotConnected)
+
+			_, err = manager.CreateTodo(context.Background(), todo.Todo{TaskID: "WHF-1", Description: "d"})
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			_, err = manager.ListTodos(context.Background(), todo.Filter{})
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			require.ErrorIs(t, manager.UpdateTodo(context.Background(), todo.Todo{ID: 1}), db.ErrNotConnected)
+			require.ErrorIs(t, manager.DeleteTodo(context.Background(), 1), db.ErrNotConnected)
 
 			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
 			require.NoError(t, manager.Close())

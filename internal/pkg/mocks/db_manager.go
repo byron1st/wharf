@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -208,6 +209,72 @@ func (_c *MockManager_CreateLocalTask_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// CreateTodo provides a mock function for the type MockManager
+func (_mock *MockManager) CreateTodo(ctx context.Context, t todo.Todo) (int64, error) {
+	ret := _mock.Called(ctx, t)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateTodo")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, todo.Todo) (int64, error)); ok {
+		return returnFunc(ctx, t)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, todo.Todo) int64); ok {
+		r0 = returnFunc(ctx, t)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, todo.Todo) error); ok {
+		r1 = returnFunc(ctx, t)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockManager_CreateTodo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateTodo'
+type MockManager_CreateTodo_Call struct {
+	*mock.Call
+}
+
+// CreateTodo is a helper method to define mock.On call
+//   - ctx context.Context
+//   - t todo.Todo
+func (_e *MockManager_Expecter) CreateTodo(ctx any, t any) *MockManager_CreateTodo_Call {
+	return &MockManager_CreateTodo_Call{Call: _e.mock.On("CreateTodo", ctx, t)}
+}
+
+func (_c *MockManager_CreateTodo_Call) Run(run func(ctx context.Context, t todo.Todo)) *MockManager_CreateTodo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 todo.Todo
+		if args[1] != nil {
+			arg1 = args[1].(todo.Todo)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_CreateTodo_Call) Return(n int64, err error) *MockManager_CreateTodo_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockManager_CreateTodo_Call) RunAndReturn(run func(ctx context.Context, t todo.Todo) (int64, error)) *MockManager_CreateTodo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeleteTask provides a mock function for the type MockManager
 func (_mock *MockManager) DeleteTask(ctx context.Context, id string) error {
 	ret := _mock.Called(ctx, id)
@@ -261,6 +328,63 @@ func (_c *MockManager_DeleteTask_Call) Return(err error) *MockManager_DeleteTask
 }
 
 func (_c *MockManager_DeleteTask_Call) RunAndReturn(run func(ctx context.Context, id string) error) *MockManager_DeleteTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteTodo provides a mock function for the type MockManager
+func (_mock *MockManager) DeleteTodo(ctx context.Context, id int64) error {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteTodo")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64) error); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockManager_DeleteTodo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteTodo'
+type MockManager_DeleteTodo_Call struct {
+	*mock.Call
+}
+
+// DeleteTodo is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int64
+func (_e *MockManager_Expecter) DeleteTodo(ctx any, id any) *MockManager_DeleteTodo_Call {
+	return &MockManager_DeleteTodo_Call{Call: _e.mock.On("DeleteTodo", ctx, id)}
+}
+
+func (_c *MockManager_DeleteTodo_Call) Run(run func(ctx context.Context, id int64)) *MockManager_DeleteTodo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_DeleteTodo_Call) Return(err error) *MockManager_DeleteTodo_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockManager_DeleteTodo_Call) RunAndReturn(run func(ctx context.Context, id int64) error) *MockManager_DeleteTodo_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -461,6 +585,74 @@ func (_c *MockManager_ListTasksByIDs_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
+// ListTodos provides a mock function for the type MockManager
+func (_mock *MockManager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error) {
+	ret := _mock.Called(ctx, f)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListTodos")
+	}
+
+	var r0 []todo.Todo
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, todo.Filter) ([]todo.Todo, error)); ok {
+		return returnFunc(ctx, f)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, todo.Filter) []todo.Todo); ok {
+		r0 = returnFunc(ctx, f)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]todo.Todo)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, todo.Filter) error); ok {
+		r1 = returnFunc(ctx, f)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockManager_ListTodos_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListTodos'
+type MockManager_ListTodos_Call struct {
+	*mock.Call
+}
+
+// ListTodos is a helper method to define mock.On call
+//   - ctx context.Context
+//   - f todo.Filter
+func (_e *MockManager_Expecter) ListTodos(ctx any, f any) *MockManager_ListTodos_Call {
+	return &MockManager_ListTodos_Call{Call: _e.mock.On("ListTodos", ctx, f)}
+}
+
+func (_c *MockManager_ListTodos_Call) Run(run func(ctx context.Context, f todo.Filter)) *MockManager_ListTodos_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 todo.Filter
+		if args[1] != nil {
+			arg1 = args[1].(todo.Filter)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_ListTodos_Call) Return(todos []todo.Todo, err error) *MockManager_ListTodos_Call {
+	_c.Call.Return(todos, err)
+	return _c
+}
+
+func (_c *MockManager_ListTodos_Call) RunAndReturn(run func(ctx context.Context, f todo.Filter) ([]todo.Todo, error)) *MockManager_ListTodos_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Migrate provides a mock function for the type MockManager
 func (_mock *MockManager) Migrate(ctx context.Context) error {
 	ret := _mock.Called(ctx)
@@ -565,6 +757,63 @@ func (_c *MockManager_UpdateLocalTask_Call) Return(err error) *MockManager_Updat
 }
 
 func (_c *MockManager_UpdateLocalTask_Call) RunAndReturn(run func(ctx context.Context, t task.Task) error) *MockManager_UpdateLocalTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateTodo provides a mock function for the type MockManager
+func (_mock *MockManager) UpdateTodo(ctx context.Context, t todo.Todo) error {
+	ret := _mock.Called(ctx, t)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateTodo")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, todo.Todo) error); ok {
+		r0 = returnFunc(ctx, t)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockManager_UpdateTodo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTodo'
+type MockManager_UpdateTodo_Call struct {
+	*mock.Call
+}
+
+// UpdateTodo is a helper method to define mock.On call
+//   - ctx context.Context
+//   - t todo.Todo
+func (_e *MockManager_Expecter) UpdateTodo(ctx any, t any) *MockManager_UpdateTodo_Call {
+	return &MockManager_UpdateTodo_Call{Call: _e.mock.On("UpdateTodo", ctx, t)}
+}
+
+func (_c *MockManager_UpdateTodo_Call) Run(run func(ctx context.Context, t todo.Todo)) *MockManager_UpdateTodo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 todo.Todo
+		if args[1] != nil {
+			arg1 = args[1].(todo.Todo)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_UpdateTodo_Call) Return(err error) *MockManager_UpdateTodo_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockManager_UpdateTodo_Call) RunAndReturn(run func(ctx context.Context, t todo.Todo) error) *MockManager_UpdateTodo_Call {
 	_c.Call.Return(run)
 	return _c
 }

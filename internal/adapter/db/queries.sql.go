@@ -9,7 +9,19 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 )
+
+const countTaskTodos = `-- name: CountTaskTodos :one
+SELECT COUNT(*) FROM task_todos WHERE task_id = ?
+`
+
+func (q *Queries) CountTaskTodos(ctx context.Context, taskID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTaskTodos, taskID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createSchemaMigration = `-- name: CreateSchemaMigration :exec
 INSERT INTO schema_migrations (version) VALUES (?)
@@ -32,6 +44,66 @@ type CreateTaskLinkParams struct {
 
 func (q *Queries) CreateTaskLink(ctx context.Context, arg CreateTaskLinkParams) error {
 	_, err := q.db.ExecContext(ctx, createTaskLink, arg.TaskID, arg.LinkedID)
+	return err
+}
+
+const createTaskTodo = `-- name: CreateTaskTodo :exec
+INSERT INTO task_todos (todo_id, task_id, position) VALUES (?, ?, ?)
+`
+
+type CreateTaskTodoParams struct {
+	TodoID   int64
+	TaskID   string
+	Position int64
+}
+
+func (q *Queries) CreateTaskTodo(ctx context.Context, arg CreateTaskTodoParams) error {
+	_, err := q.db.ExecContext(ctx, createTaskTodo, arg.TodoID, arg.TaskID, arg.Position)
+	return err
+}
+
+const createTodo = `-- name: CreateTodo :one
+INSERT INTO todos (description, is_done, start_date, end_date)
+SELECT ?1, ?2, ?3, ?4
+WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = ?5)
+RETURNING id
+`
+
+type CreateTodoParams struct {
+	Description string
+	IsDone      bool
+	StartDate   sql.NullString
+	EndDate     sql.NullString
+	TaskID      string
+}
+
+// Inserts nothing, failing with no rows, when the task is not stored, so the
+// check is a write as the transaction's first statement.
+func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createTodo,
+		arg.Description,
+		arg.IsDone,
+		arg.StartDate,
+		arg.EndDate,
+		arg.TaskID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createTodoReminder = `-- name: CreateTodoReminder :exec
+INSERT INTO todo_reminders (todo_id, remind_at) VALUES (?, ?)
+ON CONFLICT (todo_id, remind_at) DO NOTHING
+`
+
+type CreateTodoReminderParams struct {
+	TodoID   int64
+	RemindAt time.Time
+}
+
+func (q *Queries) CreateTodoReminder(ctx context.Context, arg CreateTodoReminderParams) error {
+	_, err := q.db.ExecContext(ctx, createTodoReminder, arg.TodoID, arg.RemindAt)
 	return err
 }
 
@@ -106,12 +178,87 @@ func (q *Queries) DeleteTaskParent(ctx context.Context, childID string) error {
 	return err
 }
 
+const deleteTaskTodo = `-- name: DeleteTaskTodo :one
+DELETE FROM task_todos WHERE todo_id = ? RETURNING task_id, position
+`
+
+type DeleteTaskTodoRow struct {
+	TaskID   string
+	Position int64
+}
+
+func (q *Queries) DeleteTaskTodo(ctx context.Context, todoID int64) (DeleteTaskTodoRow, error) {
+	row := q.db.QueryRowContext(ctx, deleteTaskTodo, todoID)
+	var i DeleteTaskTodoRow
+	err := row.Scan(&i.TaskID, &i.Position)
+	return i, err
+}
+
+const deleteTaskTodosOfTask = `-- name: DeleteTaskTodosOfTask :exec
+DELETE FROM task_todos WHERE task_id = ?
+`
+
+func (q *Queries) DeleteTaskTodosOfTask(ctx context.Context, taskID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTaskTodosOfTask, taskID)
+	return err
+}
+
+const deleteTodo = `-- name: DeleteTodo :execrows
+DELETE FROM todos WHERE id = ?
+`
+
+func (q *Queries) DeleteTodo(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteTodo, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteTodoReminders = `-- name: DeleteTodoReminders :exec
+DELETE FROM todo_reminders WHERE todo_id = ?
+`
+
+func (q *Queries) DeleteTodoReminders(ctx context.Context, todoID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTodoReminders, todoID)
+	return err
+}
+
+const deleteTodoRemindersOfTask = `-- name: DeleteTodoRemindersOfTask :exec
+DELETE FROM todo_reminders WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = ?)
+`
+
+func (q *Queries) DeleteTodoRemindersOfTask(ctx context.Context, taskID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTodoRemindersOfTask, taskID)
+	return err
+}
+
+const deleteTodosOfTask = `-- name: DeleteTodosOfTask :exec
+DELETE FROM todos WHERE id IN (SELECT todo_id FROM task_todos WHERE task_id = ?)
+`
+
+func (q *Queries) DeleteTodosOfTask(ctx context.Context, taskID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTodosOfTask, taskID)
+	return err
+}
+
 const existsSchemaMigration = `-- name: ExistsSchemaMigration :one
 SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = ?)
 `
 
 func (q *Queries) ExistsSchemaMigration(ctx context.Context, version string) (bool, error) {
 	row := q.db.QueryRowContext(ctx, existsSchemaMigration, version)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const existsTask = `-- name: ExistsTask :one
+SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?)
+`
+
+func (q *Queries) ExistsTask(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, existsTask, id)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -293,6 +440,150 @@ func (q *Queries) ListTasksByIDs(ctx context.Context, ids []string) ([]Task, err
 	return items, nil
 }
 
+const listTodoReminders = `-- name: ListTodoReminders :many
+SELECT todo_reminders.todo_id, todo_reminders.remind_at
+FROM todo_reminders
+JOIN todos ON todos.id = todo_reminders.todo_id
+JOIN task_todos ON task_todos.todo_id = todo_reminders.todo_id
+WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
+  AND (todos.start_date <= ?2 OR todos.start_date IS NULL OR ?2 IS NULL)
+  AND (todos.end_date = ?3 OR ?3 IS NULL)
+  AND (todos.is_done = ?4 OR ?4 IS NULL)
+ORDER BY todo_reminders.todo_id, todo_reminders.remind_at
+`
+
+type ListTodoRemindersParams struct {
+	TaskID  sql.NullString
+	Today   sql.NullString
+	EndDate sql.NullString
+	IsDone  sql.NullBool
+}
+
+// Takes the ListTodos filters rather than todo IDs, so the number of bind
+// variables stays fixed however many todos match.
+func (q *Queries) ListTodoReminders(ctx context.Context, arg ListTodoRemindersParams) ([]TodoReminder, error) {
+	rows, err := q.db.QueryContext(ctx, listTodoReminders,
+		arg.TaskID,
+		arg.Today,
+		arg.EndDate,
+		arg.IsDone,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TodoReminder
+	for rows.Next() {
+		var i TodoReminder
+		if err := rows.Scan(&i.TodoID, &i.RemindAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTodos = `-- name: ListTodos :many
+SELECT todos.id, todos.description, todos.is_done, todos.start_date, todos.end_date, task_todos.task_id, task_todos.position
+FROM todos
+JOIN task_todos ON task_todos.todo_id = todos.id
+WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
+  AND (todos.start_date <= ?2 OR todos.start_date IS NULL OR ?2 IS NULL)
+  AND (todos.end_date = ?3 OR ?3 IS NULL)
+  AND (todos.is_done = ?4 OR ?4 IS NULL)
+ORDER BY task_todos.task_id, task_todos.position
+`
+
+type ListTodosParams struct {
+	TaskID  sql.NullString
+	Today   sql.NullString
+	EndDate sql.NullString
+	IsDone  sql.NullBool
+}
+
+type ListTodosRow struct {
+	ID          int64
+	Description string
+	IsDone      bool
+	StartDate   sql.NullString
+	EndDate     sql.NullString
+	TaskID      string
+	Position    int64
+}
+
+// A NULL filter is not applied.
+func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]ListTodosRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTodos,
+		arg.TaskID,
+		arg.Today,
+		arg.EndDate,
+		arg.IsDone,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTodosRow
+	for rows.Next() {
+		var i ListTodosRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Description,
+			&i.IsDone,
+			&i.StartDate,
+			&i.EndDate,
+			&i.TaskID,
+			&i.Position,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const shiftTaskTodosDown = `-- name: ShiftTaskTodosDown :exec
+UPDATE task_todos SET position = position + 1
+WHERE task_id = ?1 AND position >= ?2
+`
+
+type ShiftTaskTodosDownParams struct {
+	TaskID   string
+	Position int64
+}
+
+func (q *Queries) ShiftTaskTodosDown(ctx context.Context, arg ShiftTaskTodosDownParams) error {
+	_, err := q.db.ExecContext(ctx, shiftTaskTodosDown, arg.TaskID, arg.Position)
+	return err
+}
+
+const shiftTaskTodosUp = `-- name: ShiftTaskTodosUp :exec
+UPDATE task_todos SET position = position - 1
+WHERE task_id = ?1 AND position > ?2
+`
+
+type ShiftTaskTodosUpParams struct {
+	TaskID   string
+	Position int64
+}
+
+func (q *Queries) ShiftTaskTodosUp(ctx context.Context, arg ShiftTaskTodosUpParams) error {
+	_, err := q.db.ExecContext(ctx, shiftTaskTodosUp, arg.TaskID, arg.Position)
+	return err
+}
+
 const updateLocalTask = `-- name: UpdateLocalTask :execrows
 UPDATE tasks SET
     title       = ?,
@@ -319,6 +610,37 @@ func (q *Queries) UpdateLocalTask(ctx context.Context, arg UpdateLocalTaskParams
 		arg.Status,
 		arg.StartDate,
 		arg.DueDate,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateTodo = `-- name: UpdateTodo :execrows
+UPDATE todos SET
+    description = ?,
+    is_done     = ?,
+    start_date  = ?,
+    end_date    = ?
+WHERE id = ?
+`
+
+type UpdateTodoParams struct {
+	Description string
+	IsDone      bool
+	StartDate   sql.NullString
+	EndDate     sql.NullString
+	ID          int64
+}
+
+func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateTodo,
+		arg.Description,
+		arg.IsDone,
+		arg.StartDate,
+		arg.EndDate,
 		arg.ID,
 	)
 	if err != nil {

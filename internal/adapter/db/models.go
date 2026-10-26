@@ -38,3 +38,22 @@ type TaskLink struct {
 	TaskID   string
 	LinkedID string
 }
+
+type TaskTodo struct {
+	TodoID   int64
+	TaskID   string
+	Position int64
+}
+
+type Todo struct {
+	ID          int64
+	Description string
+	IsDone      bool
+	StartDate   sql.NullString
+	EndDate     sql.NullString
+}
+
+type TodoReminder struct {
+	TodoID   int64
+	RemindAt time.Time
+}
