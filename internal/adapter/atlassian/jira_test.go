@@ -552,6 +552,16 @@ func TestToTaskDescription(t *testing.T) {
 			want: "List\\<String> \\<img src=x onerror=alert(3)> `<b>`\\<@x>",
 		},
 		{
+			name: "link syntax typed into text is escaped",
+			description: `{"type": "doc", "content": [{"type": "paragraph", "content": [
+				{"type": "text", "text": "see [x](javascript:alert(1)) and \\[y](javascript:alert(2)) "},
+				{"type": "status", "attrs": {"text": "[z](javascript:alert(3))"}},
+				{"type": "text", "text": " "},
+				{"type": "mention", "attrs": {"text": "[m](javascript:alert(4))"}}
+			]}]}`,
+			want: `see \[x\](javascript:alert(1)) and \\\[y\](javascript:alert(2)) \[\[z\](javascript:alert(3))\] \[m\](javascript:alert(4))`,
+		},
+		{
 			name: "status brackets are escaped so they never form a link",
 			description: `{"type": "doc", "content": [{"type": "paragraph", "content": [
 				{"type": "status", "attrs": {"text": "DONE"}},

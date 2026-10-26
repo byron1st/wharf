@@ -58,9 +58,9 @@ type mdBlock struct {
 
 // markdown renders the document as CommonMark with GFM tables and task lists.
 // It never fails: unknown nodes render their children so their text survives.
-// Text is not escaped except `<` (so it never becomes raw HTML) and `|` in
-// table cells, so other Markdown-like characters in the original text may be
-// interpreted as formatting. Link and card URLs are kept only for http, https
+// Text is not escaped except `\`, `<`, `[` and `]` (so it never becomes raw
+// HTML or a link) and `|` in table cells, so other Markdown-like characters in
+// the original text may be interpreted as formatting. Link and card URLs are kept only for http, https
 // and mailto. The result is still untrusted input for whoever renders it.
 func (n *adfNode) markdown() string {
 	if n == nil {
@@ -164,7 +164,7 @@ func renderBlock(n adfNode) mdBlock {
 	case "expand", "nestedExpand":
 		blocks := renderBlocks(n.Content)
 		if n.Attrs.Title != "" {
-			blocks = append([]mdBlock{{text: "**" + escapeHTML(n.Attrs.Title) + "**"}}, blocks...)
+			blocks = append([]mdBlock{{text: "**" + escapeText(n.Attrs.Title) + "**"}}, blocks...)
 		}
 
 		return mdBlock{text: joinBlocks(blocks, false)}
@@ -216,17 +216,17 @@ func renderInline(nodes []adfNode) string {
 		case "hardBreak":
 			b.WriteString("\\\n")
 		case "mention":
-			b.WriteString(escapeHTML(n.Attrs.Text))
+			b.WriteString(escapeText(n.Attrs.Text))
 		case "emoji":
 			if n.Attrs.Text != "" {
-				b.WriteString(escapeHTML(n.Attrs.Text))
+				b.WriteString(escapeText(n.Attrs.Text))
 			} else {
-				b.WriteString(escapeHTML(n.Attrs.ShortName))
+				b.WriteString(escapeText(n.Attrs.ShortName))
 			}
 		case "status":
 			// Escaped brackets so that a following "(...)" does not make a link.
 			if n.Attrs.Text != "" {
-				b.WriteString(`\[` + escapeHTML(n.Attrs.Text) + `\]`)
+				b.WriteString(`\[` + escapeText(n.Attrs.Text) + `\]`)
 			}
 		case "date":
 			if ms, err := strconv.ParseInt(strings.Trim(string(n.Attrs.Timestamp), `"`), 10, 64); err == nil {
@@ -235,7 +235,7 @@ func renderInline(nodes []adfNode) string {
 		case "inlineCard":
 			b.WriteString(autolink(n.Attrs.URL))
 		default:
-			b.WriteString(escapeHTML(n.Text))
+			b.WriteString(escapeText(n.Text))
 			b.WriteString(renderInline(n.Content))
 		}
 	}
@@ -313,7 +313,7 @@ func applyMarks(text string, marks []adfMark, before, after rune) string {
 	if has["code"] {
 		core = codeSpan(core)
 	} else {
-		core = escapeHTML(core)
+		core = escapeText(core)
 	}
 
 	start := strings.Index(text, trimmed)
@@ -368,9 +368,11 @@ func isSpaceOrPunct(r rune) bool {
 	return r == 0 || unicode.IsSpace(r) || isPunct(r)
 }
 
-// escapeHTML escapes `<` so that text never becomes raw HTML or an autolink.
-func escapeHTML(text string) string {
-	return strings.ReplaceAll(text, "<", `\<`)
+// escapeText escapes `<` so that text never becomes raw HTML or an autolink,
+// and `[` and `]` so that link syntax typed into the text never becomes a link
+// that bypasses safeURL. `\` is escaped first so it cannot undo the others.
+func escapeText(text string) string {
+	return strings.NewReplacer(`\`, `\\`, "<", `\<`, "[", `\[`, "]", `\]`).Replace(text)
 }
 
 // safeURL reports whether u is an http, https or mailto URL that can be put in

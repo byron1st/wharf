@@ -145,3 +145,4 @@ See the change: `git diff c1a793d5e` (+ 새 파일 `internal/adapter/atlassian/a
 - Should fix 4: `canEmphasize` 가 CommonMark left/right-flanking 조건을 앞뒤 문자로 확인해, 성립하지 않는 강조 delimiter(`**API(v2)**는`)는 생략한다. 테스트와 research 에 고정했다.
 - Nit 5: codeBlock info string 은 ASCII 영숫자·`_+#.-` 만 남긴다. Nit 6: `mdBlock` doc comment 를 다시 감쌌다.
 - `make check` 0 issues, `make test` 통과. 회귀 테스트 6건 추가.
+- 재리뷰 Blocker(Blocker 1번 우회): 본문 text 에 직접 적힌 `[x](javascript:...)` 가 링크가 되던 문제. `escapeHTML` 을 `escapeText` 로 바꿔 `\`(먼저)·`<`·`[`·`]` 를 이스케이프한다(text·mention·emoji·status·expand 제목, code span 제외). 회귀 테스트 "link syntax typed into text is escaped" 추가. `make check`·`make test` 통과.
