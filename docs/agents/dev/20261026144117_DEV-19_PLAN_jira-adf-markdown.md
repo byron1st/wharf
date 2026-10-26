@@ -67,6 +67,6 @@ Report: [20261026144117_DEV-19_IMPL_jira-adf-markdown.md](./20261026144117_DEV-1
 
 ## TODOs
 
-- [ ] `adfNode` 가 marks 와 필요한 attrs(level, order, state, language, href, title, timestamp, shortName, url, text 등)를 디코딩하게 하고, 평문 렌더러를 Key decisions 의 출력 형식을 따르는 Markdown 렌더러로 대체한 뒤 `ToTask` 가 그것을 쓰게 한다. `jira.go` 의 TODO 주석을 지운다 (AC-1, AC-3) (design-bearing) (→ research: jira-adf-description)
-- [ ] `TestToTaskDescription` 을 Markdown 기대값으로 바꾸고 AC-1 의 노드·mark 별 케이스를 추가하며, `client_test.go` 의 `view_in_progress.json` 기대 description 을 갱신한다 (AC-1, AC-2) (mechanical) (→ research: jira-adf-description)
-- [ ] research `jira-adf-description` 과 index 를 구현 후 상태로 갱신 (AC-4) (mechanical)
+- [x] `adfNode` 가 marks 와 필요한 attrs(level, order, state, language, href, title, timestamp, shortName, url, text 등)를 디코딩하게 하고, 평문 렌더러를 Key decisions 의 출력 형식을 따르는 Markdown 렌더러로 대체한 뒤 `ToTask` 가 그것을 쓰게 한다. `jira.go` 의 TODO 주석을 지운다 (AC-1, AC-3) (design-bearing) (→ research: jira-adf-description)
+- [x] `TestToTaskDescription` 을 Markdown 기대값으로 바꾸고 AC-1 의 노드·mark 별 케이스를 추가하며, `client_test.go` 의 `view_in_progress.json` 기대 description 을 갱신한다 (AC-1, AC-2) (mechanical) (→ research: jira-adf-description)
+- [x] research `jira-adf-description` 과 index 를 구현 후 상태로 갱신 (AC-4) (mechanical)

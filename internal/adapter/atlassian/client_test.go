@@ -85,15 +85,16 @@ func TestGetMyTasks(t *testing.T) {
 			ID:         "jira-WHF-2",
 			Originated: task.OriginJira,
 			Title:      "Implement Jira sync",
-			Description: "Goal\n" +
-				"Sync tasks from acli every 10 minutes.\n" +
-				"Search assigned work items\n" +
-				"View each work item\n" +
-				"Parse ADF description\n" +
-				"Map statuses\n" +
-				"Owner: @Jane Doe see https://example.atlassian.net/browse/WHF-1\n" +
-				"line one\nline two\n" +
-				"acli jira workitem search \\\n  --json",
+			Description: "## Goal\n\n" +
+				"Sync tasks from `acli` every **10 minutes**.\n\n" +
+				"- Search assigned work items\n" +
+				"- View each work item\n\n" +
+				"* [x] Parse ADF description\n" +
+				"* [ ] Map statuses\n\n" +
+				"Owner: @Jane Doe see <https://example.atlassian.net/browse/WHF-1>\n\n" +
+				"line one\\\nline two\n\n" +
+				"```\nacli jira workitem search \\\n  --json\n```\n\n" +
+				"---",
 			Status:      task.StatusInProgress,
 			StartDate:   date(t, "2026-10-01"),
 			DueDate:     date(t, "2026-10-31"),
