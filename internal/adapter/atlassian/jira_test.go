@@ -562,6 +562,48 @@ func TestToTaskDescription(t *testing.T) {
 			want: `see \[x\](javascript:alert(1)) and \\\[y\](javascript:alert(2)) \[\[z\](javascript:alert(3))\] \[m\](javascript:alert(4))`,
 		},
 		{
+			name: "backslash before less-than cannot undo the escape",
+			description: `{"type": "doc", "content": [{"type": "paragraph", "content": [
+				{"type": "text", "text": "\\<img src=x onerror=alert(3)> "},
+				{"type": "mention", "attrs": {"text": "\\<b>"}}
+			]}]}`,
+			want: `\\\<img src=x onerror=alert(3)> \\\<b>`,
+		},
+		{
+			name: "line endings in code spans become spaces",
+			description: `{"type": "doc", "content": [
+				{"type": "paragraph", "content": [
+					{"type": "text", "text": "x\n\n<img src=x onerror=alert(4)>", "marks": [{"type": "code"}]},
+					{"type": "text", "text": " "},
+					{"type": "inlineCard", "attrs": {"url": "x\r\n<script>alert(1)</script>"}}
+				]},
+				{"type": "blockCard", "attrs": {"url": "a\r\r<img src=x onerror=alert(1)>"}}
+			]}`,
+			want: "`x  <img src=x onerror=alert(4)>` `x <script>alert(1)</script>`\n\n`a  <img src=x onerror=alert(1)>`",
+		},
+		{
+			name: "em and strong share one delimiter run while strike cannot flank there",
+			description: `{"type": "doc", "content": [{"type": "paragraph", "content": [
+				{"type": "text", "text": "이건"},
+				{"type": "text", "text": "중요", "marks": [{"type": "em"}, {"type": "strong"}, {"type": "strike"}]},
+				{"type": "text", "text": "해요"}
+			]}]}`,
+			want: "이건***중요***해요",
+		},
+		{
+			name: "ordered list start is clamped to the CommonMark range",
+			description: `{"type": "doc", "content": [
+				{"type": "orderedList", "attrs": {"order": -5}, "content": [
+					{"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "a"}]}]}
+				]},
+				{"type": "paragraph", "content": [{"type": "text", "text": "gap"}]},
+				{"type": "orderedList", "attrs": {"order": 2000000000}, "content": [
+					{"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "b"}]}]}
+				]}
+			]}`,
+			want: "0. a\n\ngap\n\n999999999. b",
+		},
+		{
 			name: "status brackets are escaped so they never form a link",
 			description: `{"type": "doc", "content": [{"type": "paragraph", "content": [
 				{"type": "status", "attrs": {"text": "DONE"}},

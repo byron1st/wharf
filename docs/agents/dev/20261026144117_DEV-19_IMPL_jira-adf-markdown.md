@@ -146,3 +146,5 @@ See the change: `git diff c1a793d5e` (+ 새 파일 `internal/adapter/atlassian/a
 - Nit 5: codeBlock info string 은 ASCII 영숫자·`_+#.-` 만 남긴다. Nit 6: `mdBlock` doc comment 를 다시 감쌌다.
 - `make check` 0 issues, `make test` 통과. 회귀 테스트 6건 추가.
 - 재리뷰 Blocker(Blocker 1번 우회): 본문 text 에 직접 적힌 `[x](javascript:...)` 가 링크가 되던 문제. `escapeHTML` 을 `escapeText` 로 바꿔 `\`(먼저)·`<`·`[`·`]` 를 이스케이프한다(text·mention·emoji·status·expand 제목, code span 제외). 회귀 테스트 "link syntax typed into text is escaped" 추가. `make check`·`make test` 통과.
+- 재리뷰 Blocker(code span 개행 탈출): code mark·안전하지 않은 card URL 의 code span 에 빈 줄이 있으면 code span 이 문단 경계에서 끊겨 내용이 raw HTML 로 새던 문제. `codeSpan` 이 줄바꿈을 공백으로 바꾼다. 백슬래시로 `\<` 를 무효화하던 우회는 0aaaa59 의 `escapeText` 로 이미 막혔고 회귀 테스트를 추가했다.
+- 재리뷰 Nit: em+strong 은 감싸기 전 core 로 한 번 판정(strike 는 감싼 뒤 판정), ordered list 시작 번호를 0–999999999 로 고정. 회귀 테스트 4건 추가, `make check`·`make test` 통과.

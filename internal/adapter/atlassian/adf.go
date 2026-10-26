@@ -332,10 +332,18 @@ func applyMarks(text string, marks []adfMark, before, after rune) string {
 		}
 	}
 
-	for _, d := range []struct{ mark, delim string }{{"em", "*"}, {"strong", "**"}, {"strike", "~~"}} {
-		if has[d.mark] && canEmphasize(core, before, after) {
-			core = d.delim + core + d.delim
+	// `*` and `**` join into one delimiter run, so both are judged on the same
+	// core; `~~` is judged on what it wraps.
+	if canEmphasize(core, before, after) {
+		for _, d := range []struct{ mark, delim string }{{"em", "*"}, {"strong", "**"}} {
+			if has[d.mark] {
+				core = d.delim + core + d.delim
+			}
 		}
+	}
+
+	if has["strike"] && canEmphasize(core, before, after) {
+		core = "~~" + core + "~~"
 	}
 
 	if href != "" {
@@ -406,8 +414,12 @@ func attrInt(raw json.RawMessage, def int) int {
 	return int(f)
 }
 
-// codeSpan wraps text in a backtick run longer than any run inside it.
+// codeSpan wraps text in a backtick run longer than any run inside it. Line
+// endings become spaces, as CommonMark renders them anyway, since a code span
+// cannot cross a paragraph break and its unescaped content would leak out.
 func codeSpan(text string) string {
+	text = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ").Replace(text)
+
 	delim := strings.Repeat("`", longestRun(text, '`')+1)
 	if strings.HasPrefix(text, "`") || strings.HasSuffix(text, "`") {
 		text = " " + text + " "
@@ -437,7 +449,8 @@ func renderCodeBlock(n adfNode) string {
 // in a list (as ADF does for nested task lists) is indented under the previous
 // item. alt selects the alternate marker (`*` or `N)`) instead of `-` / `N.`.
 func renderList(n adfNode, alt bool) string {
-	number := attrInt(n.Attrs.Order, 1)
+	// CommonMark list numbers are 0 to 999999999.
+	number := min(max(attrInt(n.Attrs.Order, 1), 0), 999999999)
 
 	var (
 		lines  []string
