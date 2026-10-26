@@ -27,6 +27,22 @@ var errorStatuses = []struct {
 	{err: service.ErrLocalTaskToUpdateNotFound, status: http.StatusNotFound},
 	{err: service.ErrTaskToDeleteNotFound, status: http.StatusNotFound},
 	{err: service.ErrTaskNotLocal, status: http.StatusConflict},
+	{err: ErrFailedToDecodeTodoRequest, status: http.StatusBadRequest},
+	{err: ErrTodoRequestHasTrailingData, status: http.StatusBadRequest},
+	{err: ErrTodoRequestTooLarge, status: http.StatusRequestEntityTooLarge},
+	{err: ErrEmptyTodoRequestDate, status: http.StatusBadRequest},
+	{err: ErrInvalidTodoIsDoneFilter, status: http.StatusBadRequest},
+	{err: ErrTodoIDNotInteger, status: http.StatusNotFound},
+	{err: service.ErrEmptyTodoDescription, status: http.StatusBadRequest},
+	{err: service.ErrEmptyTodoTaskID, status: http.StatusBadRequest},
+	{err: service.ErrInvalidTodoDate, status: http.StatusBadRequest},
+	{err: service.ErrTodoStartsAfterEnd, status: http.StatusBadRequest},
+	{err: service.ErrNegativeTodoPosition, status: http.StatusBadRequest},
+	{err: service.ErrInvalidTodoFilterDate, status: http.StatusBadRequest},
+	{err: service.ErrTaskOfNewTodoNotFound, status: http.StatusBadRequest},
+	{err: service.ErrTaskOfUpdatedTodoNotFound, status: http.StatusBadRequest},
+	{err: service.ErrTodoToUpdateNotFound, status: http.StatusNotFound},
+	{err: service.ErrTodoToDeleteNotFound, status: http.StatusNotFound},
 }
 
 // writeError logs err with msg and writes it with the status errorStatuses

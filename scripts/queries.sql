@@ -76,6 +76,77 @@ DELETE FROM task_hierarchies WHERE child_id = sqlc.arg(id) OR parent_id = sqlc.a
 -- name: DeleteTaskLinksOf :exec
 DELETE FROM task_links WHERE task_id = sqlc.arg(id) OR linked_id = sqlc.arg(id);
 
+-- name: DeleteTodosOfTask :exec
+DELETE FROM todos WHERE id IN (SELECT todo_id FROM task_todos WHERE task_id = ?);
+
+-- name: DeleteTodoRemindersOfTask :exec
+DELETE FROM todo_reminders WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = ?);
+
+-- name: DeleteTaskTodosOfTask :exec
+DELETE FROM task_todos WHERE task_id = ?;
+
+-- name: CreateTodo :one
+-- Inserts nothing, failing with no rows, when the task is not stored, so the
+-- check is a write as the transaction's first statement.
+INSERT INTO todos (description, is_done, start_date, end_date)
+SELECT sqlc.arg(description), sqlc.arg(is_done), sqlc.narg(start_date), sqlc.narg(end_date)
+WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = sqlc.arg(task_id))
+RETURNING id;
+
+-- name: UpdateTodo :execrows
+UPDATE todos SET
+    description = ?,
+    is_done     = ?,
+    start_date  = ?,
+    end_date    = ?
+WHERE id = ?;
+
+-- name: DeleteTodo :execrows
+DELETE FROM todos WHERE id = ?;
+
+-- name: ExistsTask :one
+SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?);
+
+-- name: DeleteTaskTodo :one
+DELETE FROM task_todos WHERE todo_id = ? RETURNING task_id, position;
+
+-- name: CountTaskTodos :one
+SELECT COUNT(*) FROM task_todos WHERE task_id = ?;
+
+-- name: ShiftTaskTodosDown :exec
+UPDATE task_todos SET position = position + 1
+WHERE task_id = sqlc.arg(task_id) AND position >= sqlc.arg(position);
+
+-- name: ShiftTaskTodosUp :exec
+UPDATE task_todos SET position = position - 1
+WHERE task_id = sqlc.arg(task_id) AND position > sqlc.arg(position);
+
+-- name: CreateTaskTodo :exec
+INSERT INTO task_todos (todo_id, task_id, position) VALUES (?, ?, ?);
+
+-- name: ListTodos :many
+-- A NULL filter is not applied.
+SELECT todos.*, task_todos.task_id, task_todos.position
+FROM todos
+JOIN task_todos ON task_todos.todo_id = todos.id
+WHERE (task_todos.task_id = sqlc.narg(task_id) OR sqlc.narg(task_id) IS NULL)
+  AND (todos.start_date <= sqlc.narg(today) OR todos.start_date IS NULL OR sqlc.narg(today) IS NULL)
+  AND (todos.end_date = sqlc.narg(end_date) OR sqlc.narg(end_date) IS NULL)
+  AND (todos.is_done = sqlc.narg(is_done) OR sqlc.narg(is_done) IS NULL)
+ORDER BY task_todos.task_id, task_todos.position;
+
+-- name: ListTodoReminders :many
+SELECT todo_id, remind_at FROM todo_reminders
+WHERE todo_id IN (sqlc.slice(ids))
+ORDER BY todo_id, remind_at;
+
+-- name: CreateTodoReminder :exec
+INSERT INTO todo_reminders (todo_id, remind_at) VALUES (?, ?)
+ON CONFLICT (todo_id, remind_at) DO NOTHING;
+
+-- name: DeleteTodoReminders :exec
+DELETE FROM todo_reminders WHERE todo_id = ?;
+
 -- name: IncrementCounter :one
 UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value;
 

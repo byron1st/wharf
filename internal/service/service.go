@@ -10,6 +10,7 @@ import (
 	"github.com/byron1st/wharf/internal/adapter/atlassian"
 	"github.com/byron1st/wharf/internal/adapter/db"
 	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
 )
 
 var (
@@ -33,6 +34,10 @@ type Service interface {
 	CreateTask(ctx context.Context, t task.Task) (string, error)
 	UpdateTask(ctx context.Context, t task.Task) error
 	DeleteTask(ctx context.Context, id string) error
+	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
+	CreateTodo(ctx context.Context, t todo.Todo) (int64, error)
+	UpdateTodo(ctx context.Context, t todo.Todo) error
+	DeleteTodo(ctx context.Context, id int64) error
 }
 
 type service struct {

@@ -36,6 +36,10 @@ func NewHandler(svc service.Service, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /tasks/{id}", getTask(svc, logger))
 	mux.HandleFunc("PUT /tasks/{id}", updateTask(svc, logger))
 	mux.HandleFunc("DELETE /tasks/{id}", deleteTask(svc, logger))
+	mux.HandleFunc("GET /todos", listTodos(svc, logger))
+	mux.HandleFunc("POST /todos", createTodo(svc, logger))
+	mux.HandleFunc("PUT /todos/{id}", updateTodo(svc, logger))
+	mux.HandleFunc("DELETE /todos/{id}", deleteTodo(svc, logger))
 
 	return mux
 }

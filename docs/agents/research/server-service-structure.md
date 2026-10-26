@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks·task CRUD) 의 구조와 service 에러 → 상태 코드 매핑와 main wiring, internal/config 의 TOML 설정 로딩(경로·기본값·acli 해석), db.Manager(관계 테이블 쓰기 규칙·CreateLocalTask 포함)·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
+Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks·task CRUD·todo CRUD) 의 구조와 service 에러 → 상태 코드 매핑와 main wiring, internal/config 의 TOML 설정 로딩(경로·기본값·acli 해석), db.Manager(관계 테이블 쓰기 규칙·CreateLocalTask·todo 메서드 포함)·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
 ---
 
 # server / service 계층 구조 조사
@@ -54,6 +54,7 @@ flowchart LR
 - `GetTask` (`:71`) 는 `db.GetTask` 로 task 와 관계 ID 를 얻고, parent(있을 때만)·children·linked ID 를 한 번의 `ListTasksByIDs` 로 조회해(ID 가 없으면 조회하지 않음) 저장된 것만 `TaskDetail.Parent/Children/Linked` 에 ID 순서대로 담는다. `CreateTask` (`:105`) 는 `normalize`(빈 status → todo) 후 `CreateLocalTask`. `UpdateTask` (`:121`) 는 `normalize` → 자기 참조 검사 → `db.GetTask` 로 존재·origin 확인 → `db.UpdateLocalTask`. 읽기와 쓰기 사이에 삭제되거나 local 이 아니게 되면 `db.ErrLocalTaskToUpdateNotFound` 를 `ErrLocalTaskToUpdateNotFound` 로 바꿔 404 가 된다. `DeleteTask` (`:156`) 는 origin 과 관계없이 지운다.
 - `SyncResult` (`:11`) 는 `Upserted int` 와 `Partial error` 를 갖는다. `Partial` 은 `GetMyTasks` 가 tasks 와 함께 돌려준 joined error 이고, 모두 성공하면 nil 이다.
 - `SyncJiraTasks` (`:37`) 는 `GetMyTasks` 의 반환 규칙을 그대로 따른다. tasks 가 nil 이면 저장하지 않고 에러를 반환한다. non-nil 이면 에러가 있어도 반환된 tasks 를 전부 `UpsertTasks` 하고 Jira 에러는 `Partial` 로 넘긴다. `UpsertTasks` 실패는 그대로 반환한다.
+- todo (DEV-18, `internal/service/todo.go`): `ListTodos(ctx, todo.Filter)`·`CreateTodo(ctx, todo.Todo) (int64, error)`·`UpdateTodo`·`DeleteTodo(ctx, int64)` 가 `Service` 에 추가되어 있다. `normalizeTodo` (`todo.go:90`) 가 공백 description/task_id(`ErrEmptyTodoDescription`·`ErrEmptyTodoTaskID`), `YYYY-MM-DD` 가 아닌 날짜(`ErrInvalidTodoDate`), `start_date > end_date`(`ErrTodoStartsAfterEnd`), 음수 position(`ErrNegativeTodoPosition`)을 막고 reminders 를 UTC·오름차순·중복 제거로 정규화한다. `ListTodos` 는 `today`·`end_date` 형식만 검사한다(`ErrInvalidTodoFilterDate`). db 의 sentinel 은 `ErrTaskOfNewTodoNotFound`·`ErrTaskOfUpdatedTodoNotFound`(400)·`ErrTodoToUpdateNotFound`·`ErrTodoToDeleteNotFound`(404)로 바꾼다.
 - service 는 로그를 남기지 않는다. 로그는 server 쪽 handler 가 request id 와 함께 남긴다.
 
 ### route (`internal/server/route.go`)
@@ -65,6 +66,8 @@ flowchart LR
 - task 라우트의 에러는 `writeError` (`util.go:32`) 한 곳에서 `errorStatuses` 표(`util.go:14`)로 상태를 정한다: `ErrFailedToDecodeTaskRequest`·`ErrTaskRequestHasTrailingData`·`ErrEmptyTaskTitle`·`ErrUnknownTaskStatus`·`ErrEmptyRelatedTaskID`·`ErrTaskReferencesItself` 400, `ErrTaskRequestTooLarge` 413, not-found 4종(`ErrTaskNotFound`·`ErrTaskToUpdateNotFound`·`ErrLocalTaskToUpdateNotFound`·`ErrTaskToDeleteNotFound`) 404, `ErrTaskNotLocal` 409. 4xx 는 `{"error":err.Error()}` 와 Info 로그, 그 외는 Error 로그 + `writeInternalError`.
 - 요청 본문 디코딩은 `decodeTask` (`route.go:168`): `http.MaxBytesReader`(1 MiB) + `DisallowUnknownFields` 로 `taskRequest` 를 읽고, 1 MiB 를 넘으면(`*http.MaxBytesError`) `ErrTaskRequestTooLarge` 로 413, 그 외 실패는 `ErrFailedToDecodeTaskRequest` 와 json 에러의 join 이다. `id`·`originated` 는 모르는 필드라 400. 날짜는 `time.Time` 의 RFC3339 디코딩을 쓴다. 첫 JSON 값 뒤에 공백 외의 데이터(두 번째 객체·쓰레기·여분 `}`)가 있으면 두 번째 `Decode` 가 `io.EOF` 가 아니므로 `ErrTaskRequestHasTrailingData` 로 400 이다.
 - 응답은 `internal/server/model.go` 의 `taskSummary`(관계 없음, description 은 `toSummary` `route.go:204` 이 100 rune 초과 시 앞 100 rune + `…`), `taskListResponse`, `taskDetailResponse`(전체 description, `parent_id` null 가능, ID 목록·summary 목록은 항상 배열), `createTaskResponse`. POST 는 201 + `Location: /tasks/{id}`, PUT·DELETE 는 204.
+
+- todo 라우트 (DEV-18, `internal/server/todo.go`): `GET /todos`(쿼리 `task_id`·`today`·`end_date`·`is_done`, 빈 값은 필터 없음, `is_done` 은 `strconv.ParseBool` 실패 시 `ErrInvalidTodoIsDoneFilter` 400), `POST /todos`(201 `{"id":N}`, `Location` 없음), `PUT /todos/{id}`·`DELETE /todos/{id}`(204). 경로 id 가 정수가 아니면 `ErrTodoIDNotInteger` 로 404. `decodeTodo` (`todo.go:135`) 는 `decodeTask` 와 같은 규칙에 todo 전용 sentinel(`ErrFailedToDecodeTodoRequest`·`ErrTodoRequestHasTrailingData`·`ErrTodoRequestTooLarge`)을 쓰고, 날짜에 빈 문자열을 보내면 `ErrEmptyTodoRequestDate` 400 이다. 응답 `todoResponse`(`model.go`)는 날짜 없으면 null, reminders 는 항상 배열. todo sentinel 도 같은 `errorStatuses` 표에 있다.
 
 ### server (`internal/server/server.go`)
 
@@ -80,6 +83,7 @@ flowchart LR
 ### db.Manager (`internal/adapter/db/client.go`)
 
 - 인터페이스 `client.go:45-61`: `UpsertTasks(ctx, []task.Task) error`, `CreateLocalTask(ctx, task.Task) (string, error)`, `ListTasks`, `ListTasksByIDs(ctx, ids)`, `GetTask(ctx, id) (task.Task, error)`(관계 ID 포함, 없으면 `ErrTaskNotFound`), `UpdateLocalTask(ctx, task.Task) error`(없거나 local 이 아니면 `ErrLocalTaskToUpdateNotFound`), `DeleteTask(ctx, id) error`(없으면 `ErrTaskToDeleteNotFound`), `Connect`, `Migrate`, `Close`. 인자는 도메인 타입 `task.Task` 이므로 호출하는 service 는 sqlc 생성 모델(`internal/adapter/db/models.go` 의 `Task`·`TaskHierarchy`·`TaskLink`·`Counter`) 을 알 필요가 없다.
+- todo 메서드 (DEV-18, `internal/adapter/db/todo.go`): `CreateTodo(ctx, todo.Todo) (int64, error)`, `ListTodos(ctx, todo.Filter) ([]todo.Todo, error)`, `UpdateTodo(ctx, todo.Todo) error`, `DeleteTodo(ctx, int64) error`. 쓰기는 모두 `inTx` 안에서 쓰기 문장으로 시작한다(`CreateTodo` 는 `INSERT ... SELECT ... WHERE EXISTS (task)` 의 no-rows 로 없는 task 판별, `UpdateTodo`·`DeleteTodo` 는 `:execrows`). position 배치는 `placeTodo` (`todo.go:229`, 개수 → 밀기 → 연결 행 삽입), 제거는 `unlinkTodo` (`:253`, `DELETE ... RETURNING` → 당기기)가 공유한다. `DeleteTask` 는 같은 트랜잭션에서 그 task 의 reminder·todo·연결 행을 지운다(`client.go:280` 부근). 도메인 타입은 `internal/pkg/todo` 의 `todo.Todo`(날짜는 `"YYYY-MM-DD"` 문자열, 빈 문자열은 없음, `Position *int`)와 `todo.Filter`.
 - sentinel `client.go:16-40`: `ErrNotConnected`, `ErrFailedToBeginTx`, `ErrFailedToUpsertTask`, `ErrFailedToDeleteTaskParent`, `ErrFailedToStoreTaskParent`, `ErrFailedToStoreTaskChild`, `ErrFailedToDeleteTaskLinks`, `ErrFailedToStoreTaskLink`, `ErrFailedToIncrementLocalTaskCounter`, `ErrFailedToCommitTx`, 그리고 DEV-16 의 읽기·수정·삭제용(`ErrFailedToListTasks`, `ErrFailedToListTasksByIDs`, `ErrTaskNotFound`, `ErrFailedToGetTask`, `ErrFailedToListTaskChildren`, `ErrFailedToListTaskLinks`, `ErrFailedToUpdateLocalTask`, `ErrLocalTaskToUpdateNotFound`, `ErrFailedToDeleteTaskChildren`, `ErrFailedToDeleteLocalTaskLinks`, `ErrFailedToDeleteTask`, `ErrTaskToDeleteNotFound`, `ErrFailedToDeleteTaskHierarchies`, `ErrFailedToDeleteTaskLinksOf`). 관계 쓰기 실패는 `fmt.Errorf("%w: id=%s, ...", errors.Join(ErrX, err), ...)` 로 task ID 와 상대 ID 를 붙인다.
 - 트랜잭션은 `inTx` (`client.go:268`) 한 곳에서 `BeginTx` → `queries.WithTx(tx)` → fn → `Commit` 한다. defer Rollback 이라 fn 이 실패하면 아무것도 저장되지 않는다. begin/commit sentinel 은 두 메서드가 공유한다(return site 가 `inTx` 하나).
 - `UpsertTasks` `client.go:91`: `checkConnected` → 빈 목록 no-op → `inTx` 안에서 task 마다 `storeTask` (`client.go:289`, upsert 후 `storeRelations` `:299`). 같은 ID 는 `ON CONFLICT (id) DO UPDATE` 로 덮어쓴다.
@@ -126,6 +130,7 @@ flowchart LR
   - `newFileManager` (`:42`) 는 파일 DB 와 경로를 반환한다. `open` (`:145`) 이 그 경로로 별도 `*sql.DB` 를 열고, `read` (`:90`) 는 tasks 한 행의 컬럼을 `readTask` 로 읽으며, `requireExists` (`:107`) 는 `SELECT EXISTS (...)` 로 존재 여부를 확인한다. `relations` (`:120`) 는 `task_hierarchies` 를 `child<parent`, `task_links` 를 `task>linked` 문자열로 모아 정렬해 돌려준다.
   - 실패 유도는 `projectMigrationsWith` (`:57`) 로 `RAISE(ABORT)` trigger 마이그레이션을 덧붙여 한다(`TestUpsertTasksRollsBackOnFailure` 는 쓰기 지점마다 trigger 하나).
   - `newTask` (`:155`) 는 `task.Task` 를 만든다.
+  - todo 테스트는 `internal/adapter/db/todo_test.go` 에 있고 `placements`(`task_todos` 를 `task:position:todo` 로)·`stored`(todos·todo_reminders 의 id)·`texts` 헬퍼로 직접 SQL 확인한다.
 - `internal/adapter/db/client_management_test.go` 도 재연결 후 데이터 유지 등을 같은 `newFileManager`·`requireExists` 조합으로 확인한다. `TestMethodsRequireConnection` (`:234`) 은 연결 전·종료 후의 `UpsertTasks`, `CreateLocalTask`, 읽기·수정·삭제 메서드, `Migrate` 가 `ErrNotConnected` 인지 본다.
 
 ## mockery

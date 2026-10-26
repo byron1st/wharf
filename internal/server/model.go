@@ -56,3 +56,33 @@ type taskDetailResponse struct {
 type createTaskResponse struct {
 	ID string `json:"id"`
 }
+
+// todoRequest is the body of POST /todos and PUT /todos/{id}.
+type todoRequest struct {
+	TaskID      string      `json:"task_id"`
+	Description string      `json:"description"`
+	IsDone      bool        `json:"is_done"`
+	StartDate   *string     `json:"start_date"`
+	EndDate     *string     `json:"end_date"`
+	Reminders   []time.Time `json:"reminders"`
+	Position    *int        `json:"position"`
+}
+
+type todoResponse struct {
+	ID          int64       `json:"id"`
+	TaskID      string      `json:"task_id"`
+	Description string      `json:"description"`
+	IsDone      bool        `json:"is_done"`
+	StartDate   *string     `json:"start_date"`
+	EndDate     *string     `json:"end_date"`
+	Reminders   []time.Time `json:"reminders"`
+	Position    *int        `json:"position"`
+}
+
+type todoListResponse struct {
+	Todos []todoResponse `json:"todos"`
+}
+
+type createTodoResponse struct {
+	ID int64 `json:"id"`
+}

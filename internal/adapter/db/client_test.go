@@ -191,10 +191,22 @@ func TestInitialMigrationSchema(t *testing.T) {
 	require.Equal(t, []string{"child_id", "parent_id"}, columns("task_hierarchies"))
 	require.Equal(t, []string{"task_id", "linked_id"}, columns("task_links"))
 	require.Equal(t, []string{"name", "value"}, columns("counters"))
+	require.Equal(t, []string{"id", "description", "is_done", "start_date", "end_date"}, columns("todos"))
+	require.Equal(t, []string{"todo_id", "task_id", "position"}, columns("task_todos"))
+	require.Equal(t, []string{"todo_id", "remind_at"}, columns("todo_reminders"))
+
+	var todoIDIsPK bool
+
+	err := conn.QueryRowContext(
+		context.Background(),
+		"SELECT pk = 1 FROM pragma_table_info('task_todos') WHERE name = 'todo_id'",
+	).Scan(&todoIDIsPK)
+	require.NoError(t, err)
+	require.True(t, todoIDIsPK)
 
 	var value int64
 
-	err := conn.QueryRowContext(context.Background(), "SELECT value FROM counters WHERE name = 'local_task'").
+	err = conn.QueryRowContext(context.Background(), "SELECT value FROM counters WHERE name = 'local_task'").
 		Scan(&value)
 	require.NoError(t, err)
 	require.Zero(t, value)
@@ -512,7 +524,11 @@ func TestInitialMigrationIndexes(t *testing.T) {
 	require.NoError(t, rows.Err())
 	require.Equal(
 		t,
-		[]string{"task_hierarchies(task_hierarchies_parent_id)", "task_links(task_links_linked_id)"},
+		[]string{
+			"task_hierarchies(task_hierarchies_parent_id)",
+			"task_links(task_links_linked_id)",
+			"task_todos(task_todos_task_id_position)",
+		},
 		got,
 	)
 }
