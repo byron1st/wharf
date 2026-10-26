@@ -101,7 +101,7 @@ func getTask(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 			Linked:      toSummaries(detail.Linked),
 		}
 		// The detail carries the full description that toSummary cut.
-		resp.Description = t.Description
+		resp.taskSummary.Description = t.Description
 
 		if t.ParentID != "" {
 			resp.ParentID = &t.ParentID
