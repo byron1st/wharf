@@ -441,23 +441,33 @@ func (q *Queries) ListTasksByIDs(ctx context.Context, ids []string) ([]Task, err
 }
 
 const listTodoReminders = `-- name: ListTodoReminders :many
-SELECT todo_id, remind_at FROM todo_reminders
-WHERE todo_id IN (/*SLICE:ids*/?)
-ORDER BY todo_id, remind_at
+SELECT todo_reminders.todo_id, todo_reminders.remind_at
+FROM todo_reminders
+JOIN todos ON todos.id = todo_reminders.todo_id
+JOIN task_todos ON task_todos.todo_id = todo_reminders.todo_id
+WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
+  AND (todos.start_date <= ?2 OR todos.start_date IS NULL OR ?2 IS NULL)
+  AND (todos.end_date = ?3 OR ?3 IS NULL)
+  AND (todos.is_done = ?4 OR ?4 IS NULL)
+ORDER BY todo_reminders.todo_id, todo_reminders.remind_at
 `
 
-func (q *Queries) ListTodoReminders(ctx context.Context, ids []int64) ([]TodoReminder, error) {
-	query := listTodoReminders
-	var queryParams []interface{}
-	if len(ids) > 0 {
-		for _, v := range ids {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+type ListTodoRemindersParams struct {
+	TaskID  sql.NullString
+	Today   sql.NullString
+	EndDate sql.NullString
+	IsDone  sql.NullBool
+}
+
+// Takes the ListTodos filters rather than todo IDs, so the number of bind
+// variables stays fixed however many todos match.
+func (q *Queries) ListTodoReminders(ctx context.Context, arg ListTodoRemindersParams) ([]TodoReminder, error) {
+	rows, err := q.db.QueryContext(ctx, listTodoReminders,
+		arg.TaskID,
+		arg.Today,
+		arg.EndDate,
+		arg.IsDone,
+	)
 	if err != nil {
 		return nil, err
 	}

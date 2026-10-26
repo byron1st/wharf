@@ -56,7 +56,7 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks�
 | `Reminders []time.Time` | `todo_reminders(todo_id, remind_at)` | `PRIMARY KEY (todo_id, remind_at)`, `DATETIME` | `TodoReminder` |
 
 - 날짜를 TEXT 로 두어 사전순 비교가 날짜 비교이고 시간대 변환이 없다. 빈 문자열 ↔ NULL 변환은 `toNullString` (`internal/adapter/db/todo.go`). position 은 task 안에서 0..n-1 이며 한 번의 `UPDATE position = position ± 1` 로 밀고 당기므로 unique 제약을 두지 않았다. FK 는 없다.
-- reminder 는 service 가 UTC 로 정규화해 넘기므로 저장 텍스트가 시각 순으로 정렬된다(`ListTodoReminders` 의 `ORDER BY remind_at`).
+- reminder 는 service 가 UTC 로 정규화해 넘기므로 저장 텍스트가 시각 순으로 정렬된다(`ListTodoReminders` 의 `ORDER BY remind_at`). `ListTodoReminders` 는 todo ID 목록(`sqlc.slice`) 대신 `ListTodos` 와 같은 `sqlc.narg` 필터로 JOIN 해 읽는다. ID 목록을 바인드하면 todo 수가 SQLite 바인드 변수 한도(`SQLITE_MAX_VARIABLE_NUMBER`, 기본 32766)를 넘을 때 `too many SQL variables` 로 실패하기 때문이다. 두 쿼리의 WHERE 조건은 같게 유지해야 하고, 생성 struct 가 같아 `ListTodoRemindersParams(params)` 로 변환한다.
 
 ## sqlc SQLite 엔진 제약
 

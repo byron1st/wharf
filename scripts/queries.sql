@@ -136,9 +136,17 @@ WHERE (task_todos.task_id = sqlc.narg(task_id) OR sqlc.narg(task_id) IS NULL)
 ORDER BY task_todos.task_id, task_todos.position;
 
 -- name: ListTodoReminders :many
-SELECT todo_id, remind_at FROM todo_reminders
-WHERE todo_id IN (sqlc.slice(ids))
-ORDER BY todo_id, remind_at;
+-- Takes the ListTodos filters rather than todo IDs, so the number of bind
+-- variables stays fixed however many todos match.
+SELECT todo_reminders.todo_id, todo_reminders.remind_at
+FROM todo_reminders
+JOIN todos ON todos.id = todo_reminders.todo_id
+JOIN task_todos ON task_todos.todo_id = todo_reminders.todo_id
+WHERE (task_todos.task_id = sqlc.narg(task_id) OR sqlc.narg(task_id) IS NULL)
+  AND (todos.start_date <= sqlc.narg(today) OR todos.start_date IS NULL OR sqlc.narg(today) IS NULL)
+  AND (todos.end_date = sqlc.narg(end_date) OR sqlc.narg(end_date) IS NULL)
+  AND (todos.is_done = sqlc.narg(is_done) OR sqlc.narg(is_done) IS NULL)
+ORDER BY todo_reminders.todo_id, todo_reminders.remind_at;
 
 -- name: CreateTodoReminder :exec
 INSERT INTO todo_reminders (todo_id, remind_at) VALUES (?, ?)

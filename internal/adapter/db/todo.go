@@ -98,7 +98,6 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 	}
 
 	todos := make([]todo.Todo, 0, len(rows))
-	ids := make([]int64, 0, len(rows))
 
 	for _, row := range rows {
 		position := int(row.Position)
@@ -111,14 +110,14 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 			EndDate:     row.EndDate.String,
 			Position:    &position,
 		})
-		ids = append(ids, row.ID)
 	}
 
-	if len(ids) == 0 {
+	if len(todos) == 0 {
 		return todos, nil
 	}
 
-	reminders, err := m.queries.ListTodoReminders(ctx, ids)
+	// The same filters select the reminders of exactly these todos.
+	reminders, err := m.queries.ListTodoReminders(ctx, ListTodoRemindersParams(params))
 	if err != nil {
 		return nil, errors.Join(ErrFailedToListTodoReminders, err)
 	}
