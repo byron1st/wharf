@@ -15,7 +15,6 @@ import (
 	"github.com/byron1st/wharf/internal/service"
 )
 
-//go:fix inline
 func TestListTodos(t *testing.T) {
 	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 

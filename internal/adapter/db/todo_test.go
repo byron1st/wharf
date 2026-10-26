@@ -56,8 +56,6 @@ func stored(t *testing.T, path string) (todos, reminders []string) {
 		texts(t, path, "SELECT todo_id FROM todo_reminders ORDER BY todo_id, remind_at")
 }
 
-//go:fix inline
-
 func newTodoManager(t *testing.T) (db.Manager, string) {
 	t.Helper()
 
@@ -100,9 +98,7 @@ func TestCreateTodo(t *testing.T) {
 	e := create(t, manager, todo.Todo{TaskID: localID, Description: "e"})
 
 	require.Equal(t, []string{
-		"J1:0:" + fmt.Sprint(
-			c,
-		),
+		"J1:0:" + fmt.Sprint(c),
 		"J1:1:" + fmt.Sprint(a),
 		"J1:2:" + fmt.Sprint(b),
 		"J1:3:" + fmt.Sprint(d),

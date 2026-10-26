@@ -22,7 +22,6 @@ func newTodoService(t *testing.T) (service.Service, *mocks.MockManager) {
 	return service.NewService(mocks.NewMockClient(t), manager), manager
 }
 
-//go:fix inline
 func TestCreateTodoNormalizesReminders(t *testing.T) {
 	svc, manager := newTodoService(t)
 
