@@ -20,7 +20,7 @@ const (
 	requestIDHeader   = "X-Request-ID"
 	readHeaderTimeout = 10 * time.Second
 	// shutdownTimeout bounds how long Run waits for in-flight requests, such
-	// as a Jira sync calling the CLI per item, after its context ends.
+	// as a Jira sync paging through the REST search API, after its context ends.
 	shutdownTimeout = 30 * time.Second
 )
 

@@ -27,7 +27,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 ## Architecture Overview
 
 - `cmd/wharf/`: Entry point; wires config, adapters, services, and routes only.
-- `internal/config/`: Loads the TOML config file (`config.Path`, `config.Load`), fills defaults, and resolves the `acli` executable. `config.example.toml` at the repo root documents every key.
+- `internal/config/`: Loads the TOML config file (`config.Path`, `config.Load`), fills defaults, and requires and validates the Atlassian REST API keys (`atlassian_site_url`, `atlassian_email`, `atlassian_api_token`). `config.example.toml` at the repo root documents every key.
 - `internal/server/`: HTTP server, middleware, and handlers; translates requests/responses and calls services.
 - `internal/service/`: Business logic; depends on adapter interfaces, never on HTTP types.
 - `internal/adapter/`: External I/O (database, third-party APIs). `internal/adapter/db/` holds sqlc output (`db.go`, `models.go`, `queries.sql.go`) next to the hand-written `db.Manager` (`client.go`, `client_management.go`).

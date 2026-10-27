@@ -11,7 +11,7 @@ import (
 	"github.com/byron1st/wharf/internal/adapter/atlassian"
 	"github.com/byron1st/wharf/internal/adapter/db"
 	"github.com/byron1st/wharf/internal/config"
-	"github.com/byron1st/wharf/internal/pkg/tool"
+	"github.com/byron1st/wharf/internal/pkg/httputil"
 	"github.com/byron1st/wharf/internal/server"
 	"github.com/byron1st/wharf/internal/service"
 	"github.com/byron1st/wharf/scripts"
@@ -39,32 +39,32 @@ func run() (code int) {
 		return 1
 	}
 
-	manager := db.NewManager(cfg.DBPath, scripts.Migrations())
-	if err := manager.Connect(ctx); err != nil {
+	dbMng := db.NewManager(cfg.DBPath, scripts.Migrations())
+	if err := dbMng.Connect(ctx); err != nil {
 		logger.Error("failed to connect database", "error", err)
 		return 1
 	}
 
 	defer func() {
-		if err := manager.Close(); err != nil {
+		if err := dbMng.Close(); err != nil {
 			logger.Error("failed to close database", "error", err)
 
 			code = 1
 		}
 	}()
 
-	if err := manager.Migrate(ctx); err != nil {
+	if err := dbMng.Migrate(ctx); err != nil {
 		logger.Error("failed to migrate database", "error", err)
 		return 1
 	}
 
-	acli, err := tool.NewTool(cfg.ACLIPath)
-	if err != nil {
-		logger.Error("failed to create acli tool", "error", err)
-		return 1
-	}
-
-	svc := service.NewService(atlassian.NewClient(acli), manager)
+	atls := atlassian.NewClient(
+		httputil.NewHTTPClient(),
+		cfg.AtlassianSiteURL,
+		cfg.AtlassianEmail,
+		cfg.AtlassianAPIToken,
+	)
+	svc := service.NewService(atls, dbMng)
 	srv := server.New(server.NewHandler(svc, logger), logger)
 
 	ln, err := net.Listen("tcp", cfg.Addr)

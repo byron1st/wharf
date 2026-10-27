@@ -1,16 +1,16 @@
 ---
 Application: wharf
 ResearchType: Flow
-Description: Jira work item 의 description(ADF, Atlassian Document Format)이 `acli jira workitem view --json` 출력에서 `atlassian.ViewWorkItem` 으로 디코딩되어 `adfNode.markdown` 렌더러를 거쳐 Markdown 문자열 `task.Task.Description` 이 되고, `SyncJiraTasks` → `db.Manager.UpsertTasks` 로 `tasks.description` 에 덮어써진 뒤 `GET /tasks`·`GET /tasks/{id}` 응답(목록은 100 rune 절단)으로 나가기까지의 경로, `adfNode` 구조체가 디코딩하는 필드, ADF 노드·mark 별 Markdown 출력 규칙, 관련 테스트(fixture 포함) 위치를 정리한다.
+Description: Jira work item 의 description(ADF, Atlassian Document Format)이 Jira REST `POST /rest/api/3/search/jql` 응답의 `issues[]` 원소에서 `atlassian.ViewWorkItem` 으로 디코딩되어 `adfNode.markdown` 렌더러를 거쳐 Markdown 문자열 `task.Task.Description` 이 되고, `SyncJiraTasks` → `db.Manager.UpsertTasks` 로 `tasks.description` 에 덮어써진 뒤 `GET /tasks`·`GET /tasks/{id}` 응답(목록은 100 rune 절단)으로 나가기까지의 경로, `adfNode` 구조체가 디코딩하는 필드, ADF 노드·mark 별 Markdown 출력 규칙, 관련 테스트(fixture 포함) 위치를 정리한다.
 ---
 
 # Jira description(ADF) → task.Description 경로
 
 ## 흐름
 
-1. `client.GetMyTasks` (`internal/adapter/atlassian/client.go:37`) 가 검색으로 key 를 모은 뒤 key 마다 `viewWorkItem` (`client.go:94`) 으로 `acli jira workitem view {key} --fields ... --json` 을 실행하고 `ViewWorkItem` 으로 `json.Unmarshal` 한다.
-2. `ViewWorkItem.Fields.Description` 은 `*adfNode` (`internal/adapter/atlassian/jira.go:26`, 타입 정의는 `internal/adapter/atlassian/adf.go:17`) 이다. description 이 없으면 JSON `null` → nil.
-3. `ToTask` (`jira.go:56`) 가 `Description: f.Description.markdown()` (`jira.go:101`) 로 Markdown 문자열을 만든다. 변환은 에러를 내지 않는다(ToTask 의 에러는 status·날짜만).
+1. `client.GetMyTasks` (`internal/adapter/atlassian/client.go:68`) 가 `POST /rest/api/3/search/jql` 를 `fields` 와 함께 페이지마다 호출하고, 응답 `issues[]` 의 각 원소(REST v3 IssueBean)를 `ViewWorkItem` 으로 개별 `json.Unmarshal` 한다. v3 여야 description 이 ADF 다(v2 는 wiki markup).
+2. `ViewWorkItem.Fields.Description` 은 `*adfNode` (`internal/adapter/atlassian/jira.go:21`, 타입 정의는 `internal/adapter/atlassian/adf.go:17`) 이다. description 이 없으면 JSON `null` → nil.
+3. `ToTask` (`jira.go:51`) 가 `Description: f.Description.markdown()` (`jira.go:96`) 로 Markdown 문자열을 만든다. 변환은 에러를 내지 않는다(ToTask 의 에러는 status·날짜만).
 4. `service.SyncJiraTasks` 가 tasks 를 `db.Manager.UpsertTasks` 로 저장한다. `UpsertTask` 쿼리 (`scripts/queries.sql:1`) 는 `ON CONFLICT (id) DO UPDATE SET description = excluded.description` 이므로 다음 동기화 때 기존 행의 description 이 새 변환 결과로 덮어써진다(마이그레이션 불필요).
 5. 응답: `GET /tasks` 의 `toSummary` (`internal/server/route.go:214`) 는 description 을 100 rune 에서 자르고 `…` 를 붙인다. `GET /tasks/{id}` 는 전체를 준다. local task 의 description 은 사용자가 보낸 문자열 그대로 저장된다(변환 대상 아님).
 
@@ -28,5 +28,5 @@ Description: Jira work item 의 description(ADF, Atlassian Document Format)이 `
 ## 테스트 위치
 
 - `internal/adapter/atlassian/jira_test.go:204` `TestToTaskDescription` — `descriptionItem` 헬퍼(`jira_test.go:24`)로 ADF 조각을 감싸 `ToTask` 의 `Description` 을 비교하는 표 테스트. 노드·mark 별 Markdown 기대값(heading·mark 중첩·목록·code fence·quote·rule·표·expand·inline 노드·card·모르는 노드·빈 블록)을 담는다.
-- `internal/adapter/atlassian/client_test.go:88` — `testdata/view_in_progress.json` 의 description(heading, code·strong mark, bulletList, taskList, mention, inlineCard, hardBreak, codeBlock, rule, mediaSingle, 빈 paragraph)을 변환한 Markdown 기대 문자열. `view_done.json`·`view_canceled.json` 은 단일 paragraph.
+- `internal/adapter/atlassian/client_test.go:115` (`TestGetMyTasks`) — 검색 응답 페이지에 담긴 `testdata/view_in_progress.json` 의 description(heading, code·strong mark, bulletList, taskList, mention, inlineCard, hardBreak, codeBlock, rule, mediaSingle, 빈 paragraph)을 변환한 Markdown 기대 문자열. `view_done.json`·`view_canceled.json` 은 단일 paragraph.
 - 변환기는 unexported 이고 테스트는 외부 `atlassian_test` 패키지에서 `ToTask` 를 통해서만 검증한다(AGENTS.md 테스트 관례).

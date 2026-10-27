@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks·task CRUD·todo CRUD) 의 구조와 service 에러 → 상태 코드 매핑와 main wiring, internal/config 의 TOML 설정 로딩(경로·기본값·acli 해석), db.Manager(관계 테이블 쓰기 규칙·CreateLocalTask·todo 메서드 포함)·atlassian.Client·tool.Tool 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
+Description: internal/server(route·미들웨어·Run)·internal/service(SyncJiraTasks·task CRUD·todo CRUD) 의 구조와 service 에러 → 상태 코드 매핑와 main wiring, internal/config 의 TOML 설정 로딩(경로·기본값·Atlassian 필수 키 검증), db.Manager(관계 테이블 쓰기 규칙·CreateLocalTask·todo 메서드 포함)·atlassian.Client·httputil.HTTPClient 계약과 mock, GetMyTasks 부분 실패 반환 규칙과 그 처리, db 테스트의 저장 확인 방식, mockery·lint·에러·테스트 관례, AGENTS.md 의 계층 서술 위치를 정리한다.
 ---
 
 # server / service 계층 구조 조사
@@ -15,11 +15,11 @@ flowchart LR
     main --> service[internal/service]
     main --> atlassian[internal/adapter/atlassian]
     main --> db[internal/adapter/db]
-    main --> tool[internal/pkg/tool]
+    main --> httputil[internal/pkg/httputil]
     server --> service
     service --> atlassian
     service --> db
-    atlassian --> tool
+    atlassian --> httputil
     atlassian --> task[internal/pkg/task]
     db --> task
 ```
@@ -29,21 +29,20 @@ flowchart LR
 ## main wiring (`cmd/wharf/main.go`)
 
 - `run() (code int)` (`main.go:24`) 이 실제 본체이고 `main` 은 `os.Exit(run())` 만 한다. defer 로 DB `Close` 를 보장하면서 exit code 를 돌려주기 위한 형태다.
-- 순서: `signal.NotifyContext(os.Interrupt, SIGTERM)` → `config.Path` → `config.Load` → `db.NewManager(cfg.DBPath, scripts.Migrations())` → `Connect` → `Migrate` → `tool.NewTool(cfg.ACLIPath)` → `atlassian.NewClient` → `service.NewService` → `server.NewHandler` → `server.New` → `net.Listen(cfg.Addr)` → `Run`. 각 실패는 slog JSON 로그(stdout) 를 남기고 exit 1.
+- 순서: `signal.NotifyContext(os.Interrupt, SIGTERM)` → `config.Path` → `config.Load` → `db.NewManager(cfg.DBPath, scripts.Migrations())` → `Connect` → `Migrate` → `atlassian.NewClient(httputil.NewHTTPClient(), cfg.AtlassianSiteURL, cfg.AtlassianEmail, cfg.AtlassianAPIToken)` (`main.go:61`) → `service.NewService` → `server.NewHandler` → `server.New` → `net.Listen(cfg.Addr)` → `Run`. 각 실패는 slog JSON 로그(stdout) 를 남기고 exit 1.
 - main 은 환경변수를 직접 읽지 않는다. 설정값은 모두 `internal/config` 가 돌려준 `Config` 에서 온다.
 
 ## 설정 로딩 (`internal/config/config.go`)
 
 - 설정은 TOML 파일 하나이고, 파서는 `github.com/BurntSushi/toml` 이다 (표준 라이브러리에 TOML 파서가 없다). 키 목록과 기본값은 저장소 루트의 `config.example.toml` 에 정리되어 있다.
-- `Path()` (`config.go:45`): `WHARF_CONFIG` (`PathEnv`, `:15`) 가 있으면 그 값을, 없으면 `<os.UserConfigDir()>/wharf/config.toml` 을 돌려준다. `WHARF_CONFIG` 가 프로그램 전체에서 유일한 환경변수다.
-- `Load(path)` (`:67`) 순서: `os.ReadFile` → `toml.Decode` → `MetaData.Undecoded()` 로 모르는 키가 있으면 실패 → 기본값 채움 → `exec.LookPath` 로 acli 해석.
-  - 설정 파일이 없으면 실패한다. 모든 키가 선택이므로 빈 파일은 유효하다.
-  - `Config` (`:33`) 필드와 기본값: `addr` = `:8080`, `db_path` = `<os.UserConfigDir()>/wharf/wharf.db`, `acli_path` = `acli`.
+- `Path()` (`config.go:51`): `WHARF_CONFIG` (`PathEnv`, `:15`) 가 있으면 그 값을, 없으면 `<os.UserConfigDir()>/wharf/config.toml` 을 돌려준다. `WHARF_CONFIG` 가 프로그램 전체에서 유일한 환경변수다.
+- `Load(path)` (`:71`) 순서: `os.ReadFile` → `toml.Decode` → `MetaData.Undecoded()` 로 모르는 키가 있으면 실패 → Atlassian 필수 키 검사 → site URL 검증 → 기본값 채움.
+  - 설정 파일이 없으면 실패한다. `atlassian_site_url`·`atlassian_email`·`atlassian_api_token` 은 필수라 빈 파일은 `ErrMissingConfigKey`(`key=` 에 빠진 키 이름) 로 실패한다. site URL 은 `http`/`https` scheme 과 host 가 있는 절대 URL 이어야 하고 아니면 `ErrInvalidAtlassianSiteURL` 이다. 에러 메시지에 토큰 값은 넣지 않는다.
+  - `Config` (`:33`) 필드와 기본값: `addr` = `:8080`, `db_path` = `<os.UserConfigDir()>/wharf/wharf.db`, `atlassian_*` 세 키는 기본값 없음. 예전 `acli_path` 키는 이제 `ErrUnknownConfigKeys` 로 거부된다.
   - `db_path` 를 기본값으로 채울 때만 그 디렉터리를 `os.MkdirAll(..., 0o700)` 로 만든다. `WHARF_CONFIG` 로 설정 파일을 다른 곳에 두면 기본 DB 디렉터리가 없을 수 있고, SQLite 는 상위 디렉터리를 만들지 않기 때문이다. `db_path` 를 직접 지정하면 아무것도 만들지 않는다.
-  - acli 는 `acli_path` 가 있든 없든 `exec.LookPath(cmp.Or(cfg.ACLIPath, "acli"))` 를 거친다. bare name 은 PATH 에서 찾고, `/` 가 들어간 경로는 그 파일이 실행 가능한지만 본다. `tool.NewTool` 이 PATH 를 탐색하지 않으므로 `Load` 이후의 `ACLIPath` 는 항상 해석된 경로다.
-- sentinel 은 `"config: "` 접두어로 `ErrFailedToFindUserConfigDir`, `ErrFailedToReadConfigFile`, `ErrFailedToParseConfigFile`, `ErrUnknownConfigKeys`, `ErrFailedToCreateDBDir`, `ErrFailedToFindACLI` 다 (`:23-30`). `UserConfigDir` 조회는 `Path` 와 `Load` 가 공유하는 `defaultFilePath` (`:54`) 한 곳에서만 실패한다.
-- 파일 하나를 읽을 뿐 막히는 작업이 없어서 `Load` 는 `context.Context` 를 받지 않는다 (`tool.NewTool` 의 `os.Stat` 과 같은 취급).
-- 테스트 (`internal/config/config_test.go`) 는 `isolateUserConfigDir` 로 `HOME`·`XDG_CONFIG_HOME` 을 임시 디렉터리로 돌린다. 기본 DB 디렉터리 생성이 실제 사용자 설정 디렉터리에 닿지 않게 하려는 것이다. acli 는 임시 디렉터리에 실행 스크립트를 만들고 `PATH` 를 그쪽으로 바꿔 찾게 한다.
+- sentinel 은 `"config: "` 접두어로 `ErrFailedToFindUserConfigDir`, `ErrFailedToReadConfigFile`, `ErrFailedToParseConfigFile`, `ErrUnknownConfigKeys`, `ErrFailedToCreateDBDir`, `ErrMissingConfigKey`, `ErrInvalidAtlassianSiteURL` 다 (`:22-30`). `UserConfigDir` 조회는 `Path` 와 `Load` 가 공유하는 `defaultFilePath` (`:60`) 한 곳에서만 실패한다.
+- 파일 하나를 읽을 뿐 막히는 작업이 없어서 `Load` 는 `context.Context` 를 받지 않는다.
+- 테스트 (`internal/config/config_test.go`) 는 `isolateUserConfigDir` 로 `HOME`·`XDG_CONFIG_HOME` 을 임시 디렉터리로 돌린다. 기본 DB 디렉터리 생성이 실제 사용자 설정 디렉터리에 닿지 않게 하려는 것이다. 유효한 최소 설정은 `atlassianKeys` 상수(세 키)다.
 
 ## server / service 구현
 
@@ -71,7 +70,7 @@ flowchart LR
 
 ### server (`internal/server/server.go`)
 
-- `New(handler, logger) *Server` (`server.go:35`) 는 `*http.Server` 를 감싸고 미들웨어를 바깥부터 request-id → request-logger → recover 순으로 씌운다. `ReadHeaderTimeout` 은 10초이고, 동기화 요청이 CLI 를 항목마다 호출해 오래 걸릴 수 있으므로 `WriteTimeout` 은 두지 않는다.
+- `New(handler, logger) *Server` (`server.go:35`) 는 `*http.Server` 를 감싸고 미들웨어를 바깥부터 request-id → request-logger → recover 순으로 씌운다. `ReadHeaderTimeout` 은 10초이고, 동기화 요청이 Jira REST 검색을 여러 페이지 호출해 오래 걸릴 수 있으므로 `WriteTimeout` 은 두지 않는다.
 - `withRequestID` (`:68`): 들어온 `X-Request-ID` 를 재사용하고, 없으면 `crypto/rand.Text()` 로 만들어 요청을 Clone 한 뒤 헤더에 넣는다. 응답 헤더에도 같은 값을 넣는다.
 - `withRequestLog` (`:83`): `statusRecorder` (`:129`) 로 상태 코드를 잡아 method, path, status, request_id 를 Info 로그로 남긴다. `statusRecorder.Unwrap` 이 있어 `http.ResponseController` 가 원래 writer 에 닿는다.
 - `withRecover` (`:101`): panic 을 500 응답과 Error 로그(stack 포함) 로 바꾼다. `http.ErrAbortHandler` 는 다시 panic 해서 net/http 가 연결을 끊게 둔다. 이 경우 request-logger 의 로그 줄까지 실행되지 않는다.
@@ -101,20 +100,19 @@ flowchart LR
 
 ### atlassian.Client (`internal/adapter/atlassian/client.go`)
 
-- 인터페이스 `client.go:20-22`: `GetMyTasks(ctx) ([]task.Task, error)`. 생성자 `NewClient(tool tool.Tool) Client` (`client.go:29`).
-- 반환 규칙 (`client.go:36-61`):
-  - 검색 자체 실패(`searchKeys` 에러) → `nil, err` (`client.go:39`).
-  - 루프 중 ctx 취소 → `nil, errors.Join(..., ErrGetMyTasksCanceled, ctx.Err())` (`client.go:46`).
-  - 개별 항목 view 실패 → 해당 항목은 건너뛰고 에러만 누적 (`client.go:49-53`).
-  - 변환(`ToTask`) 에러가 있어도 task 는 결과에 포함된다 (`client.go:55-57`). `ToTask` 는 잘못된 필드를 빈 값으로 두고 에러를 join 한다 (`internal/adapter/atlassian/jira.go:57-110`). task ID 와 관계 ID 는 `jira-{key}` 이고, CLI 호출과 에러 메시지의 `key=` 는 raw key 다.
-  - 그 외에는 `tasks` (항상 non-nil, `make(..., 0, len(keys))` `client.go:42`) 와 `errors.Join(errs...)` 를 함께 반환한다.
-  - 즉 "tasks 가 nil 이면 전체 실패, non-nil 이면 부분 결과(에러가 있을 수 있음)" 가 현재 코드의 규칙이다. view 실패와 검색 실행 실패는 둘 다 `tool.ErrFailedToExecuteCmd` 를 포함할 수 있어 `errors.Is` 로는 구분되지 않는다.
-- CLI 옵션: `JiraSearchOption` (`jira.go:165`), `JiraViewOption` (`jira.go:183`) 의 `Cmd` 는 `"jira"`, 실행 파일은 Atlassian CLI(`acli`) 를 전제로 한다.
+- 인터페이스 `client.go:25-27`: `GetMyTasks(ctx) ([]task.Task, error)`. 생성자 `NewClient(httpClient httputil.HTTPClient, siteURL, email, apiToken string) Client` (`client.go:38`). site URL 끝의 `/` 를 떼고 `/rest/api/3/search/jql` 을 붙이며(경로 prefix 보존), `Authorization: Basic base64(email:token)`·`Accept`·`Content-Type: application/json` 헤더를 미리 만든다.
+- 반환 규칙 (`GetMyTasks` `client.go:68`):
+  - 어떤 페이지든 요청 실패(`httputil` 에러 그대로) 또는 응답 파싱 실패(`ErrFailedToParseSearchOutput`) → `nil, err`. 앞 페이지 결과와 항목 에러는 버린다. ctx 취소는 `httputil.ErrFailedToSendRequest` 와 `context.Canceled` 를 함께 담는다.
+  - 항목은 `json.RawMessage` 로 받아 개별 디코딩한다. 디코딩 실패 → `ErrFailedToParseWorkItem` + `index=`(페이지를 넘어 이어지는 전역 순번), key 없음(`null` 포함) → `ErrMissingWorkItemKey` + `index=`. 둘 다 그 항목만 뺀다.
+  - 변환(`ToTask`) 에러가 있어도 task 는 결과에 포함된다. `ToTask` 는 잘못된 필드를 빈 값으로 두고 에러를 join 한다 (`internal/adapter/atlassian/jira.go:51`). task ID 와 관계 ID 는 `jira-{key}` 이고, 에러 메시지의 `key=` 는 raw key 다.
+  - 모든 페이지가 성공하면 `tasks` (항상 non-nil, 결과 없음이면 빈 슬라이스) 와 `errors.Join(errs...)` 를 함께 반환한다. `isLast` 가 true 이거나 `nextPageToken` 이 비면 멈춘다. 응답 토큰이 방금 보낸 토큰과 같으면 `ErrRepeatedSearchPageToken`, 100 페이지(`maxSearchPages`)를 넘기면 `ErrTooManySearchPages` 로 `nil` 과 에러를 반환한다.
+  - 즉 "tasks 가 nil 이면 전체 실패, non-nil 이면 부분 결과(에러가 있을 수 있음)" 가 규칙이다.
+- 요청 바디는 `jql`(`myTasksJQL`), `fields`(`searchFields()` 8개, `jira.go:162`), `maxResults` 100, 두 번째 페이지부터 `nextPageToken`.
 
-### tool.Tool (`internal/pkg/tool/tool.go`)
+### httputil.HTTPClient (`internal/pkg/httputil/httputil.go`)
 
-- `NewTool(execCmd string) (Tool, error)` (`tool.go:41-57`): `filepath.Abs` 후 `os.Stat` 으로 실행 파일 여부를 검사한다. PATH 탐색을 하지 않으므로 `"acli"` 같은 bare name 은 현재 디렉터리 기준 경로가 된다.
-- `Run` (`tool.go:61-80`): ctx 가 끝나면 프로세스를 kill 한다. `RunOption.Cwd` 가 빈 문자열이면 `filepath.Abs("")` 로 현재 디렉터리가 된다.
+- `Get(ctx, url, header)` / `Post(ctx, url, header, body)` 가 `[]byte` 응답 본문을 돌려준다. 생성자 `NewHTTPClient() HTTPClient`, `net/http` 와 고정 timeout 30초. redirect 는 따라가지 않는다(`CheckRedirect` 가 `http.ErrUseLastResponse`; 같은 host redirect 에 Authorization 이 재전송되는 것을 막음) — 3xx 는 `ErrUnexpectedStatusCode`.
+- sentinel: `ErrFailedToCreateRequest`, `ErrFailedToSendRequest`(연결 실패·ctx 취소·timeout), `ErrFailedToReadResponseBody`, `ErrUnexpectedStatusCode`(2xx 외, 메시지에 `status=` 와 최대 512바이트 `body=`), `ErrResponseBodyTooLarge`(2xx 본문 32 MiB 초과). 요청 헤더 값과 URL userinfo 는 에러에 넣지 않는다. 재시도는 없다.
 
 ### 도메인 타입 (`internal/pkg/task`)
 
@@ -135,15 +133,15 @@ flowchart LR
 
 ## mockery
 
-- `.mockery.yml`: template `testify`, `dir: internal/pkg/mocks`, `filename: "{{.SrcPackageName}}_{{.InterfaceName | lower}}.go"`, `structname: "{{.Mock}}{{.InterfaceName}}"`. 등록된 인터페이스는 `db.Manager`, `tool.Tool`, `atlassian.Client`, `service.Service` 이다.
+- `.mockery.yml`: template `testify`, `dir: internal/pkg/mocks`, `filename: "{{.SrcPackageName}}_{{.InterfaceName | lower}}.go"`, `structname: "{{.Mock}}{{.InterfaceName}}"`. 등록된 인터페이스는 `db.Manager`, `httputil.HTTPClient`, `atlassian.Client`, `service.Service` 이다.
 - 따라서 `service.Service` → `internal/pkg/mocks/service_service.go` / `MockService`, `atlassian.Client` → `internal/pkg/mocks/atlassian_client.go` / `MockClient`, `db.Manager` → `db_manager.go` / `MockManager` 가 된다. service 테스트는 `MockClient`·`MockManager`, route 테스트는 `MockService` 를 쓴다.
-- 테스트는 `mocks.NewMockTool(t)` + `m.EXPECT().Run(...).Return(...).Once()` 형태로 쓴다 (`internal/adapter/atlassian/client_test.go` 의 `TestGetMyTasks`). 기대를 등록하지 않은 메서드가 호출되면 mock 이 테스트를 실패시키므로, "호출되지 않아야 한다" 는 기대를 등록하지 않는 것으로 표현한다.
+- 테스트는 `mocks.NewMockHTTPClient(t)` + `m.EXPECT().Post(ctx, url, header, body).Return(...).Once()` 형태로 쓴다 (`internal/adapter/atlassian/client_test.go` 의 `TestGetMyTasks`). `httputil.HTTPClient` → `httputil_httpclient.go` / `MockHTTPClient`. 기대를 등록하지 않은 메서드가 호출되면 mock 이 테스트를 실패시키므로, "호출되지 않아야 한다" 는 기대를 등록하지 않는 것으로 표현한다.
 
 ## 코드 스타일 관례
 
 - lint (`.golangci.yml`): `wsl_v5` 활성화, `after-block` (블록 `}` 뒤 빈 줄), `branch-max-lines: 2`. formatter `gofumpt`, `golines` (`max-len: 120`).
 - 에러: sentinel 은 파일 상단 `var (...)` 블록에 모으고 메시지는 `"<package>: ..."`. 표준/서드파티 에러는 `errors.Join(ErrX, err)`, 모듈 내부 에러는 그대로 반환하되 맥락이 필요하면 `fmt.Errorf("%w: key=%s", err, key)`.
-- 생성자는 인터페이스를 반환하고 구현은 unexported struct (`atlassian.NewClient`, `db.NewManager`, `tool.NewTool`).
+- 생성자는 인터페이스를 반환하고 구현은 unexported struct (`atlassian.NewClient`, `db.NewManager`, `httputil.NewHTTPClient`).
 - 문서 주석은 exported 함수·메서드에 이름으로 시작. unexported 는 의도가 불분명할 때만.
 - 테스트: `<package>_test` 외부 패키지, `require` 위주, `t.Context()` 또는 `context.Background()`, 헬퍼는 `t.Helper()` 로 시작.
 
