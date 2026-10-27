@@ -56,20 +56,6 @@ func NewClient(httpClient httputil.HTTPClient, siteURL, email, apiToken string) 
 	}
 }
 
-type searchRequest struct {
-	JQL           string   `json:"jql"`
-	Fields        []string `json:"fields"`
-	MaxResults    int      `json:"maxResults"`
-	NextPageToken string   `json:"nextPageToken,omitempty"`
-}
-
-type searchResponse struct {
-	// Issues stay raw so that one malformed item does not fail the page.
-	Issues        []json.RawMessage `json:"issues"`
-	NextPageToken string            `json:"nextPageToken"`
-	IsLast        bool              `json:"isLast"`
-}
-
 // GetMyTasks returns the Jira work items assigned to the current user that are
 // not done, following every search page. A failed page, a repeated page token,
 // or more than maxSearchPages pages returns nil and the error. Items that fail
