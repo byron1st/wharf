@@ -4,14 +4,14 @@ JiraTicket: DEV-21
 ReportType: single-step
 Timestamp: 20261027160231
 Title: service-desk-requests
-ReviewBase: git diff e23652d HEAD
+ReviewBase: git diff e23652d dbb2009
 ---
 
 # Service Desk 요청 수집
 
 Plan: [20261027160231_DEV-21_PLAN_service-desk-requests.md](./20261027160231_DEV-21_PLAN_service-desk-requests.md)
 
-See the change: `git diff e23652d HEAD`. Every `path:line` anchor in this report is valid against that snapshot.
+See the change: `git diff e23652d dbb2009`. Every `path:line` anchor in this report is valid against that snapshot.
 
 ## Summary
 

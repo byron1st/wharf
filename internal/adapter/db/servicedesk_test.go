@@ -48,6 +48,33 @@ func TestUpsertServiceDeskRequests(t *testing.T) {
 	require.Equal(t, 1, tasks)
 }
 
+func TestUpsertServiceDeskRequestsCanceled(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := manager.UpsertServiceDeskRequests(ctx, []servicedesk.Request{
+		{
+			Key:      "SD-1",
+			Title:    "Mouse",
+			Status:   "Open",
+			Created:  time.UnixMilli(1).UTC(),
+			StatusAt: time.UnixMilli(2).UTC(),
+		},
+	})
+	require.ErrorIs(t, err, context.Canceled)
+
+	var count int
+
+	scanErr := open(t, path).QueryRowContext(
+		context.Background(),
+		"SELECT COUNT(*) FROM service_desk_requests",
+	).Scan(&count)
+	require.NoError(t, scanErr)
+	require.Zero(t, count)
+}
+
 type readServiceDeskRequestRow struct {
 	title    string
 	status   string

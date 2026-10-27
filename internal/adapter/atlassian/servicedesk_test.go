@@ -315,3 +315,41 @@ func TestGetOwnedRequestsOverHTTP(t *testing.T) {
 	require.Equal(t, header.Get("Authorization"), got.Header.Get("Authorization"))
 	require.NotContains(t, fmt.Sprint(got.Header), apiToken)
 }
+
+func TestGetOwnedRequestsAdvancesByPageSize(t *testing.T) {
+	item := sdItem(t, sdRequest("SD-1", "Mouse", "Open", createdMillis, statusAtMillis))
+	m := mocks.NewMockHTTPClient(t)
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(0), header).Return(sdPage(t, 50, false, item), nil).Once()
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(50), header).Return(sdPage(t, 0, true), nil).Once()
+
+	got, err := newClient(m).GetOwnedRequests(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, []servicedesk.Request{wantRequest("SD-1", "Mouse", "Open")}, got)
+}
+
+func TestGetOwnedRequestsNormalizesFields(t *testing.T) {
+	item := sdRequest("  SD-1  ", "   ", "  Open  ", -1, statusAtMillis)
+	item["requestFieldValues"] = []any{
+		map[string]any{"fieldId": "summary", "value": "   "},
+		map[string]any{"fieldId": "summary", "value": "  Kept  "},
+	}
+
+	m := mocks.NewMockHTTPClient(t)
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(0), header).
+		Return(sdPage(t, 1, true, sdItem(t, item)), nil).
+		Once()
+
+	got, err := newClient(m).GetOwnedRequests(t.Context())
+	require.NoError(t, err)
+
+	want := wantRequest("SD-1", "Kept", "  Open  ")
+	want.Created = time.UnixMilli(-1).UTC()
+	require.Equal(t, []servicedesk.Request{want}, got)
+}
+
+func TestGetOwnedRequestsRejectsBadURL(t *testing.T) {
+	got, err := atlassian.NewClient(mocks.NewMockHTTPClient(t), "http://a b", email, apiToken).
+		GetOwnedRequests(t.Context())
+	require.ErrorIs(t, err, atlassian.ErrFailedToBuildRequestURL)
+	require.Nil(t, got)
+}

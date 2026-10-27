@@ -91,6 +91,22 @@ func TestSyncServiceDeskRequestsAllDropped(t *testing.T) {
 	require.ErrorIs(t, result.Partial, partial)
 }
 
+func TestSyncServiceDeskRequestsUpsertFailureDropsPartial(t *testing.T) {
+	partial := errors.New("missing title: key=SD-2")
+	failure := errors.New("upsert failed")
+
+	jira := mocks.NewMockClient(t)
+	jira.EXPECT().GetOwnedRequests(mock.Anything).Return(requests, partial).Once()
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().UpsertServiceDeskRequests(mock.Anything, requests).Return(failure).Once()
+
+	result, err := service.NewService(jira, manager).SyncServiceDeskRequests(t.Context())
+	require.ErrorIs(t, err, failure)
+	require.NotErrorIs(t, err, partial)
+	require.Equal(t, service.SyncResult{}, result)
+}
+
 func TestSyncServiceDeskRequestsReturnsUpsertFailure(t *testing.T) {
 	failure := errors.New("upsert failed")
 
