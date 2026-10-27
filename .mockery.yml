@@ -7,9 +7,9 @@ packages:
   github.com/byron1st/wharf/internal/adapter/db:
     interfaces:
       Manager:
-  github.com/byron1st/wharf/internal/pkg/tool:
+  github.com/byron1st/wharf/internal/pkg/httputil:
     interfaces:
-      Tool:
+      HTTPClient:
   github.com/byron1st/wharf/internal/adapter/atlassian:
     interfaces:
       Client:

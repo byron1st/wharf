@@ -2,19 +2,33 @@ package atlassian
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 
+	"github.com/byron1st/wharf/internal/pkg/httputil"
 	"github.com/byron1st/wharf/internal/pkg/task"
-	"github.com/byron1st/wharf/internal/pkg/tool"
 )
 
 var (
-	ErrFailedToParseSearchOutput = errors.New("atlassian: failed to parse search output")
-	ErrMissingWorkItemKey        = errors.New("atlassian: missing work item key")
-	ErrGetMyTasksCanceled        = errors.New("atlassian: get my tasks canceled")
-	ErrFailedToParseViewOutput   = errors.New("atlassian: failed to parse view output")
+	ErrFailedToEncodeSearchRequest = errors.New("atlassian: failed to encode search request")
+	ErrFailedToParseSearchOutput   = errors.New("atlassian: failed to parse search output")
+	ErrFailedToParseWorkItem       = errors.New("atlassian: failed to parse work item")
+	ErrMissingWorkItemKey          = errors.New("atlassian: missing work item key")
+	ErrRepeatedSearchPageToken     = errors.New("atlassian: search returned the page token it was sent")
+	ErrTooManySearchPages          = errors.New("atlassian: search exceeded the page limit")
+)
+
+const (
+	searchPath = "/rest/api/3/search/jql"
+
+	// maxSearchPages caps the pages one GetMyTasks follows (100 pages of
+	// searchMaxResults = 10,000 work items) so a server that never ends the
+	// token chain cannot loop until ctx ends.
+	maxSearchPages = 100
 )
 
 type Client interface {
@@ -22,83 +36,117 @@ type Client interface {
 }
 
 type client struct {
-	tool tool.Tool
+	http      httputil.HTTPClient
+	searchURL string
+	header    http.Header
 }
 
-// NewClient returns a Client that queries Jira through the given CLI tool.
-func NewClient(tool tool.Tool) Client {
-	return &client{tool: tool}
+// NewClient returns a Client that queries the Jira Cloud REST API v3 at siteURL
+// with Basic auth. siteURL is either https://{site}.atlassian.net or a gateway
+// URL such as https://api.atlassian.com/ex/jira/{cloudId}; its path is kept.
+func NewClient(httpClient httputil.HTTPClient, siteURL, email, apiToken string) Client {
+	return &client{
+		http:      httpClient,
+		searchURL: strings.TrimRight(siteURL, "/") + searchPath,
+		header: http.Header{
+			"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte(email+":"+apiToken))},
+			"Accept":        {"application/json"},
+			"Content-Type":  {"application/json"},
+		},
+	}
+}
+
+type searchRequest struct {
+	JQL           string   `json:"jql"`
+	Fields        []string `json:"fields"`
+	MaxResults    int      `json:"maxResults"`
+	NextPageToken string   `json:"nextPageToken,omitempty"`
+}
+
+type searchResponse struct {
+	// Issues stay raw so that one malformed item does not fail the page.
+	Issues        []json.RawMessage `json:"issues"`
+	NextPageToken string            `json:"nextPageToken"`
+	IsLast        bool              `json:"isLast"`
 }
 
 // GetMyTasks returns the Jira work items assigned to the current user that are
-// not done. Items that fail to load or convert are reported in the joined error
-// alongside the tasks that succeeded.
+// not done, following every search page. A failed page, a repeated page token,
+// or more than maxSearchPages pages returns nil and the error. Items that fail
+// to decode or convert are reported in the joined error alongside the tasks
+// that succeeded.
 func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
-	keys, errs, err := c.searchKeys(ctx)
-	if err != nil {
-		return nil, err
-	}
+	tasks := []task.Task{}
 
-	tasks := make([]task.Task, 0, len(keys))
+	var (
+		errs  []error
+		token string
+		seen  int
+	)
 
-	for _, key := range keys {
-		if err := ctx.Err(); err != nil {
-			return nil, errors.Join(append(errs, ErrGetMyTasksCanceled, err)...)
-		}
-
-		item, err := c.viewWorkItem(ctx, key)
+	for pages := 1; ; pages++ {
+		page, err := c.search(ctx, token)
 		if err != nil {
+			return nil, err
+		}
+
+		for i, raw := range page.Issues {
+			index := seen + i
+
+			var item ViewWorkItem
+			if err := json.Unmarshal(raw, &item); err != nil {
+				errs = append(errs, errors.Join(fmt.Errorf("%w: index=%d", ErrFailedToParseWorkItem, index), err))
+				continue
+			}
+
+			if item.Key == "" {
+				errs = append(errs, fmt.Errorf("%w: index=%d", ErrMissingWorkItemKey, index))
+				continue
+			}
+
+			t, err := ToTask(item)
 			errs = append(errs, err)
-			continue
+			tasks = append(tasks, t)
 		}
 
-		t, err := ToTask(item)
-		errs = append(errs, err)
-		tasks = append(tasks, t)
-	}
+		seen += len(page.Issues)
 
-	return tasks, errors.Join(errs...)
-}
-
-// searchKeys returns the found keys and the errors of items without a key.
-// The last error is set only when the search itself failed.
-func (c *client) searchKeys(ctx context.Context) ([]string, []error, error) {
-	out, err := c.tool.Run(ctx, JiraSearchOption())
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var items []SearchItem
-	if err := json.Unmarshal([]byte(out), &items); err != nil {
-		return nil, nil, errors.Join(ErrFailedToParseSearchOutput, err)
-	}
-
-	keys := make([]string, 0, len(items))
-
-	var errs []error
-
-	for i, item := range items {
-		if item.Key == "" {
-			errs = append(errs, fmt.Errorf("%w: index=%d", ErrMissingWorkItemKey, i))
-			continue
+		if page.IsLast || page.NextPageToken == "" {
+			return tasks, errors.Join(errs...)
 		}
 
-		keys = append(keys, item.Key)
-	}
+		if page.NextPageToken == token {
+			return nil, fmt.Errorf("%w: page=%d", ErrRepeatedSearchPageToken, pages)
+		}
 
-	return keys, errs, nil
+		if pages == maxSearchPages {
+			return nil, fmt.Errorf("%w: max=%d", ErrTooManySearchPages, maxSearchPages)
+		}
+
+		token = page.NextPageToken
+	}
 }
 
-func (c *client) viewWorkItem(ctx context.Context, key string) (ViewWorkItem, error) {
-	out, err := c.tool.Run(ctx, JiraViewOption(key))
+func (c *client) search(ctx context.Context, token string) (searchResponse, error) {
+	body, err := json.Marshal(searchRequest{
+		JQL:           myTasksJQL,
+		Fields:        searchFields(),
+		MaxResults:    searchMaxResults,
+		NextPageToken: token,
+	})
 	if err != nil {
-		return ViewWorkItem{}, fmt.Errorf("%w: key=%s", err, key)
+		return searchResponse{}, errors.Join(ErrFailedToEncodeSearchRequest, err)
 	}
 
-	var item ViewWorkItem
-	if err := json.Unmarshal([]byte(out), &item); err != nil {
-		return ViewWorkItem{}, errors.Join(fmt.Errorf("%w: key=%s", ErrFailedToParseViewOutput, key), err)
+	out, err := c.http.Post(ctx, c.searchURL, c.header, body)
+	if err != nil {
+		return searchResponse{}, err
 	}
 
-	return item, nil
+	var page searchResponse
+	if err := json.Unmarshal(out, &page); err != nil {
+		return searchResponse{}, errors.Join(ErrFailedToParseSearchOutput, err)
+	}
+
+	return page, nil
 }

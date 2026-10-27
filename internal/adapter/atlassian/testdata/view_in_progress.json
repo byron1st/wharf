@@ -29,7 +29,7 @@
               "type": "text"
             },
             {
-              "text": "acli",
+              "text": "wharf",
               "type": "text",
               "marks": [
                 {
@@ -195,7 +195,7 @@
           },
           "content": [
             {
-              "text": "acli jira workitem search \\\n  --json",
+              "text": "wharf jira workitem search \\\n  --json",
               "type": "text"
             }
           ],

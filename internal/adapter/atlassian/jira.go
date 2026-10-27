@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/byron1st/wharf/internal/pkg/task"
-	"github.com/byron1st/wharf/internal/pkg/tool"
 )
 
 var (
@@ -14,10 +13,6 @@ var (
 	ErrFailedToParseStartDate = errors.New("atlassian: failed to parse start date")
 	ErrFailedToParseDueDate   = errors.New("atlassian: failed to parse due date")
 )
-
-type SearchItem struct {
-	Key string `json:"key"`
-}
 
 type ViewWorkItem struct {
 	Key    string `json:"key"`
@@ -155,42 +150,15 @@ func ToStatus(name string, categoryKey StatusCategoryKey) (task.Status, error) {
 const (
 	myTasksJQL = "assignee = currentUser() AND statusCategory != done"
 
-	// Jira Cloud's default "Start date" field. `workitem search` rejects date
-	// fields, so they are fetched per work item with `workitem view`.
+	// Jira Cloud's default "Start date" field.
 	startDateField = "customfield_10015"
-	viewFields     = "summary,description,status,duedate,parent,subtasks,issuelinks," + startDateField
+
+	// searchMaxResults is the requested page size; Jira may return fewer
+	// items per page when many fields are requested.
+	searchMaxResults = 100
 )
 
-// JiraSearchOption returns the CLI option that searches the work items
-// assigned to the current user that are not done.
-func JiraSearchOption() tool.RunOption {
-	return tool.RunOption{
-		Cmd: "jira",
-		Args: []string{
-			"workitem",
-			"search",
-			"--jql",
-			myTasksJQL,
-			"--fields",
-			"key,summary",
-			"--paginate",
-			"--json",
-		},
-	}
-}
-
-// JiraViewOption returns the CLI option that fetches the fields of the work
-// item identified by key.
-func JiraViewOption(key string) tool.RunOption {
-	return tool.RunOption{
-		Cmd: "jira",
-		Args: []string{
-			"workitem",
-			"view",
-			key,
-			"--fields",
-			viewFields,
-			"--json",
-		},
-	}
+// searchFields returns a fresh slice of the fields every search page returns.
+func searchFields() []string {
+	return []string{"summary", "description", "status", "duedate", "parent", "subtasks", "issuelinks", startDateField}
 }

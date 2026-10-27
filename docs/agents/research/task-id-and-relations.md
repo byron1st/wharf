@@ -12,7 +12,7 @@ DEV-17 에서 관계를 `tasks` 의 JSON 컬럼에서 별도 테이블로 옮기
 
 ```mermaid
 flowchart LR
-    jira[acli jira workitem view] -->|ViewWorkItem| totask[atlassian.ToTask]
+    jira[Jira REST search/jql] -->|ViewWorkItem| totask[atlassian.ToTask]
     totask -->|task.Task, ID=jira-KEY| svc[service.SyncJiraTasks]
     svc -->|UpsertTasks| db[db.manager]
     db -->|storeTask| tasks[(tasks)]
@@ -38,7 +38,7 @@ flowchart LR
 ## ID 가 만들어지는 곳
 
 - `task.NewID(originated, key)` (`internal/pkg/task/id.go:10`) 가 `{originated}-{key}` 를 만든다. `task.LocalKey(n)` (`:16`) 은 `WHF-%03d` (3자리 0 채움, 999 초과 시 자리수 증가).
-- Jira: `atlassian.ToTask` (`internal/adapter/atlassian/jira.go:57`) 가 task 자신(`:99`), parent(`:77`, 빈 key 면 parent 없음), children, linked 모두에 `jira-` 접두어를 붙인다. 관계 ID 가 저장된 task ID 와 맞물려야 하기 때문이다. `atlassian.client` 의 CLI 호출(`JiraViewOption(key)`)과 에러 메시지의 `key=` 는 raw key 를 쓴다.
+- Jira: `atlassian.ToTask` (`internal/adapter/atlassian/jira.go:51`) 가 task 자신(`:93`), parent(`:71`, 빈 key 면 parent 없음), children, linked 모두에 `jira-` 접두어를 붙인다. 관계 ID 가 저장된 task ID 와 맞물려야 하기 때문이다. 에러 메시지의 `key=` 는 raw key 를 쓴다.
 - local: `db.Manager.CreateLocalTask` (`internal/adapter/db/client.go:115`) 가 한 트랜잭션에서 카운터를 올리고 `local-WHF-NNN` ID 로 task 와 관계를 저장한 뒤 ID 를 돌려준다. 입력의 `ID`, `Originated` 는 무시한다. 실패하면 카운터 증가도 롤백되어 번호가 소모되지 않는다. `service.CreateTask` → `POST /tasks` 가 호출한다.
 - 접두어 `WHF` 는 상수 `localKeyPrefix` 로 유지한다(DEV-16 결정: 바꾸면 기존 task 와 접두어가 섞이고 카운터는 하나라 TOML 로 옮겨 얻는 것이 없다).
 
