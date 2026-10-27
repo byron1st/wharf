@@ -3,7 +3,6 @@ package atlassian
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/byron1st/wharf/internal/pkg/task"
@@ -99,7 +98,7 @@ func ToTask(item ViewWorkItem) (task.Task, error) {
 		ID:          task.NewID(task.OriginJira, item.Key),
 		Originated:  task.OriginJira,
 		Title:       f.Summary,
-		Description: f.Description.plainText(),
+		Description: f.Description.markdown(),
 		Status:      status,
 		StartDate:   startDate,
 		DueDate:     dueDate,
@@ -193,58 +192,5 @@ func JiraViewOption(key string) tool.RunOption {
 			viewFields,
 			"--json",
 		},
-	}
-}
-
-// TODO: Convert ADF to Markdown
-//   - Render date nodes from attrs.timestamp (epoch milliseconds); they are
-//     dropped today.
-//   - Render status and emoji nodes from attrs.text; they are dropped today.
-//   - Keep list and task markers (`- `, `1. `, `[x]`/`[ ]` from taskItem
-//     attrs.state) so items stay distinguishable.
-
-// adfNode is a node of the Atlassian Document Format that Jira uses for rich
-// text fields such as description.
-type adfNode struct {
-	Type  string `json:"type"`
-	Text  string `json:"text"`
-	Attrs struct {
-		Text string `json:"text"`
-		URL  string `json:"url"`
-	} `json:"attrs"`
-	Content []adfNode `json:"content"`
-}
-
-// plainText flattens the document into text, putting each block on its own line.
-func (n *adfNode) plainText() string {
-	if n == nil {
-		return ""
-	}
-
-	var b strings.Builder
-	n.writeText(&b)
-
-	return strings.TrimSpace(b.String())
-}
-
-func (n *adfNode) writeText(b *strings.Builder) {
-	switch n.Type {
-	case "text":
-		b.WriteString(n.Text)
-	case "hardBreak":
-		b.WriteString("\n")
-	case "mention":
-		b.WriteString(n.Attrs.Text)
-	case "inlineCard":
-		b.WriteString(n.Attrs.URL)
-	}
-
-	for i := range n.Content {
-		n.Content[i].writeText(b)
-	}
-
-	switch n.Type {
-	case "paragraph", "heading", "codeBlock", "taskItem":
-		b.WriteString("\n")
 	}
 }
