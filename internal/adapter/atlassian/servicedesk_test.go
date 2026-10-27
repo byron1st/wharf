@@ -121,7 +121,6 @@ func TestGetOwnedRequestsStopsPaging(t *testing.T) {
 	}{
 		{name: "isLast", size: 1, isLast: true, items: []string{item}},
 		{name: "empty values", size: 2, isLast: false},
-		{name: "size zero", size: 0, isLast: false, items: []string{item}},
 	}
 
 	for _, tt := range tests {
@@ -196,10 +195,10 @@ func TestGetOwnedRequestsPageLimit(t *testing.T) {
 func TestGetOwnedRequestsLastPageAtLimit(t *testing.T) {
 	const maxPages = 100
 
-	item := sdItem(t, sdRequest("SD-1", "Mouse", "Open", createdMillis, statusAtMillis))
 	m := mocks.NewMockHTTPClient(t)
 
 	for start := range maxPages {
+		item := sdItem(t, sdRequest(fmt.Sprintf("SD-%d", start+1), "Mouse", "Open", createdMillis, statusAtMillis))
 		m.EXPECT().Get(t.Context(), ownedRequestsURL(start), header).
 			Return(sdPage(t, 1, start == maxPages-1, item), nil).
 			Once()
@@ -317,10 +316,26 @@ func TestGetOwnedRequestsOverHTTP(t *testing.T) {
 }
 
 func TestGetOwnedRequestsAdvancesByPageSize(t *testing.T) {
-	item := sdItem(t, sdRequest("SD-1", "Mouse", "Open", createdMillis, statusAtMillis))
+	first := sdItem(t, sdRequest("SD-1", "Mouse", "Open", createdMillis, statusAtMillis))
+	second := sdItem(t, sdRequest("SD-2", "Keyboard", "Open", createdMillis, statusAtMillis))
 	m := mocks.NewMockHTTPClient(t)
-	m.EXPECT().Get(t.Context(), ownedRequestsURL(0), header).Return(sdPage(t, 50, false, item), nil).Once()
-	m.EXPECT().Get(t.Context(), ownedRequestsURL(50), header).Return(sdPage(t, 0, true), nil).Once()
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(0), header).Return(sdPage(t, 1, false, first), nil).Once()
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(1), header).Return(sdPage(t, 1, true, second), nil).Once()
+
+	got, err := newClient(m).GetOwnedRequests(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, []servicedesk.Request{
+		wantRequest("SD-1", "Mouse", "Open"),
+		wantRequest("SD-2", "Keyboard", "Open"),
+	}, got)
+}
+
+func TestGetOwnedRequestsDedupesIssueKey(t *testing.T) {
+	first := sdItem(t, sdRequest("SD-1", "Mouse", "Open", createdMillis, statusAtMillis))
+	dup := sdItem(t, sdRequest("SD-1", "Later title", "Closed", createdMillis, statusAtMillis))
+	m := mocks.NewMockHTTPClient(t)
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(0), header).Return(sdPage(t, 1, false, first), nil).Once()
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(1), header).Return(sdPage(t, 1, true, dup), nil).Once()
 
 	got, err := newClient(m).GetOwnedRequests(t.Context())
 	require.NoError(t, err)

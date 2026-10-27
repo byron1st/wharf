@@ -40,7 +40,6 @@ const (
 
 type requestPage struct {
 	IsLastPage bool              `json:"isLastPage"`
-	Size       int               `json:"size"`
 	Values     []json.RawMessage `json:"values"`
 }
 
@@ -70,11 +69,13 @@ type dateDTO struct {
 // open and closed, following every page. A failed page, a page that is not
 // JSON, or more than maxRequestPages pages returns nil and the error. Items
 // that fail to decode or map are omitted and reported in the joined error.
+// A repeated issue key keeps the first occurrence.
 func (c *client) GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, error) {
 	var (
-		reqs []servicedesk.Request
-		errs []error
-		seen int
+		reqs     []servicedesk.Request
+		errs     []error
+		seen     int
+		seenKeys = make(map[string]struct{})
 	)
 
 	for pages, start := 1, 0; ; pages++ {
@@ -90,12 +91,17 @@ func (c *client) GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, e
 				continue
 			}
 
+			if _, ok := seenKeys[req.Key]; ok {
+				continue
+			}
+
+			seenKeys[req.Key] = struct{}{}
 			reqs = append(reqs, req)
 		}
 
 		seen += len(page.Values)
 
-		if page.IsLastPage || len(page.Values) == 0 || page.Size <= 0 {
+		if page.IsLastPage || len(page.Values) == 0 {
 			if reqs == nil {
 				reqs = []servicedesk.Request{}
 			}
@@ -107,7 +113,7 @@ func (c *client) GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, e
 			return nil, fmt.Errorf("%w: max=%d", ErrTooManyRequestPages, maxRequestPages)
 		}
 
-		start += page.Size
+		start += len(page.Values)
 	}
 }
 
