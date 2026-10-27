@@ -2,12 +2,13 @@ package service
 
 import "github.com/byron1st/wharf/internal/pkg/task"
 
-// SyncResult is the outcome of a sync that stored the tasks it received.
+// SyncResult is the outcome of a sync that stored what its source returned.
 type SyncResult struct {
-	// Upserted is the number of tasks stored.
+	// Upserted is how many items were passed to storage.
 	Upserted int
-	// Partial joins the errors of items that failed to load or convert. Items
-	// that failed to convert are still stored. It is nil when every item synced.
+	// Partial joins item errors from the source. It is nil when every returned
+	// item was accepted by the source. Whether a failed item was still stored
+	// depends on the sync method.
 	Partial error
 }
 

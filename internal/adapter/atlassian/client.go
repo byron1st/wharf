@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/byron1st/wharf/internal/pkg/httputil"
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 )
 
@@ -33,21 +34,26 @@ const (
 
 type Client interface {
 	GetMyTasks(ctx context.Context) ([]task.Task, error)
+	GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, error)
 }
 
 type client struct {
-	http      httputil.HTTPClient
-	searchURL string
-	header    http.Header
+	http        httputil.HTTPClient
+	searchURL   string
+	requestsURL string
+	header      http.Header
 }
 
 // NewClient returns a Client that queries the Jira Cloud REST API v3 at siteURL
 // with Basic auth. siteURL is either https://{site}.atlassian.net or a gateway
 // URL such as https://api.atlassian.com/ex/jira/{cloudId}; its path is kept.
 func NewClient(httpClient httputil.HTTPClient, siteURL, email, apiToken string) Client {
+	base := strings.TrimRight(siteURL, "/")
+
 	return &client{
-		http:      httpClient,
-		searchURL: strings.TrimRight(siteURL, "/") + searchPath,
+		http:        httpClient,
+		searchURL:   base + searchPath,
+		requestsURL: base + requestsPath,
 		header: http.Header{
 			"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte(email+":"+apiToken))},
 			"Accept":        {"application/json"},

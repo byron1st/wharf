@@ -31,6 +31,7 @@ func NewHandler(svc service.Service, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.HandleFunc("POST /tasks/jira", syncJiraTasks(svc, logger))
+	mux.HandleFunc("POST /service-desk/requests", syncServiceDeskRequests(svc, logger))
 	mux.HandleFunc("GET /tasks", listTasks(svc, logger))
 	mux.HandleFunc("POST /tasks", createTask(svc, logger))
 	mux.HandleFunc("GET /tasks/{id}", getTask(svc, logger))
@@ -66,6 +67,41 @@ func syncJiraTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 			logger.WarnContext(
 				r.Context(),
 				"synced jira tasks partially",
+				"request_id", requestID,
+				"upserted", result.Upserted,
+				"error", result.Partial,
+			)
+		}
+
+		writeJSON(w, http.StatusOK, syncResponse{Upserted: result.Upserted, Partial: result.Partial != nil})
+	}
+}
+
+// syncServiceDeskRequests maps every service error to 500, since none is
+// caused by the request yet.
+func syncServiceDeskRequests(svc service.Service, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		requestID := r.Header.Get(requestIDHeader)
+
+		result, err := svc.SyncServiceDeskRequests(r.Context())
+		if err != nil {
+			logger.ErrorContext(
+				r.Context(),
+				"failed to sync service desk requests",
+				"request_id",
+				requestID,
+				"error",
+				err,
+			)
+			writeInternalError(w, err)
+
+			return
+		}
+
+		if result.Partial != nil {
+			logger.WarnContext(
+				r.Context(),
+				"synced service desk requests partially",
 				"request_id", requestID,
 				"upserted", result.Upserted,
 				"error", result.Partial,

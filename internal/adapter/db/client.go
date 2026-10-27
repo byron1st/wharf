@@ -10,6 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/pkg/todo"
 )
@@ -42,6 +43,7 @@ var (
 	ErrFailedToDeleteTodoRemindersOfTask = errors.New("db: failed to delete todo reminders of task")
 	ErrFailedToDeleteTodosOfTask         = errors.New("db: failed to delete todos of task")
 	ErrFailedToDeleteTaskTodosOfTask     = errors.New("db: failed to delete task todos of task")
+	ErrFailedToUpsertServiceDeskRequest  = errors.New("db: failed to upsert service desk request")
 )
 
 // localTaskCounter is the counters row seeded by the initial migration.
@@ -61,6 +63,7 @@ type Manager interface {
 	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
 	UpdateTodo(ctx context.Context, t todo.Todo) error
 	DeleteTodo(ctx context.Context, id int64) error
+	UpsertServiceDeskRequests(ctx context.Context, requests []servicedesk.Request) error
 
 	// DB Management
 
@@ -287,6 +290,37 @@ func (m *manager) DeleteTask(ctx context.Context, id string) error {
 
 		if err := queries.DeleteTaskTodosOfTask(ctx, id); err != nil {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskTodosOfTask, err), id)
+		}
+
+		return nil
+	})
+}
+
+// UpsertServiceDeskRequests stores requests in one transaction: either every
+// request is stored or none is. A request whose issue key is already stored
+// has its other fields overwritten. Requests absent from this call are kept.
+// An empty list is a no-op.
+func (m *manager) UpsertServiceDeskRequests(ctx context.Context, requests []servicedesk.Request) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	if len(requests) == 0 {
+		return nil
+	}
+
+	return m.inTx(ctx, func(queries *Queries) error {
+		for _, request := range requests {
+			err := queries.UpsertServiceDeskRequest(ctx, UpsertServiceDeskRequestParams{
+				IssueKey:  request.Key,
+				Title:     request.Title,
+				Status:    request.Status,
+				CreatedAt: request.Created,
+				StatusAt:  request.StatusAt,
+			})
+			if err != nil {
+				return fmt.Errorf("%w: key=%s", errors.Join(ErrFailedToUpsertServiceDeskRequest, err), request.Key)
+			}
 		}
 
 		return nil

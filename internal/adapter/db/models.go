@@ -19,6 +19,14 @@ type SchemaMigration struct {
 	AppliedAt time.Time
 }
 
+type ServiceDeskRequest struct {
+	IssueKey  string
+	Title     string
+	Status    string
+	CreatedAt time.Time
+	StatusAt  time.Time
+}
+
 type Task struct {
 	ID          string
 	Originated  string

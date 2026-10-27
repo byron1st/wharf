@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -105,6 +106,68 @@ func (_c *MockClient_GetMyTasks_Call) Return(tasks []task.Task, err error) *Mock
 }
 
 func (_c *MockClient_GetMyTasks_Call) RunAndReturn(run func(ctx context.Context) ([]task.Task, error)) *MockClient_GetMyTasks_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetOwnedRequests provides a mock function for the type MockClient
+func (_mock *MockClient) GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetOwnedRequests")
+	}
+
+	var r0 []servicedesk.Request
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]servicedesk.Request, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []servicedesk.Request); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]servicedesk.Request)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_GetOwnedRequests_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetOwnedRequests'
+type MockClient_GetOwnedRequests_Call struct {
+	*mock.Call
+}
+
+// GetOwnedRequests is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockClient_Expecter) GetOwnedRequests(ctx any) *MockClient_GetOwnedRequests_Call {
+	return &MockClient_GetOwnedRequests_Call{Call: _e.mock.On("GetOwnedRequests", ctx)}
+}
+
+func (_c *MockClient_GetOwnedRequests_Call) Run(run func(ctx context.Context)) *MockClient_GetOwnedRequests_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_GetOwnedRequests_Call) Return(requests []servicedesk.Request, err error) *MockClient_GetOwnedRequests_Call {
+	_c.Call.Return(requests, err)
+	return _c
+}
+
+func (_c *MockClient_GetOwnedRequests_Call) RunAndReturn(run func(ctx context.Context) ([]servicedesk.Request, error)) *MockClient_GetOwnedRequests_Call {
 	_c.Call.Return(run)
 	return _c
 }
