@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Flow
-Description: Jira 동기화가 꽂혀 있는 현재 경로(atlassian.Client.GetMyTasks, service.SyncJiraTasks, POST /tasks/jira, 0001 tasks 스키마, httputil.Get)와, 그 옆에 둘 Service Desk 수집의 공식 계약 — GET /rest/servicedeskapi/request 의 CustomerRequestDTO(assignee·updated 없음), OWNED_REQUESTS·ALL_REQUESTS·start/limit/size/isLastPage, Basic 인증과 site URL 경로 결합을 정리한다.
+Description: Jira 동기화가 꽂혀 있는 현재 경로(atlassian.Client.GetMyTasks, service.SyncJiraTasks, POST /tasks/jira, 0001 tasks 스키마, httputil.Get)와, 그 옆에 둘 Service Desk 수집의 공식 계약 — GET /rest/servicedeskapi/request 의 CustomerRequestDTO(assignee·updated 없음), OWNED_REQUESTS·ALL_REQUESTS·start/limit/size/isLastPage, Basic 인증과 site URL 경로 결합, DEV-22 의 task ↔ 요청 relates-to 연결(`task_service_desk_requests`, `PUT`/`DELETE /tasks/{id}/service-desk-requests/{key}`, `GET /tasks/{id}` 의 `service_desk_requests`)을 정리한다.
 ---
 
 # Service Desk 요청 수집을 붙일 현재 경로와 공식 계약
@@ -60,3 +60,13 @@ Base URL (JSM REST intro):
 - OAuth 3LO 및 scoped token 게이트웨이: `https://api.atlassian.com/ex/jira/{cloudId}/rest/servicedeskapi/` (`{api}` 예시가 `/rest/servicedeskapi/request`).
 
 인증은 Jira Cloud 와 같다. 이 저장소는 `Authorization: Basic base64(email:token)` 을 이미 만든다 (`client.go:52`).
+
+## task 와의 relates-to 연결 (DEV-22)
+
+결정 근거는 [DEV-22 plan](../dev/20261027212216_DEV-22_PLAN_service-desk-task-relation.md) 의 Key decisions 에 있다.
+
+- 스키마: `task_service_desk_requests (task_id, issue_key, PRIMARY KEY (task_id, issue_key))` (`scripts/migrations/0001_initial_migration.sql:79`, 배포 전 예외로 0001 에 직접 추가). 행 하나가 방향 없는 연결 하나이고 다대다다. FK·추가 인덱스는 없다(역방향 조회 API 가 없고 PK 가 `task_id` 조회를 덮는다).
+- API: `PUT /tasks/{id}/service-desk-requests/{key}` → 204(멱등, 다시 PUT 해도 204·행 하나), task 없음·요청 없음은 각각 404. `DELETE /tasks/{id}/service-desk-requests/{key}` → 204, 연결이 없으면 404. 본문은 없다. task origin(local·jira)은 상관없다(`internal/server/route.go:40-41`).
+- `GET /tasks/{id}` 응답에 `service_desk_requests` 배열(`{"key","title","status","created_at","status_at"}`, `issue_key` 오름차순, 없으면 `[]`)이 붙는다. JOIN 쿼리 `ListTaskServiceDeskRequests` 로 읽는다.
+- 연결은 wharf 소유다. `UpsertTasks`(Jira 동기화)·`UpsertServiceDeskRequests` 는 연결을 건드리지 않고, `DeleteTask` 만 그 task 의 연결 행을 같은 트랜잭션에서 지운다. 동기화가 요청 행을 지우지 않으므로 요청 쪽 cascade 는 없다. Jira 쪽(issue link)에는 연결을 쓰지 않는다.
+- 계층: `db.Manager.LinkServiceDeskRequest`·`UnlinkServiceDeskRequest`·`ListTaskServiceDeskRequests` (`internal/adapter/db/client.go:354`·`:405`·`:427`) → `service.LinkServiceDeskRequest`·`UnlinkServiceDeskRequest` (`internal/service/service.go:221`·`:237`), `service.GetTask` 가 `TaskDetail.ServiceDeskRequests` (`internal/service/model.go:33`) 를 채운다. `servicedesk.Request`·`task.Task` 는 바뀌지 않았다.

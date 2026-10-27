@@ -175,3 +175,28 @@ ON CONFLICT (issue_key) DO UPDATE SET
     status     = excluded.status,
     created_at = excluded.created_at,
     status_at  = excluded.status_at;
+
+-- name: CreateTaskServiceDeskRequest :execrows
+-- Inserts nothing when the task or the request is not stored or the link
+-- exists, so the check is a write as the transaction's first statement.
+INSERT INTO task_service_desk_requests (task_id, issue_key)
+SELECT sqlc.arg(task_id), sqlc.arg(issue_key)
+WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = sqlc.arg(task_id))
+  AND EXISTS (SELECT 1 FROM service_desk_requests WHERE service_desk_requests.issue_key = sqlc.arg(issue_key))
+ON CONFLICT (task_id, issue_key) DO NOTHING;
+
+-- name: ExistsServiceDeskRequest :one
+SELECT EXISTS (SELECT 1 FROM service_desk_requests WHERE issue_key = ?);
+
+-- name: DeleteTaskServiceDeskRequest :execrows
+DELETE FROM task_service_desk_requests WHERE task_id = ? AND issue_key = ?;
+
+-- name: DeleteTaskServiceDeskRequestsOfTask :exec
+DELETE FROM task_service_desk_requests WHERE task_id = ?;
+
+-- name: ListTaskServiceDeskRequests :many
+SELECT service_desk_requests.*
+FROM task_service_desk_requests
+JOIN service_desk_requests ON service_desk_requests.issue_key = task_service_desk_requests.issue_key
+WHERE task_service_desk_requests.task_id = ?
+ORDER BY service_desk_requests.issue_key;

@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks·task_hierarchies·task_links·counters·todos·task_todos·todo_reminders 스키마와 Task·Todo 구조체 매핑, sqlc SQLite 의 bulk insert 제약과 생성 코드 형태(UPDATE ... RETURNING, ON CONFLICT, :execrows, sqlc.slice, sqlc.embed, sqlc.narg, INSERT ... SELECT ... RETURNING, UNION)를 정리한다.
+Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks·task_hierarchies·task_links·counters·todos·task_todos·todo_reminders·service_desk_requests·task_service_desk_requests 스키마와 Task·Todo 구조체 매핑, sqlc SQLite 의 bulk insert 제약과 생성 코드 형태(UPDATE ... RETURNING, ON CONFLICT, :execrows, sqlc.slice, sqlc.embed, sqlc.narg, INSERT ... SELECT ... RETURNING, INSERT ... SELECT ... ON CONFLICT :execrows, UNION)를 정리한다.
 ---
 
 # sqlc + SQLite 초기 설정 현황
@@ -58,6 +58,12 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks�
 - 날짜를 TEXT 로 두어 사전순 비교가 날짜 비교이고 시간대 변환이 없다. 빈 문자열 ↔ NULL 변환은 `toNullString` (`internal/adapter/db/todo.go`). position 은 task 안에서 0..n-1 이며 한 번의 `UPDATE position = position ± 1` 로 밀고 당기므로 unique 제약을 두지 않았다. FK 는 없다.
 - reminder 는 service 가 UTC 로 정규화해 넘기므로 저장 텍스트가 시각 순으로 정렬된다(`ListTodoReminders` 의 `ORDER BY remind_at`). `ListTodoReminders` 는 todo ID 목록(`sqlc.slice`) 대신 `ListTodos` 와 같은 `sqlc.narg` 필터로 JOIN 해 읽는다. ID 목록을 바인드하면 todo 수가 SQLite 바인드 변수 한도(`SQLITE_MAX_VARIABLE_NUMBER`, 기본 32766)를 넘을 때 `too many SQL variables` 로 실패하기 때문이다. 두 쿼리의 WHERE 조건은 같게 유지해야 하고, 생성 struct 가 같아 `ListTodoRemindersParams(params)` 로 변환한다.
 
+## Service Desk 요청과 task 연결 (DEV-21, DEV-22)
+
+- `service_desk_requests (issue_key PK, title, status, created_at DATETIME, status_at DATETIME)` → sqlc 모델 `ServiceDeskRequest`, 도메인 `servicedesk.Request{Key, Title, Status, Created, StatusAt}`.
+- `task_service_desk_requests (task_id, issue_key, PRIMARY KEY (task_id, issue_key))` → `TaskServiceDeskRequest`. FK·추가 인덱스 없음.
+- 쿼리: `CreateTaskServiceDeskRequest` (`:execrows`, 아래 형태), `ExistsServiceDeskRequest` (`:one` bool), `DeleteTaskServiceDeskRequest` (`:execrows`), `DeleteTaskServiceDeskRequestsOfTask` (`DeleteTask` cascade), `ListTaskServiceDeskRequests` (`SELECT service_desk_requests.* ... JOIN ... ORDER BY issue_key`, `[]ServiceDeskRequest` 로 생성).
+
 ## sqlc SQLite 엔진 제약
 
 - `:copyfrom` 은 PostgreSQL(pgx)·MySQL 전용이다 (sqlc 공식 문서 howto/insert). SQLite 에서는 bulk insert 를 위한 생성 코드가 없다.
@@ -68,6 +74,7 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks�
 - `sqlc.slice(ids)` 는 `IN (/*SLICE:ids*/?)` 를 실행 시 `?,?,...` 로 바꾸고, 빈 slice 면 `NULL` 로 바꿔 0행이 된다(`ListTasksByIDs`).
 - `sqlc.narg(x)` 는 `x IS NULL` 쪽이 먼저 나오면 타입 추론이 안 돼 `interface{}` 가 된다. 컬럼 비교를 먼저 쓰면(`todos.end_date = sqlc.narg(end_date) OR sqlc.narg(end_date) IS NULL`) `sql.NullString`/`sql.NullBool` 로 생성된다(`ListTodos`).
 - `INSERT INTO ... SELECT ... WHERE EXISTS (...) RETURNING id` + `:one` 은 조건이 거짓이면 `sql.ErrNoRows` 를 돌려준다(`CreateTodo`). `DELETE ... RETURNING a, b` + `:one` 은 행 struct(`DeleteTaskTodoRow`)를 돌려준다.
+- `INSERT INTO ... SELECT sqlc.arg(a), sqlc.arg(b) WHERE EXISTS (...) AND EXISTS (...) ON CONFLICT (...) DO NOTHING` + `:execrows` 도 생성된다(`CreateTaskServiceDeskRequest`, `?1`·`?2` 재사용). SELECT 에 WHERE 가 있어 SQLite 의 `INSERT ... SELECT ... ON CONFLICT` 파싱 모호성이 생기지 않는다. 조건 거짓과 충돌 모두 영향 행 수 0 이다.
 - `sqlc.embed(tasks)` 는 행 struct 에 `Task Task` 필드로 들어간다. `LEFT JOIN` 한 nullable 컬럼은 `sql.NullString` 이다(`GetTaskRow`).
 - 같은 `sqlc.arg(x)` 를 여러 번 쓰면 `?1` 로 번호 매겨진 하나의 파라미터가 된다. `UNION` 쿼리에서 `ORDER BY 1` 이나 테이블을 한정하지 않은 컬럼은 sqlc 가 "column reference is ambiguous" 로 거부해 `AS id` 별칭·`task_links.` 한정이 필요하다(`ListTaskLinks`).
 - `ON CONFLICT (...) DO UPDATE` / `DO NOTHING` 도 그대로 생성된다: `UpsertTaskHierarchy` (child 의 parent 재지정), `CreateTaskLink` (중복 링크 무시).

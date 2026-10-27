@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/byron1st/wharf/internal/pkg/mocks"
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/server"
 	"github.com/byron1st/wharf/internal/service"
@@ -174,6 +175,16 @@ func TestGetTask(t *testing.T) {
 		Parent:   &task.Task{ID: "jira-P", Originated: task.OriginJira, Title: "parent", Description: long},
 		Children: []task.Task{{ID: "jira-C1", Originated: task.OriginJira, Title: "child"}},
 		Linked:   []task.Task{{ID: "jira-L1", Originated: task.OriginJira, Title: "linked"}},
+		ServiceDeskRequests: []servicedesk.Request{
+			{
+				Key:      "SD-1",
+				Title:    "Mouse",
+				Status:   "Open",
+				Created:  time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC),
+				StatusAt: time.Date(2026, 10, 2, 10, 30, 0, 0, time.UTC),
+			},
+			{Key: "SD-2", Title: "Account", Status: "Done"},
+		},
 	}, nil).Once()
 
 	rec, _ := serve(t, svc, http.MethodGet, "/tasks/local-WHF-001")
@@ -190,7 +201,13 @@ func TestGetTask(t *testing.T) {
 		"children":[{"id":"jira-C1","originated":"jira","title":"child","description":"",
 		             "status":"","start_date":null,"due_date":null}],
 		"linked":[{"id":"jira-L1","originated":"jira","title":"linked","description":"",
-		           "status":"","start_date":null,"due_date":null}]
+		           "status":"","start_date":null,"due_date":null}],
+		"service_desk_requests":[
+			{"key":"SD-1","title":"Mouse","status":"Open",
+			 "created_at":"2026-10-01T09:00:00Z","status_at":"2026-10-02T10:30:00Z"},
+			{"key":"SD-2","title":"Account","status":"Done",
+			 "created_at":"0001-01-01T00:00:00Z","status_at":"0001-01-01T00:00:00Z"}
+		]
 	}`, rec.Body.String())
 }
 
@@ -207,7 +224,8 @@ func TestGetTaskWithoutRelations(t *testing.T) {
 	require.JSONEq(t, `{
 		"id":"jira-WHF-1","originated":"jira","title":"alone","description":"","status":"",
 		"start_date":null,"due_date":null,
-		"parent_id":null,"children_ids":[],"linked_ids":[],"parent":null,"children":[],"linked":[]
+		"parent_id":null,"children_ids":[],"linked_ids":[],"parent":null,"children":[],"linked":[],
+		"service_desk_requests":[]
 	}`, rec.Body.String())
 }
 

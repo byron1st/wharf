@@ -51,6 +51,17 @@ type taskDetailResponse struct {
 	Parent      *taskSummary  `json:"parent"`
 	Children    []taskSummary `json:"children"`
 	Linked      []taskSummary `json:"linked"`
+
+	ServiceDeskRequests []serviceDeskRequestResponse `json:"service_desk_requests"`
+}
+
+// serviceDeskRequestResponse is a Service Desk request linked to a task.
+type serviceDeskRequestResponse struct {
+	Key       string    `json:"key"`
+	Title     string    `json:"title"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	StatusAt  time.Time `json:"status_at"`
 }
 
 type createTaskResponse struct {

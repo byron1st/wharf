@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/byron1st/wharf/internal/adapter/db"
 	"github.com/byron1st/wharf/internal/pkg/mocks"
 	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/service"
@@ -128,4 +129,66 @@ func TestSyncServiceDeskRequestsCanceled(t *testing.T) {
 	result, err := service.NewService(jira, mocks.NewMockManager(t)).SyncServiceDeskRequests(t.Context())
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, service.SyncResult{}, result)
+}
+
+func TestLinkServiceDeskRequest(t *testing.T) {
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().LinkServiceDeskRequest(mock.Anything, "local-WHF-001", "SD-1").Return(nil).Once()
+
+	err := service.NewService(mocks.NewMockClient(t), manager).
+		LinkServiceDeskRequest(t.Context(), "local-WHF-001", "SD-1")
+	require.NoError(t, err)
+}
+
+func TestLinkServiceDeskRequestFailures(t *testing.T) {
+	failure := errors.New("insert failed")
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().LinkServiceDeskRequest(mock.Anything, "T9", "SD-1").Return(db.ErrTaskToLinkNotFound).Once()
+	manager.EXPECT().
+		LinkServiceDeskRequest(mock.Anything, "T1", "SD-9").
+		Return(db.ErrServiceDeskRequestToLinkNotFound).
+		Once()
+	manager.EXPECT().LinkServiceDeskRequest(mock.Anything, "T1", "SD-1").Return(failure).Once()
+
+	svc := service.NewService(mocks.NewMockClient(t), manager)
+
+	err := svc.LinkServiceDeskRequest(t.Context(), "T9", "SD-1")
+	require.ErrorIs(t, err, service.ErrTaskToLinkNotFound)
+	require.NotErrorIs(t, err, service.ErrServiceDeskRequestToLinkNotFound)
+	require.ErrorContains(t, err, "task_id=T9")
+
+	err = svc.LinkServiceDeskRequest(t.Context(), "T1", "SD-9")
+	require.ErrorIs(t, err, service.ErrServiceDeskRequestToLinkNotFound)
+	require.NotErrorIs(t, err, service.ErrTaskToLinkNotFound)
+	require.ErrorContains(t, err, "key=SD-9")
+
+	err = svc.LinkServiceDeskRequest(t.Context(), "T1", "SD-1")
+	require.ErrorIs(t, err, failure)
+	require.NotErrorIs(t, err, service.ErrTaskToLinkNotFound)
+	require.NotErrorIs(t, err, service.ErrServiceDeskRequestToLinkNotFound)
+}
+
+func TestUnlinkServiceDeskRequest(t *testing.T) {
+	failure := errors.New("delete failed")
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().UnlinkServiceDeskRequest(mock.Anything, "T1", "SD-1").Return(nil).Once()
+	manager.EXPECT().
+		UnlinkServiceDeskRequest(mock.Anything, "T1", "SD-9").
+		Return(db.ErrServiceDeskRequestLinkToDeleteNotFound).
+		Once()
+	manager.EXPECT().UnlinkServiceDeskRequest(mock.Anything, "T1", "SD-2").Return(failure).Once()
+
+	svc := service.NewService(mocks.NewMockClient(t), manager)
+
+	require.NoError(t, svc.UnlinkServiceDeskRequest(t.Context(), "T1", "SD-1"))
+
+	err := svc.UnlinkServiceDeskRequest(t.Context(), "T1", "SD-9")
+	require.ErrorIs(t, err, service.ErrServiceDeskRequestLinkToDeleteNotFound)
+	require.ErrorContains(t, err, "task_id=T1, key=SD-9")
+
+	err = svc.UnlinkServiceDeskRequest(t.Context(), "T1", "SD-2")
+	require.ErrorIs(t, err, failure)
+	require.NotErrorIs(t, err, service.ErrServiceDeskRequestLinkToDeleteNotFound)
 }

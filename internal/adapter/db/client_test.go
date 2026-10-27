@@ -199,10 +199,21 @@ func TestInitialMigrationSchema(t *testing.T) {
 		[]string{"issue_key", "title", "status", "created_at", "status_at"},
 		columns("service_desk_requests"),
 	)
+	require.Equal(t, []string{"task_id", "issue_key"}, columns("task_service_desk_requests"))
+
+	var linkPK string
+
+	err := conn.QueryRowContext(
+		context.Background(),
+		"SELECT group_concat(name, ',') FROM "+
+			"(SELECT name FROM pragma_table_info('task_service_desk_requests') WHERE pk > 0 ORDER BY pk)",
+	).Scan(&linkPK)
+	require.NoError(t, err)
+	require.Equal(t, "task_id,issue_key", linkPK)
 
 	var todoIDIsPK bool
 
-	err := conn.QueryRowContext(
+	err = conn.QueryRowContext(
 		context.Background(),
 		"SELECT pk = 1 FROM pragma_table_info('task_todos') WHERE name = 'todo_id'",
 	).Scan(&todoIDIsPK)

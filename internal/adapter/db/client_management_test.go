@@ -275,6 +275,19 @@ func TestMethodsRequireConnection(t *testing.T) {
 				manager.UpsertServiceDeskRequests(context.Background(), []servicedesk.Request{{Key: "SD-1"}}),
 				db.ErrNotConnected,
 			)
+			require.ErrorIs(
+				t,
+				manager.LinkServiceDeskRequest(context.Background(), "WHF-1", "SD-1"),
+				db.ErrNotConnected,
+			)
+			require.ErrorIs(
+				t,
+				manager.UnlinkServiceDeskRequest(context.Background(), "WHF-1", "SD-1"),
+				db.ErrNotConnected,
+			)
+
+			_, err = manager.ListTaskServiceDeskRequests(context.Background(), "WHF-1")
+			require.ErrorIs(t, err, db.ErrNotConnected)
 
 			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
 			require.NoError(t, manager.Close())
