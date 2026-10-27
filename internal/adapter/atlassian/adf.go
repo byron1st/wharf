@@ -226,7 +226,9 @@ func renderInline(nodes []adfNode) string {
 		case "status":
 			// Escaped brackets so that a following "(...)" does not make a link.
 			if n.Attrs.Text != "" {
-				b.WriteString(`\[` + escapeText(n.Attrs.Text) + `\]`)
+				b.WriteString(`\[`)
+				b.WriteString(escapeText(n.Attrs.Text))
+				b.WriteString(`\]`)
 			}
 		case "date":
 			if ms, err := strconv.ParseInt(strings.Trim(string(n.Attrs.Timestamp), `"`), 10, 64); err == nil {
@@ -536,14 +538,17 @@ func renderTable(n adfNode) string {
 				cell = cells[i]
 			}
 
-			b.WriteString(" " + cell + " |")
+			b.WriteString(" ")
+			b.WriteString(cell)
+			b.WriteString(" |")
 		}
 	}
 
 	var b strings.Builder
 
 	writeRow(&b, rows[0])
-	b.WriteString("\n|" + strings.Repeat(" --- |", cols))
+	b.WriteString("\n|")
+	b.WriteString(strings.Repeat(" --- |", cols))
 
 	for _, row := range rows[1:] {
 		b.WriteString("\n")
