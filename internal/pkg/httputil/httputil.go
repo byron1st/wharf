@@ -45,9 +45,17 @@ type httpClient struct {
 	client *http.Client
 }
 
-// NewHTTPClient returns an HTTPClient backed by net/http with a fixed request timeout.
+// NewHTTPClient returns an HTTPClient backed by net/http with a fixed request
+// timeout. Redirects are not followed, since net/http would resend the
+// Authorization header (and a 307/308 body) to a same-host redirect even over
+// http; a 3xx response is an ErrUnexpectedStatusCode error.
 func NewHTTPClient() HTTPClient {
-	return &httpClient{client: &http.Client{Timeout: requestTimeout}}
+	return &httpClient{client: &http.Client{
+		Timeout: requestTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}}
 }
 
 // Get sends a GET request to url with header and returns the response body.

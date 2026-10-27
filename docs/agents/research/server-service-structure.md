@@ -105,14 +105,14 @@ flowchart LR
   - 어떤 페이지든 요청 실패(`httputil` 에러 그대로) 또는 응답 파싱 실패(`ErrFailedToParseSearchOutput`) → `nil, err`. 앞 페이지 결과와 항목 에러는 버린다. ctx 취소는 `httputil.ErrFailedToSendRequest` 와 `context.Canceled` 를 함께 담는다.
   - 항목은 `json.RawMessage` 로 받아 개별 디코딩한다. 디코딩 실패 → `ErrFailedToParseWorkItem` + `index=`(페이지를 넘어 이어지는 전역 순번), key 없음(`null` 포함) → `ErrMissingWorkItemKey` + `index=`. 둘 다 그 항목만 뺀다.
   - 변환(`ToTask`) 에러가 있어도 task 는 결과에 포함된다. `ToTask` 는 잘못된 필드를 빈 값으로 두고 에러를 join 한다 (`internal/adapter/atlassian/jira.go:51`). task ID 와 관계 ID 는 `jira-{key}` 이고, 에러 메시지의 `key=` 는 raw key 다.
-  - 모든 페이지가 성공하면 `tasks` (항상 non-nil, 결과 없음이면 빈 슬라이스) 와 `errors.Join(errs...)` 를 함께 반환한다. `isLast` 가 true 이거나 `nextPageToken` 이 비면 멈춘다. 페이지 수 상한은 없다.
+  - 모든 페이지가 성공하면 `tasks` (항상 non-nil, 결과 없음이면 빈 슬라이스) 와 `errors.Join(errs...)` 를 함께 반환한다. `isLast` 가 true 이거나 `nextPageToken` 이 비면 멈춘다. 응답 토큰이 방금 보낸 토큰과 같으면 `ErrRepeatedSearchPageToken`, 100 페이지(`maxSearchPages`)를 넘기면 `ErrTooManySearchPages` 로 `nil` 과 에러를 반환한다.
   - 즉 "tasks 가 nil 이면 전체 실패, non-nil 이면 부분 결과(에러가 있을 수 있음)" 가 규칙이다.
 - 요청 바디는 `jql`(`myTasksJQL`), `fields`(`searchFields()` 8개, `jira.go:162`), `maxResults` 100, 두 번째 페이지부터 `nextPageToken`.
 
 ### httputil.HTTPClient (`internal/pkg/httputil/httputil.go`)
 
-- `Get(ctx, url, header)` / `Post(ctx, url, header, body)` 가 `[]byte` 응답 본문을 돌려준다. 생성자 `NewHTTPClient() HTTPClient` (`httputil.go:42`), `net/http` 와 고정 timeout 30초.
-- sentinel: `ErrFailedToCreateRequest`, `ErrFailedToSendRequest`(연결 실패·ctx 취소·timeout), `ErrFailedToReadResponseBody`, `ErrUnexpectedStatusCode`(2xx 외, 메시지에 `status=` 와 최대 512바이트 `body=`). 요청 헤더 값은 에러에 넣지 않는다. 재시도는 없다.
+- `Get(ctx, url, header)` / `Post(ctx, url, header, body)` 가 `[]byte` 응답 본문을 돌려준다. 생성자 `NewHTTPClient() HTTPClient`, `net/http` 와 고정 timeout 30초. redirect 는 따라가지 않는다(`CheckRedirect` 가 `http.ErrUseLastResponse`; 같은 host redirect 에 Authorization 이 재전송되는 것을 막음) — 3xx 는 `ErrUnexpectedStatusCode`.
+- sentinel: `ErrFailedToCreateRequest`, `ErrFailedToSendRequest`(연결 실패·ctx 취소·timeout), `ErrFailedToReadResponseBody`, `ErrUnexpectedStatusCode`(2xx 외, 메시지에 `status=` 와 최대 512바이트 `body=`), `ErrResponseBodyTooLarge`(2xx 본문 32 MiB 초과). 요청 헤더 값과 URL userinfo 는 에러에 넣지 않는다. 재시도는 없다.
 
 ### 도메인 타입 (`internal/pkg/task`)
 

@@ -117,6 +117,28 @@ func TestUnexpectedStatusCode(t *testing.T) {
 	}
 }
 
+func TestDoesNotFollowRedirects(t *testing.T) {
+	for _, status := range []int{http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Error("redirect target must not receive the request")
+			}))
+			t.Cleanup(target.Close)
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL+"/rest/api/3/search/jql", status)
+			}))
+			t.Cleanup(srv.Close)
+
+			body, err := httputil.NewHTTPClient().Post(t.Context(), srv.URL, header(), []byte(`{"jql":"x"}`))
+			require.ErrorIs(t, err, httputil.ErrUnexpectedStatusCode)
+			require.ErrorContains(t, err, "status="+strconv.Itoa(status))
+			require.NotContains(t, err.Error(), secret)
+			require.Nil(t, body)
+		})
+	}
+}
+
 func TestConnectionFailure(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	url := srv.URL

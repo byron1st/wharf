@@ -174,6 +174,10 @@ func TestLoad(t *testing.T) {
 		"https://",
 		"/rest/api/3",
 		"https://exa mple.atlassian.net",
+		"http://example.atlassian.net",
+		"https://example.atlassian.net?a=b",
+		"https://example.atlassian.net?",
+		"https://example.atlassian.net#top",
 	} {
 		t.Run("fails on invalid site url "+siteURL, func(t *testing.T) {
 			content := strings.Replace(atlassianKeys, "https://example.atlassian.net", siteURL, 1)
@@ -185,15 +189,6 @@ func TestLoad(t *testing.T) {
 			require.NotContains(t, err.Error(), "secret-token")
 		})
 	}
-
-	t.Run("accepts an http site url", func(t *testing.T) {
-		content := strings.Replace(atlassianKeys, "https://", "http://", 1)
-		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), content, 0o644)
-
-		cfg, err := config.Load(path)
-		require.NoError(t, err)
-		require.Equal(t, "http://example.atlassian.net", cfg.AtlassianSiteURL)
-	})
 }
 
 func TestLoadInvalidSiteURLDoesNotLeakUserinfo(t *testing.T) {

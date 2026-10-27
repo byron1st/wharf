@@ -36,8 +36,8 @@ type Config struct {
 	// DBPath is the SQLite database file path, defaulting to wharf/wharf.db
 	// under os.UserConfigDir, whose directory Load creates when missing.
 	DBPath string `toml:"db_path"`
-	// AtlassianSiteURL is the Jira Cloud REST API base URL, an absolute
-	// http(s) URL such as https://{site}.atlassian.net or
+	// AtlassianSiteURL is the Jira Cloud REST API base URL, an absolute https
+	// URL without query or fragment such as https://{site}.atlassian.net or
 	// https://api.atlassian.com/ex/jira/{cloudId} for scoped API tokens.
 	AtlassianSiteURL string `toml:"atlassian_site_url"`
 	// AtlassianEmail is the Atlassian account email used for Basic auth.
@@ -95,11 +95,14 @@ func Load(path string) (Config, error) {
 		}
 	}
 
+	// Only https is accepted since Basic auth would send the token in plain
+	// text over http. A query or fragment would end up before the API path.
 	// Userinfo is rejected (credentials come from the email/token keys) and
 	// never echoed: the message uses withoutUserinfo, and the *url.Error, which
 	// quotes the raw URL, is unwrapped to its cause.
 	u, err := url.Parse(cfg.AtlassianSiteURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil ||
+		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 		return Config{}, errors.Join(
 			fmt.Errorf("%w: path=%s, atlassian_site_url=%s", ErrInvalidAtlassianSiteURL, path, withoutUserinfo(u)),
 			errors.Unwrap(err),
