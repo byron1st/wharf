@@ -649,6 +649,38 @@ func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, 
 	return result.RowsAffected()
 }
 
+const upsertServiceDeskRequest = `-- name: UpsertServiceDeskRequest :exec
+INSERT INTO service_desk_requests (
+    issue_key, title, status, created_at, status_at
+) VALUES (
+    ?, ?, ?, ?, ?
+)
+ON CONFLICT (issue_key) DO UPDATE SET
+    title      = excluded.title,
+    status     = excluded.status,
+    created_at = excluded.created_at,
+    status_at  = excluded.status_at
+`
+
+type UpsertServiceDeskRequestParams struct {
+	IssueKey  string
+	Title     string
+	Status    string
+	CreatedAt time.Time
+	StatusAt  time.Time
+}
+
+func (q *Queries) UpsertServiceDeskRequest(ctx context.Context, arg UpsertServiceDeskRequestParams) error {
+	_, err := q.db.ExecContext(ctx, upsertServiceDeskRequest,
+		arg.IssueKey,
+		arg.Title,
+		arg.Status,
+		arg.CreatedAt,
+		arg.StatusAt,
+	)
+	return err
+}
+
 const upsertTask = `-- name: UpsertTask :exec
 INSERT INTO tasks (
     id, originated, title, description, status, start_date, due_date

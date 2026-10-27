@@ -163,3 +163,15 @@ SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = ?);
 
 -- name: CreateSchemaMigration :exec
 INSERT INTO schema_migrations (version) VALUES (?);
+
+-- name: UpsertServiceDeskRequest :exec
+INSERT INTO service_desk_requests (
+    issue_key, title, status, created_at, status_at
+) VALUES (
+    ?, ?, ?, ?, ?
+)
+ON CONFLICT (issue_key) DO UPDATE SET
+    title      = excluded.title,
+    status     = excluded.status,
+    created_at = excluded.created_at,
+    status_at  = excluded.status_at;

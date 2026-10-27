@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/pkg/todo"
 	"github.com/byron1st/wharf/scripts"
@@ -269,6 +270,11 @@ func TestMethodsRequireConnection(t *testing.T) {
 
 			require.ErrorIs(t, manager.UpdateTodo(context.Background(), todo.Todo{ID: 1}), db.ErrNotConnected)
 			require.ErrorIs(t, manager.DeleteTodo(context.Background(), 1), db.ErrNotConnected)
+			require.ErrorIs(
+				t,
+				manager.UpsertServiceDeskRequests(context.Background(), []servicedesk.Request{{Key: "SD-1"}}),
+				db.ErrNotConnected,
+			)
 
 			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
 			require.NoError(t, manager.Close())

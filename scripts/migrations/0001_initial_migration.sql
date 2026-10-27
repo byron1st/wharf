@@ -62,3 +62,13 @@ CREATE TABLE todo_reminders (
     remind_at DATETIME NOT NULL,
     PRIMARY KEY (todo_id, remind_at)
 );
+
+-- Service Desk customer requests are not tasks. issue_key is the Jira issue
+-- key. status_at is when the current status was attained, not issue.updated.
+CREATE TABLE service_desk_requests (
+    issue_key  TEXT PRIMARY KEY NOT NULL,
+    title      TEXT NOT NULL,
+    status     TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    status_at  DATETIME NOT NULL
+);

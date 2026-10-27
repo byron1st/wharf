@@ -29,6 +29,7 @@ var (
 
 type Service interface {
 	SyncJiraTasks(ctx context.Context) (SyncResult, error)
+	SyncServiceDeskRequests(ctx context.Context) (SyncResult, error)
 	ListTasks(ctx context.Context) ([]task.Task, error)
 	GetTask(ctx context.Context, id string) (TaskDetail, error)
 	CreateTask(ctx context.Context, t task.Task) (string, error)
@@ -45,15 +46,16 @@ type service struct {
 	db   db.Manager
 }
 
-// NewService returns a Service that syncs tasks from jira into db.
+// NewService returns a Service that syncs Atlassian data into db.
 func NewService(jira atlassian.Client, db db.Manager) Service {
 	return &service{jira: jira, db: db}
 }
 
 // SyncJiraTasks upserts the Jira tasks assigned to the current user. When
 // Jira returns no tasks with an error, such as a failed search, nothing is
-// stored and the error is returned. Otherwise every returned task is stored
-// and the Jira error, if any, is reported in SyncResult.Partial.
+// stored and the error is returned. Otherwise every returned task is stored,
+// including a task whose fields failed to convert, and that error is reported
+// in SyncResult.Partial.
 func (s *service) SyncJiraTasks(ctx context.Context) (SyncResult, error) {
 	tasks, err := s.jira.GetMyTasks(ctx)
 	if tasks == nil {
@@ -65,6 +67,23 @@ func (s *service) SyncJiraTasks(ctx context.Context) (SyncResult, error) {
 	}
 
 	return SyncResult{Upserted: len(tasks), Partial: err}, nil
+}
+
+// SyncServiceDeskRequests upserts Service Desk requests the current user
+// created. A nil slice, such as a failed page, stores nothing and returns the
+// error. Otherwise every returned request is stored. Requests that failed to
+// convert are omitted, and their error is reported in SyncResult.Partial.
+func (s *service) SyncServiceDeskRequests(ctx context.Context) (SyncResult, error) {
+	requests, err := s.jira.GetOwnedRequests(ctx)
+	if requests == nil {
+		return SyncResult{}, err
+	}
+
+	if err := s.db.UpsertServiceDeskRequests(ctx, requests); err != nil {
+		return SyncResult{}, err
+	}
+
+	return SyncResult{Upserted: len(requests), Partial: err}, nil
 }
 
 // ListTasks returns every stored task in ID order, without relations.

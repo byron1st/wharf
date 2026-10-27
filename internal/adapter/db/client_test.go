@@ -194,6 +194,11 @@ func TestInitialMigrationSchema(t *testing.T) {
 	require.Equal(t, []string{"id", "description", "is_done", "start_date", "end_date"}, columns("todos"))
 	require.Equal(t, []string{"todo_id", "task_id", "position"}, columns("task_todos"))
 	require.Equal(t, []string{"todo_id", "remind_at"}, columns("todo_reminders"))
+	require.Equal(
+		t,
+		[]string{"issue_key", "title", "status", "created_at", "status_at"},
+		columns("service_desk_requests"),
+	)
 
 	var todoIDIsPK bool
 
