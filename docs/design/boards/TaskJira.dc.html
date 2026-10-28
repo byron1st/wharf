@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Wharf — SEC-142 KMS 키 로테이션 정책 적용</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+KR:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#ffffff;color:#09090b;font-family:'Geist','Noto Sans KR',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#0f766e}a:hover{color:#115e59}
+</style>
+</helmet>
+<div style="position: relative; min-height: 100vh; overflow: hidden; background: #ffffff; font-family: 'Geist', 'Noto Sans KR', ui-sans-serif, system-ui, sans-serif; color: #09090b">
+  <div aria-hidden="true" style="pointer-events: none">
+    <dc-import name="TodayFinal" initial-task="SEC-142" hint-size="100%,1080px"></dc-import>
+  </div>
+  <div style="position: absolute; inset: 0; box-sizing: border-box; padding: 40px 24px; display: flex; justify-content: center; align-items: flex-start; background: rgba(9, 9, 11, 0.48)">
+    <div role="dialog" aria-modal="true" aria-label="SEC-142 KMS 키 로테이션 정책 적용" style="width: 100%; max-width: 960px; max-height: calc(100vh - 80px); overflow-y: auto; box-sizing: border-box; padding: 24px 28px 28px; border: 1px solid #e4e4e7; border-radius: 14px; background: #ffffff; box-shadow: 0 24px 64px rgba(0,0,0,0.28), 0 4px 12px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 20px">
+            <header style="display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px">
+              <div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                  <span style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: #eff6ff; border: 1px solid #dbeafe; font-size: 12px; font-weight: 600; color: #1d4ed8">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 22 12 12 22 2 12Z"></path></svg>Jira</span>
+                  <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px; color: #52525b">SEC-142</span>
+                  <span style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 9999px; background: #f4f4f5; font-size: 12px; font-weight: 500; color: #52525b">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Read-only</span>
+                </div>
+                <h1 style="margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25">KMS 키 로테이션 정책 적용</h1>
+              </div>
+              <div style="position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                <span style="height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid #fde68a; border-radius: 6px; background: #fffbeb; font-size: 14px; font-weight: 500; color: #92400e">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="#d97706" stroke-width="1.6"></circle><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6Z" fill="#d97706"></path></svg>
+                  In progress
+                </span>
+                <button type="button" aria-label="More actions" aria-expanded="true" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 6px; background: #f4f4f5; color: #09090b; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>
+                </button>
+                <div role="menu" aria-label="Task actions" style="position: absolute; top: 44px; right: 0; z-index: 10; width: 300px; box-sizing: border-box; padding: 4px; border: 1px solid #e4e4e7; border-radius: 8px; background: #ffffff; box-shadow: 0 10px 24px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column">
+                  <a href="#" role="menuitem" target="_blank" rel="noopener" style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-radius: 5px; background: #f4f4f5; text-decoration: none; color: #09090b">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>
+                    <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                      <span style="font-size: 13px; font-weight: 500">Open in Jira</span>
+                      <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #71717a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">…/browse/SEC-142</span>
+                    </span>
+                    <span style="font-size: 11px; color: #a1a1aa; margin-top: 2px">Browser</span>
+                  </a>
+                  <button type="button" role="menuitem" style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; border: none; border-radius: 5px; background: transparent; font: inherit; text-align: left; color: #09090b; cursor: pointer">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg>
+                    <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                      <span style="font-size: 13px; font-weight: 500">Sync from Jira</span>
+                      <span style="font-size: 12px; line-height: 1.4; color: #71717a">Pull the latest title, status, dates and description for this issue.</span>
+                    </span>
+                  </button>
+                </div>
+                <span aria-hidden="true" style="width: 1px; height: 24px; background: #e4e4e7; margin: 0 2px"></span>
+                <a href="TodayFinal.dc.html" aria-label="Close task detail" title="Close (Esc)" style="width: 36px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #52525b; text-decoration: none">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+                </a>
+              </div>
+            </header>
+
+            <div role="note" style="display: flex; gap: 12px; padding: 12px 14px; border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+              <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+                <span style="font-size: 14px; font-weight: 600; color: #1e3a8a">Managed in Jira</span>
+                <span style="font-size: 13px; line-height: 1.55; color: #1e40af">Title, status, dates and relations are a snapshot from the last Jira sync and can’t be edited here. If the issue is resolved or reassigned in Jira, this copy stays as it is. Your todos below are kept only in Wharf.</span>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+              <div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+
+                <section aria-label="Description" style="display: flex; flex-direction: column; gap: 10px">
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <h2 style="margin: 0; font-size: 13px; font-weight: 600; color: #52525b">Description</h2>
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #71717a"><svg width="16" height="12" viewBox="0 0 208 128" fill="none" stroke="currentColor" stroke-width="12" aria-hidden="true"><rect x="6" y="6" width="196" height="116" rx="14"></rect><path d="M30 98V30h20l20 25 20-25h20v68h-20V59l-20 25-20-25v39z" fill="currentColor" stroke="none"></path><path d="M155 98l-30-33h20V30h20v35h20z" fill="currentColor" stroke="none"></path></svg>Markdown from Jira</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 10px; min-width: 0; font-size: 14px; line-height: 1.65; color: #27272a">
+                    <sc-for list="{{md}}" as="b" hint-placeholder-count="3">
+                      <sc-if value="{{b.h}}" hint-placeholder-val="{{ false }}"><h3 style="margin: 4px 0 0; font-size: 14px; font-weight: 600; line-height: 1.4; color: #09090b">{{b.text}}</h3></sc-if>
+                      <sc-if value="{{b.p}}" hint-placeholder-val="{{ true }}"><p style="margin: 0"><sc-for list="{{b.runs}}" as="r" hint-placeholder-count="2"><sc-if value="{{r.plain}}" hint-placeholder-val="{{ true }}">{{r.text}}</sc-if><sc-if value="{{r.bold}}" hint-placeholder-val="{{ false }}"><strong style="font-weight: 600; color: #09090b">{{r.text}}</strong></sc-if><sc-if value="{{r.code}}" hint-placeholder-val="{{ false }}"><code style="padding: 1px 5px; border-radius: 4px; background: #f4f4f5; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.86em; color: #3f3f46">{{r.text}}</code></sc-if><sc-if value="{{r.link}}" hint-placeholder-val="{{ false }}"><a href="{{r.href}}" style="color: #0f766e; text-decoration: underline; text-underline-offset: 2px">{{r.text}}</a></sc-if></sc-for></p></sc-if>
+                      <sc-if value="{{b.quote}}" hint-placeholder-val="{{ false }}"><blockquote style="margin: 0; padding: 8px 12px; border: 1px solid #ececee; border-radius: 8px; background: #fafafa; color: #52525b"><sc-for list="{{b.runs}}" as="r" hint-placeholder-count="2"><sc-if value="{{r.plain}}" hint-placeholder-val="{{ true }}">{{r.text}}</sc-if><sc-if value="{{r.bold}}" hint-placeholder-val="{{ false }}"><strong style="font-weight: 600; color: #09090b">{{r.text}}</strong></sc-if><sc-if value="{{r.code}}" hint-placeholder-val="{{ false }}"><code style="padding: 1px 5px; border-radius: 4px; background: #f4f4f5; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.86em; color: #3f3f46">{{r.text}}</code></sc-if><sc-if value="{{r.link}}" hint-placeholder-val="{{ false }}"><a href="{{r.href}}" style="color: #0f766e; text-decoration: underline; text-underline-offset: 2px">{{r.text}}</a></sc-if></sc-for></blockquote></sc-if>
+                      <sc-if value="{{b.code}}" hint-placeholder-val="{{ false }}"><pre style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #18181b; color: #e4e4e7; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all">{{b.text}}</pre></sc-if>
+                      <sc-if value="{{b.ul}}" hint-placeholder-val="{{ false }}"><ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px"><sc-for list="{{b.items}}" as="it" hint-placeholder-count="2"><li style="display: flex; align-items: flex-start; gap: 8px"><sc-if value="{{it.bullet}}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width: 5px; height: 5px; margin-top: 0.62em; flex-shrink: 0; border-radius: 9999px; background: #a1a1aa"></span></sc-if><sc-if value="{{it.unchecked}}" hint-placeholder-val="{{ false }}"><span role="img" aria-label="Not done" style="width: 14px; height: 14px; margin-top: 0.3em; flex-shrink: 0; box-sizing: border-box; border: 1.5px solid #a1a1aa; border-radius: 4px"></span></sc-if><sc-if value="{{it.checked}}" hint-placeholder-val="{{ false }}"><span role="img" aria-label="Done" style="width: 14px; height: 14px; margin-top: 0.3em; flex-shrink: 0; border-radius: 4px; background: #0f766e; display: flex; align-items: center; justify-content: center"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span></sc-if><span style="min-width: 0; text-decoration: {{it.deco}}; color: {{it.color}}"><sc-for list="{{it.runs}}" as="r" hint-placeholder-count="2"><sc-if value="{{r.plain}}" hint-placeholder-val="{{ true }}">{{r.text}}</sc-if><sc-if value="{{r.bold}}" hint-placeholder-val="{{ false }}"><strong style="font-weight: 600; color: #09090b">{{r.text}}</strong></sc-if><sc-if value="{{r.code}}" hint-placeholder-val="{{ false }}"><code style="padding: 1px 5px; border-radius: 4px; background: #f4f4f5; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.86em; color: #3f3f46">{{r.text}}</code></sc-if><sc-if value="{{r.link}}" hint-placeholder-val="{{ false }}"><a href="{{r.href}}" style="color: #0f766e; text-decoration: underline; text-underline-offset: 2px">{{r.text}}</a></sc-if></sc-for></span></li></sc-for></ul></sc-if>
+                    </sc-for>
+                  </div>
+                </section>
+
+                <section aria-label="Todos" style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.04); overflow: hidden">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #f4f4f5">
+                    <h2 style="margin: 0; font-size: 15px; font-weight: 600">Todos</h2>
+                    <span style="font-size: 13px; color: #52525b; font-variant-numeric: tabular-nums">{{doneCount}} of {{total}}</span>
+                    <span style="width: 96px; height: 6px; border-radius: 9999px; background: #f4f4f5; overflow: hidden; display: flex"><span style="width: {{pct}}%; background: #0f766e; border-radius: 9999px"></span></span>
+                    <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #0f766e; background: #f0fdfa; border-radius: 9999px; padding: 2px 10px">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
+                      Editable — stays in Wharf
+                    </span>
+                  </div>
+                  <ol style="list-style: none; margin: 0; padding: 0">
+                    <sc-for list="{{todos}}" as="t" hint-placeholder-count="5">
+                      <li style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px 12px 8px; border-bottom: 1px solid #f4f4f5">
+                        <button type="button" aria-label="Drag to reorder" style="width: 20px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding: 0; border: none; background: transparent; color: #a1a1aa; cursor: grab">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"></circle><circle cx="15" cy="6" r="1.5"></circle><circle cx="9" cy="12" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="9" cy="18" r="1.5"></circle><circle cx="15" cy="18" r="1.5"></circle></svg>
+                        </button>
+                        <button type="button" role="checkbox" aria-checked="{{t.checked}}" aria-label="{{t.text}}" onClick="{{t.toggle}}" style="margin-top: 2px; width: 18px; height: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 5px; border: 1.5px solid {{t.boxBorder}}; background: {{t.boxBg}}; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05)">
+                          <sc-if value="{{t.checked}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></sc-if>
+                        </button>
+                        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+                          <span style="font-size: 14px; line-height: 1.45; color: {{t.textColor}}; text-decoration: {{t.deco}}">{{t.text}}</span>
+                          <sc-if value="{{t.hasMeta}}" hint-placeholder-val="{{ true }}">
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px">
+                              <sc-if value="{{t.hasRange}}" hint-placeholder-val="{{ true }}">
+                                <span style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: {{t.rangeBg}}; font-size: 12px; font-weight: {{t.rangeWeight}}; color: {{t.rangeColor}}; font-variant-numeric: tabular-nums">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h18"></path></svg>{{t.range}}</span>
+                              </sc-if>
+                              <sc-for list="{{t.rems}}" as="r" hint-placeholder-count="1">
+                                <span title="{{r.tip}}" style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: {{r.bg}}; font-size: 12px; color: {{r.color}}; font-variant-numeric: tabular-nums">
+                                  <sc-if value="{{r.fired}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M20 6 9 17l-5-5"></path></svg></sc-if><sc-if value="{{r.upcoming}}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></sc-if>{{r.label}}</span>
+                              </sc-for>
+                            </div>
+                          </sc-if>
+                        </div>
+                        <button type="button" aria-label="Edit todo" style="width: 30px; height: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: none; border-radius: 6px; background: transparent; color: #52525b; cursor: pointer">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>
+                        </button>
+                      </li>
+                    </sc-for>
+                  </ol>
+                  <form style="display: flex; align-items: center; gap: 10px; padding: 10px 16px 10px 38px">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+                    <label style="flex: 1; display: flex">
+                      <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">New todo</span>
+                      <input type="text" placeholder="Add a todo — press Enter" style="flex: 1; min-width: 0; height: 32px; border: none; outline: none; font: inherit; font-size: 14px; color: #09090b; background: transparent">
+                    </label>
+                  </form>
+                </section>
+              </div>
+
+              <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+                <section aria-label="Details" style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 16px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.04)">
+                  <h2 style="margin: 0 0 8px; font-size: 14px; font-weight: 600">Details</h2>
+                  <div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 32px; font-size: 13px">
+                    <span style="color: #71717a">Status</span>
+                    <span style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="#d97706" stroke-width="1.6"></circle><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6Z" fill="#d97706"></path></svg>In progress</span>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 32px; font-size: 13px">
+                    <span style="color: #71717a">Start</span>
+                    <span style="color: #a1a1aa">Not set</span>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 32px; font-size: 13px">
+                    <span style="color: #71717a">Due</span>
+                    <span style="font-variant-numeric: tabular-nums">Oct 28, 2026 <span style="color: #71717a">· in 2 days</span></span>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 32px; font-size: 13px">
+                    <span style="color: #71717a">ID</span>
+                    <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: #3f3f46">jira-SEC-142</span>
+                  </div>
+                </section>
+
+                <section aria-label="Relations" style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 16px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04)">
+                  <h2 style="margin: 0; font-size: 14px; font-weight: 600">Relations</h2>
+                  <div style="display: flex; flex-direction: column; gap: 8px">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #71717a">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9 9 4 4 9"></path><path d="M20 20h-7a4 4 0 0 1-4-4V4"></path></svg>
+                      Parent
+                    </div>
+                    <div title="Not in Wharf — only the ID is known" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed #d4d4d8; border-radius: 8px; background: #fafafa">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="#d4d4d8" stroke-width="1.6" stroke-dasharray="2 2"></circle></svg>
+                      <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: #52525b">jira-SEC-120</span>
+                      <span style="margin-left: auto; font-size: 11px; color: #71717a">Not in Wharf</span>
+                    </div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #71717a">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 15 5 5 5-5"></path><path d="M4 4h7a4 4 0 0 1 4 4v12"></path></svg>
+                      Children
+                    </div>
+                    <span style="font-size: 13px; color: #a1a1aa; padding: 2px 0">No child tasks</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: #71717a">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                      Linked · 1
+                    </div>
+                    <a href="TaskLocal.dc.html" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #e4e4e7; border-radius: 8px; text-decoration: none; color: #09090b; min-width: 0">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" role="img" aria-label="In progress" style="flex-shrink: 0"><circle cx="8" cy="8" r="6" stroke="#d97706" stroke-width="1.6"></circle><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6Z" fill="#d97706"></path></svg>
+                      <span style="width: 15px; height: 15px; border-radius: 4px; background: #ccfbf1; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Local"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M2 20h20"></path></svg></span>
+                      <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: #52525b; flex-shrink: 0">WHF-003</span>
+                      <span style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">결제 모듈 리팩터링</span>
+                    </a>
+                  </div>
+                  <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #71717a; border-top: 1px solid #f4f4f5; padding-top: 12px">To group this issue with your own work, add it to a local task’s children or links.</p>
+                </section>
+              </div>
+            </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  state = { done: { 24: true, 25: true } };
+
+  renderVals() {
+    var self = this;
+
+    // Minimal Markdown → blocks for rendering (headings, paragraphs, lists, task lists, quotes, fenced code; **bold**, `code`, [link](url)).
+    function mdRuns(s) {
+      var out = [], re = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g, last = 0, m;
+      while ((m = re.exec(s))) {
+        if (m.index > last) out.push({ plain: true, text: s.slice(last, m.index) });
+        var t = m[0];
+        if (t.charAt(0) === '*') out.push({ bold: true, text: t.slice(2, -2) });
+        else if (t.charAt(0) === '`') out.push({ code: true, text: t.slice(1, -1) });
+        else { var mm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(t); out.push({ link: true, text: mm[1], href: mm[2] }); }
+        last = m.index + t.length;
+      }
+      if (last < s.length) out.push({ plain: true, text: s.slice(last) });
+      return out;
+    }
+    function mdBlocks(src) {
+      var lines = (src || '').split('\n'), blocks = [], i = 0;
+      while (i < lines.length) {
+        var ln = lines[i];
+        if (/^```/.test(ln)) { var buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; } i++; blocks.push({ code: true, text: buf.join('\n') }); continue; }
+        if (/^#{1,6}\s/.test(ln)) { blocks.push({ h: true, text: ln.replace(/^#+\s*/, '') }); i++; continue; }
+        if (/^>\s?/.test(ln)) { var q = []; while (i < lines.length && /^>\s?/.test(lines[i])) { q.push(lines[i].replace(/^>\s?/, '')); i++; } blocks.push({ quote: true, runs: mdRuns(q.join(' ')) }); continue; }
+        if (/^\s*[-*]\s/.test(ln)) {
+          var items = [];
+          while (i < lines.length && /^\s*[-*]\s/.test(lines[i])) {
+            var tx = lines[i].replace(/^\s*[-*]\s/, ''), tm = /^\[( |x)\]\s/.exec(tx), ck = !!(tm && tm[1] === 'x');
+            items.push({ bullet: !tm, checked: ck, unchecked: !!(tm && !ck), deco: ck ? 'line-through' : 'none', color: ck ? '#71717a' : 'inherit', runs: mdRuns(tm ? tx.slice(4) : tx) });
+            i++;
+          }
+          blocks.push({ ul: true, items: items }); continue;
+        }
+        if (!ln.trim()) { i++; continue; }
+        var para = [];
+        while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|>|\s*[-*]\s)/.test(lines[i])) { para.push(lines[i]); i++; }
+        blocks.push({ p: true, runs: mdRuns(para.join(' ')) });
+      }
+      return blocks;
+    }
+    function descModeVals(mode, set) {
+      var w = mode === 'write';
+      return {
+        descWrite: w, descPreview: !w,
+        wrBg: w ? '#ffffff' : 'transparent', wrShadow: w ? '0 1px 2px rgba(0,0,0,0.08)' : 'none', wrColor: w ? '#09090b' : '#71717a',
+        pvBg: !w ? '#ffffff' : 'transparent', pvShadow: !w ? '0 1px 2px rgba(0,0,0,0.08)' : 'none', pvColor: !w ? '#09090b' : '#71717a',
+        toWrite: function () { set('write'); }, toPreview: function () { set('preview'); }, mdNoop: function () {}
+      };
+    }
+    var done = this.state.done || {};
+    var raw = [
+      { id: 24, text: '현행 키 사용처 목록 추출', range: 'Oct 15 – Oct 17' },
+      { id: 25, text: '보안팀 정책 초안 공유', range: 'Oct 19' },
+      { id: 21, text: '로테이션 주기 변경(90일 → 30일) 영향 검토', range: 'Oct 21 – Oct 23', tone: 'over' },
+      { id: 22, text: 'KMS 서명 키 별칭 매핑 표 작성', range: 'Due today', tone: 'today', rems: [{ label: 'Today · 11:00', fired: true }] },
+      { id: 23, text: 'API 스펙 리뷰 요청', range: 'Oct 26 – Oct 28', rems: [{ label: 'Oct 27 · 10:00' }] }
+    ];
+    var doneCount = 0;
+    raw.forEach(function (o) { if (done[o.id]) doneCount++; });
+    var todos = raw.map(function (o) {
+      var checked = !!done[o.id];
+      var rems = (o.rems || []).map(function (r) { var fired = !!r.fired; return { label: r.label, fired: fired, upcoming: !fired, tip: fired ? 'Already sent' : '', bg: fired ? '#f4f4f5' : '#f5f3ff', color: fired ? '#a1a1aa' : '#6d28d9' }; });
+      var tone = checked ? 'normal' : (o.tone || 'normal');
+      return {
+        text: o.text, checked: checked,
+        boxBorder: checked ? '#0f766e' : '#a1a1aa', boxBg: checked ? '#0f766e' : '#ffffff',
+        textColor: checked ? '#71717a' : '#09090b', deco: checked ? 'line-through' : 'none',
+        hasRange: !!o.range, range: o.range || '',
+        rangeColor: tone === 'over' ? '#b91c1c' : tone === 'today' ? '#9a3412' : '#52525b',
+        rangeBg: tone === 'over' ? '#fef2f2' : tone === 'today' ? '#fff7ed' : '#f4f4f5',
+        rangeWeight: tone === 'normal' ? '400' : '500',
+        rems: rems, hasMeta: !!o.range || rems.length > 0,
+        toggle: function () {
+          var next = Object.assign({}, self.state.done);
+          next[o.id] = !checked;
+          self.setState({ done: next });
+        }
+      };
+    });
+    return {
+      md: mdBlocks('서명 키 로테이션 주기를 **90일 → 30일**로 단축한다.\n\n## 대상\n- 감사 로그 서명 키\n- 데이터 무결성 증명 키\n\n## 적용 방식\nKMS 별칭(alias)을 서비스별로 분리하고, 이전 키 버전은 검증용으로 **180일** 유지한다.\n\n```\naws kms list-aliases --query "Aliases[?starts_with(AliasName, \'alias/sec-\')]"\n```\n\n> 적용 전 보안팀 정책 리뷰 필요'), todos: todos, doneCount: doneCount, total: raw.length, pct: Math.round(doneCount / raw.length * 100) };
+  }
+}
+</script>
+</body>
+</html>
