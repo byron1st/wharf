@@ -47,6 +47,11 @@ type TaskLink struct {
 	LinkedID string
 }
 
+type TaskServiceDeskRequest struct {
+	TaskID   string
+	IssueKey string
+}
+
 type TaskTodo struct {
 	TodoID   int64
 	TaskID   string

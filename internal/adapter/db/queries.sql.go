@@ -47,6 +47,29 @@ func (q *Queries) CreateTaskLink(ctx context.Context, arg CreateTaskLinkParams) 
 	return err
 }
 
+const createTaskServiceDeskRequest = `-- name: CreateTaskServiceDeskRequest :execrows
+INSERT INTO task_service_desk_requests (task_id, issue_key)
+SELECT ?1, ?2
+WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = ?1)
+  AND EXISTS (SELECT 1 FROM service_desk_requests WHERE service_desk_requests.issue_key = ?2)
+ON CONFLICT (task_id, issue_key) DO NOTHING
+`
+
+type CreateTaskServiceDeskRequestParams struct {
+	TaskID   string
+	IssueKey string
+}
+
+// Inserts nothing when the task or the request is not stored or the link
+// exists, so the check is a write as the transaction's first statement.
+func (q *Queries) CreateTaskServiceDeskRequest(ctx context.Context, arg CreateTaskServiceDeskRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, createTaskServiceDeskRequest, arg.TaskID, arg.IssueKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const createTaskTodo = `-- name: CreateTaskTodo :exec
 INSERT INTO task_todos (todo_id, task_id, position) VALUES (?, ?, ?)
 `
@@ -178,6 +201,32 @@ func (q *Queries) DeleteTaskParent(ctx context.Context, childID string) error {
 	return err
 }
 
+const deleteTaskServiceDeskRequest = `-- name: DeleteTaskServiceDeskRequest :execrows
+DELETE FROM task_service_desk_requests WHERE task_id = ? AND issue_key = ?
+`
+
+type DeleteTaskServiceDeskRequestParams struct {
+	TaskID   string
+	IssueKey string
+}
+
+func (q *Queries) DeleteTaskServiceDeskRequest(ctx context.Context, arg DeleteTaskServiceDeskRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteTaskServiceDeskRequest, arg.TaskID, arg.IssueKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteTaskServiceDeskRequestsOfTask = `-- name: DeleteTaskServiceDeskRequestsOfTask :exec
+DELETE FROM task_service_desk_requests WHERE task_id = ?
+`
+
+func (q *Queries) DeleteTaskServiceDeskRequestsOfTask(ctx context.Context, taskID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTaskServiceDeskRequestsOfTask, taskID)
+	return err
+}
+
 const deleteTaskTodo = `-- name: DeleteTaskTodo :one
 DELETE FROM task_todos WHERE todo_id = ? RETURNING task_id, position
 `
@@ -248,6 +297,17 @@ SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = ?)
 
 func (q *Queries) ExistsSchemaMigration(ctx context.Context, version string) (bool, error) {
 	row := q.db.QueryRowContext(ctx, existsSchemaMigration, version)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const existsServiceDeskRequest = `-- name: ExistsServiceDeskRequest :one
+SELECT EXISTS (SELECT 1 FROM service_desk_requests WHERE issue_key = ?)
+`
+
+func (q *Queries) ExistsServiceDeskRequest(ctx context.Context, issueKey string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, existsServiceDeskRequest, issueKey)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -350,6 +410,43 @@ func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]string, e
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskServiceDeskRequests = `-- name: ListTaskServiceDeskRequests :many
+SELECT service_desk_requests.issue_key, service_desk_requests.title, service_desk_requests.status, service_desk_requests.created_at, service_desk_requests.status_at
+FROM task_service_desk_requests
+JOIN service_desk_requests ON service_desk_requests.issue_key = task_service_desk_requests.issue_key
+WHERE task_service_desk_requests.task_id = ?
+ORDER BY service_desk_requests.issue_key
+`
+
+func (q *Queries) ListTaskServiceDeskRequests(ctx context.Context, taskID string) ([]ServiceDeskRequest, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskServiceDeskRequests, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ServiceDeskRequest
+	for rows.Next() {
+		var i ServiceDeskRequest
+		if err := rows.Scan(
+			&i.IssueKey,
+			&i.Title,
+			&i.Status,
+			&i.CreatedAt,
+			&i.StatusAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

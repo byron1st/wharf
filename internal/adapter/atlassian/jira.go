@@ -1,6 +1,8 @@
 package atlassian
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -13,6 +15,110 @@ var (
 	ErrFailedToParseStartDate = errors.New("atlassian: failed to parse start date")
 	ErrFailedToParseDueDate   = errors.New("atlassian: failed to parse due date")
 )
+
+const (
+	searchPath = "/rest/api/3/search/jql"
+
+	// maxSearchPages caps the pages one GetMyTasks follows (100 pages of
+	// searchMaxResults = 10,000 work items) so a server that never ends the
+	// token chain cannot loop until ctx ends.
+	maxSearchPages = 100
+
+	myTasksJQL = "assignee = currentUser() AND statusCategory != done"
+
+	// Jira Cloud's default "Start date" field.
+	startDateField = "customfield_10015"
+
+	// searchMaxResults is the requested page size; Jira may return fewer
+	// items per page when many fields are requested.
+	searchMaxResults = 100
+)
+
+// GetMyTasks returns the Jira work items assigned to the current user that are
+// not done, following every search page. A failed page, a repeated page token,
+// or more than maxSearchPages pages returns nil and the error. Items that fail
+// to decode or convert are reported in the joined error alongside the tasks
+// that succeeded.
+func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
+	tasks := []task.Task{}
+
+	var (
+		errs  []error
+		token string
+		seen  int
+	)
+
+	for pages := 1; ; pages++ {
+		page, err := c.search(ctx, token)
+		if err != nil {
+			return nil, err
+		}
+
+		for i, raw := range page.Issues {
+			index := seen + i
+
+			var item ViewWorkItem
+			if err := json.Unmarshal(raw, &item); err != nil {
+				errs = append(errs, errors.Join(fmt.Errorf("%w: index=%d", ErrFailedToParseWorkItem, index), err))
+				continue
+			}
+
+			if item.Key == "" {
+				errs = append(errs, fmt.Errorf("%w: index=%d", ErrMissingWorkItemKey, index))
+				continue
+			}
+
+			t, err := ToTask(item)
+			errs = append(errs, err)
+			tasks = append(tasks, t)
+		}
+
+		seen += len(page.Issues)
+
+		if page.IsLast || page.NextPageToken == "" {
+			return tasks, errors.Join(errs...)
+		}
+
+		if page.NextPageToken == token {
+			return nil, fmt.Errorf("%w: page=%d", ErrRepeatedSearchPageToken, pages)
+		}
+
+		if pages == maxSearchPages {
+			return nil, fmt.Errorf("%w: max=%d", ErrTooManySearchPages, maxSearchPages)
+		}
+
+		token = page.NextPageToken
+	}
+}
+
+func (c *client) search(ctx context.Context, token string) (searchResponse, error) {
+	body, err := json.Marshal(searchRequest{
+		JQL:           myTasksJQL,
+		Fields:        searchFields(),
+		MaxResults:    searchMaxResults,
+		NextPageToken: token,
+	})
+	if err != nil {
+		return searchResponse{}, errors.Join(ErrFailedToEncodeSearchRequest, err)
+	}
+
+	out, err := c.http.Post(ctx, c.searchURL, c.header, body)
+	if err != nil {
+		return searchResponse{}, err
+	}
+
+	var page searchResponse
+	if err := json.Unmarshal(out, &page); err != nil {
+		return searchResponse{}, errors.Join(ErrFailedToParseSearchOutput, err)
+	}
+
+	return page, nil
+}
+
+// searchFields returns a fresh slice of the fields every search page returns.
+func searchFields() []string {
+	return []string{"summary", "description", "status", "duedate", "parent", "subtasks", "issuelinks", startDateField}
+}
 
 type ViewWorkItem struct {
 	Key    string `json:"key"`
@@ -145,20 +251,4 @@ func ToStatus(name string, categoryKey StatusCategoryKey) (task.Status, error) {
 	}
 
 	return "", fmt.Errorf("%w: status=%s, category=%s", ErrUnknownStatusCategory, name, categoryKey)
-}
-
-const (
-	myTasksJQL = "assignee = currentUser() AND statusCategory != done"
-
-	// Jira Cloud's default "Start date" field.
-	startDateField = "customfield_10015"
-
-	// searchMaxResults is the requested page size; Jira may return fewer
-	// items per page when many fields are requested.
-	searchMaxResults = 100
-)
-
-// searchFields returns a fresh slice of the fields every search page returns.
-func searchFields() []string {
-	return []string{"summary", "description", "status", "duedate", "parent", "subtasks", "issuelinks", startDateField}
 }

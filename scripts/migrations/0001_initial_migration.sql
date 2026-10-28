@@ -72,3 +72,12 @@ CREATE TABLE service_desk_requests (
     created_at DATETIME NOT NULL,
     status_at  DATETIME NOT NULL
 );
+
+-- A task relates to Service Desk requests and a request to tasks. A row is
+-- one undirected relates-to link. Like the task relations, there are no
+-- foreign keys; db.Manager checks both sides exist when it links them.
+CREATE TABLE task_service_desk_requests (
+    task_id   TEXT NOT NULL,
+    issue_key TEXT NOT NULL,
+    PRIMARY KEY (task_id, issue_key)
+);
