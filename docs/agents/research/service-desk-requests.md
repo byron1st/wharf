@@ -51,7 +51,7 @@ sequenceDiagram
 
 - `summary` 는 문자열이다. 공식 예시는 최상위 `summary` 가 빠진 항목에 `requestFieldValues[].fieldId == "summary"` 를 둔다. 그 `value` 스키마는 타입이 없고, 예시에서는 JSON 문자열이다.
 - `currentStatus.status` 는 상태 이름 문자열이다. `currentStatus.statusDate` 는 "Date on which the status was attained" 다.
-- `currentStatus.statusCategory` 는 Jira 상태 카테고리(`NEW`·`INDETERMINATE`·`DONE`·`UNDEFINED`)다. 상태 이름은 프로젝트마다 다르므로("Done"·"Canceled"·"Resolved" 등) 닫힌 요청은 이름이 아니라 `DONE` 카테고리로 가른다. `toRequest` 는 이 값을 `servicedesk.Request.StatusCategory` 로 원문 그대로 옮기고, 공백뿐이면 `ErrMissingRequestCategory` 로 그 항목을 뺀다 (`internal/adapter/atlassian/servicedesk.go:182`). 테이블 컬럼은 `service_desk_requests.status_category` 다.
+- `currentStatus.statusCategory` 는 Jira 상태 카테고리(`NEW`·`INDETERMINATE`·`DONE`·`UNDEFINED`)다. 상태 이름은 프로젝트마다 다르므로("Done"·"Canceled"·"Resolved" 등) 닫힌 요청은 이름이 아니라 `DONE` 카테고리로 가른다. `toRequest` 는 이 값을 trim 해 `servicedesk.Request.StatusCategory` 로 옮긴다. 비었거나 필드가 없으면 그 항목을 빼지 않고 `UNDEFINED` 로 둔다 (`internal/adapter/atlassian/servicedesk.go:184`). 빈 status 처럼 항목을 버리면, 어떤 인스턴스·API 버전이 이 필드를 빼는 순간 모든 요청이 부분 실패로 빠지고 기존 행과 todo 연결이 낡기 때문이다. `UNDEFINED` 는 닫힌 요청이 아니므로 Today 에 남는다. 테이블 컬럼은 `service_desk_requests.status_category` 다.
 - `createdDate` 와 `statusDate` 는 `DateDTO`: `epochMillis`, `friendly`, `iso8601`, `jira`. 공식 예시의 `iso8601` 은 `2015-10-08T14:42:00+0700` 처럼 타임존 콜론이 없다. `epochMillis` 는 UTC 밀리초다.
 - `reporter` 는 `UserDTO` (`displayName` 등)이고 요청을 올린 고객이다. 담당 에이전트가 아니다.
 

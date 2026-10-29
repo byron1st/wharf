@@ -247,8 +247,6 @@ func TestGetOwnedRequestsSkipsBadItems(t *testing.T) {
 	missingCreated := sdRequest("SD-4", "Title", "Open", 0, statusAtMillis)
 	missingStatusAt := sdRequest("SD-5", "Title", "Open", createdMillis, 0)
 	blankStatus := sdRequest("SD-6", "Title", "   ", createdMillis, statusAtMillis)
-	blankCategory := sdRequest("SD-8", "Title", "Open", createdMillis, statusAtMillis)
-	blankCategory["currentStatus"].(map[string]any)["statusCategory"] = " "
 	objectTitle := sdRequest("SD-7", "", "Open", createdMillis, statusAtMillis)
 	objectTitle["requestFieldValues"] = []any{
 		map[string]any{"fieldId": "summary", "value": map[string]any{"text": "no"}},
@@ -262,7 +260,6 @@ func TestGetOwnedRequestsSkipsBadItems(t *testing.T) {
 		sdItem(t, missingStatusAt),
 		sdItem(t, blankStatus),
 		sdItem(t, objectTitle),
-		sdItem(t, blankCategory),
 		sdItem(t, good),
 	}
 
@@ -277,12 +274,33 @@ func TestGetOwnedRequestsSkipsBadItems(t *testing.T) {
 	require.ErrorIs(t, err, atlassian.ErrMissingRequestCreated)
 	require.ErrorIs(t, err, atlassian.ErrMissingRequestStatusDate)
 	require.ErrorIs(t, err, atlassian.ErrMissingRequestStatus)
-	require.ErrorIs(t, err, atlassian.ErrMissingRequestCategory)
 	require.ErrorContains(t, err, "index=0")
 	require.ErrorContains(t, err, "index=1")
 	require.ErrorContains(t, err, "key=SD-3")
 	require.ErrorContains(t, err, "key=SD-6")
-	require.ErrorContains(t, err, "key=SD-8")
+}
+
+func TestGetOwnedRequestsDefaultsBlankStatusCategory(t *testing.T) {
+	blank := sdRequest("SD-1", "Mouse", "Open", createdMillis, statusAtMillis)
+	blank["currentStatus"].(map[string]any)["statusCategory"] = " "
+
+	missing := sdRequest("SD-2", "Account", "Open", createdMillis, statusAtMillis)
+	delete(missing["currentStatus"].(map[string]any), "statusCategory")
+
+	m := mocks.NewMockHTTPClient(t)
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(0), header).
+		Return(sdPage(t, 2, true, sdItem(t, blank), sdItem(t, missing)), nil).
+		Once()
+
+	got, err := newClient(m).GetOwnedRequests(t.Context())
+	require.NoError(t, err)
+
+	want := []servicedesk.Request{wantRequest("SD-1", "Mouse", "Open"), wantRequest("SD-2", "Account", "Open")}
+	for i := range want {
+		want[i].StatusCategory = "UNDEFINED"
+	}
+
+	require.Equal(t, want, got)
 }
 
 func TestGetOwnedRequestsCanceledContext(t *testing.T) {
