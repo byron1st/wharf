@@ -191,25 +191,29 @@ func TestInitialMigrationSchema(t *testing.T) {
 	require.Equal(t, []string{"child_id", "parent_id"}, columns("task_hierarchies"))
 	require.Equal(t, []string{"task_id", "linked_id"}, columns("task_links"))
 	require.Equal(t, []string{"name", "value"}, columns("counters"))
-	require.Equal(t, []string{"id", "description", "is_done", "start_date", "end_date"}, columns("todos"))
+	require.Equal(
+		t,
+		[]string{"id", "description", "note", "is_done", "completed_at", "start_date", "end_date"},
+		columns("todos"),
+	)
 	require.Equal(t, []string{"todo_id", "task_id", "position"}, columns("task_todos"))
 	require.Equal(t, []string{"todo_id", "remind_at"}, columns("todo_reminders"))
 	require.Equal(
 		t,
-		[]string{"issue_key", "title", "status", "created_at", "status_at"},
+		[]string{"issue_key", "title", "status", "status_category", "created_at", "status_at"},
 		columns("service_desk_requests"),
 	)
-	require.Equal(t, []string{"task_id", "issue_key"}, columns("task_service_desk_requests"))
+	require.Equal(t, []string{"todo_id", "issue_key"}, columns("todo_service_desk_requests"))
 
 	var linkPK string
 
 	err := conn.QueryRowContext(
 		context.Background(),
 		"SELECT group_concat(name, ',') FROM "+
-			"(SELECT name FROM pragma_table_info('task_service_desk_requests') WHERE pk > 0 ORDER BY pk)",
+			"(SELECT name FROM pragma_table_info('todo_service_desk_requests') WHERE pk > 0 ORDER BY pk)",
 	).Scan(&linkPK)
 	require.NoError(t, err)
-	require.Equal(t, "task_id,issue_key", linkPK)
+	require.Equal(t, "todo_id,issue_key", linkPK)
 
 	var todoIDIsPK bool
 

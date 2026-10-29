@@ -47,29 +47,6 @@ func (q *Queries) CreateTaskLink(ctx context.Context, arg CreateTaskLinkParams) 
 	return err
 }
 
-const createTaskServiceDeskRequest = `-- name: CreateTaskServiceDeskRequest :execrows
-INSERT INTO task_service_desk_requests (task_id, issue_key)
-SELECT ?1, ?2
-WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = ?1)
-  AND EXISTS (SELECT 1 FROM service_desk_requests WHERE service_desk_requests.issue_key = ?2)
-ON CONFLICT (task_id, issue_key) DO NOTHING
-`
-
-type CreateTaskServiceDeskRequestParams struct {
-	TaskID   string
-	IssueKey string
-}
-
-// Inserts nothing when the task or the request is not stored or the link
-// exists, so the check is a write as the transaction's first statement.
-func (q *Queries) CreateTaskServiceDeskRequest(ctx context.Context, arg CreateTaskServiceDeskRequestParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, createTaskServiceDeskRequest, arg.TaskID, arg.IssueKey)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const createTaskTodo = `-- name: CreateTaskTodo :exec
 INSERT INTO task_todos (todo_id, task_id, position) VALUES (?, ?, ?)
 `
@@ -86,15 +63,17 @@ func (q *Queries) CreateTaskTodo(ctx context.Context, arg CreateTaskTodoParams) 
 }
 
 const createTodo = `-- name: CreateTodo :one
-INSERT INTO todos (description, is_done, start_date, end_date)
-SELECT ?1, ?2, ?3, ?4
-WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = ?5)
+INSERT INTO todos (description, note, is_done, completed_at, start_date, end_date)
+SELECT ?1, ?2, ?3, ?4, ?5, ?6
+WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = ?7)
 RETURNING id
 `
 
 type CreateTodoParams struct {
 	Description string
+	Note        string
 	IsDone      bool
+	CompletedAt sql.NullTime
 	StartDate   sql.NullString
 	EndDate     sql.NullString
 	TaskID      string
@@ -105,7 +84,9 @@ type CreateTodoParams struct {
 func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createTodo,
 		arg.Description,
+		arg.Note,
 		arg.IsDone,
+		arg.CompletedAt,
 		arg.StartDate,
 		arg.EndDate,
 		arg.TaskID,
@@ -128,6 +109,29 @@ type CreateTodoReminderParams struct {
 func (q *Queries) CreateTodoReminder(ctx context.Context, arg CreateTodoReminderParams) error {
 	_, err := q.db.ExecContext(ctx, createTodoReminder, arg.TodoID, arg.RemindAt)
 	return err
+}
+
+const createTodoServiceDeskRequest = `-- name: CreateTodoServiceDeskRequest :execrows
+INSERT INTO todo_service_desk_requests (todo_id, issue_key)
+SELECT ?1, ?2
+WHERE EXISTS (SELECT 1 FROM todos WHERE todos.id = ?1)
+  AND EXISTS (SELECT 1 FROM service_desk_requests WHERE service_desk_requests.issue_key = ?2)
+ON CONFLICT (todo_id, issue_key) DO NOTHING
+`
+
+type CreateTodoServiceDeskRequestParams struct {
+	TodoID   int64
+	IssueKey string
+}
+
+// Inserts nothing when the todo or the request is not stored or the link
+// exists, so the check is a write as the transaction's first statement.
+func (q *Queries) CreateTodoServiceDeskRequest(ctx context.Context, arg CreateTodoServiceDeskRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, createTodoServiceDeskRequest, arg.TodoID, arg.IssueKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteTask = `-- name: DeleteTask :execrows
@@ -201,32 +205,6 @@ func (q *Queries) DeleteTaskParent(ctx context.Context, childID string) error {
 	return err
 }
 
-const deleteTaskServiceDeskRequest = `-- name: DeleteTaskServiceDeskRequest :execrows
-DELETE FROM task_service_desk_requests WHERE task_id = ? AND issue_key = ?
-`
-
-type DeleteTaskServiceDeskRequestParams struct {
-	TaskID   string
-	IssueKey string
-}
-
-func (q *Queries) DeleteTaskServiceDeskRequest(ctx context.Context, arg DeleteTaskServiceDeskRequestParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deleteTaskServiceDeskRequest, arg.TaskID, arg.IssueKey)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const deleteTaskServiceDeskRequestsOfTask = `-- name: DeleteTaskServiceDeskRequestsOfTask :exec
-DELETE FROM task_service_desk_requests WHERE task_id = ?
-`
-
-func (q *Queries) DeleteTaskServiceDeskRequestsOfTask(ctx context.Context, taskID string) error {
-	_, err := q.db.ExecContext(ctx, deleteTaskServiceDeskRequestsOfTask, taskID)
-	return err
-}
-
 const deleteTaskTodo = `-- name: DeleteTaskTodo :one
 DELETE FROM task_todos WHERE todo_id = ? RETURNING task_id, position
 `
@@ -282,6 +260,41 @@ func (q *Queries) DeleteTodoRemindersOfTask(ctx context.Context, taskID string) 
 	return err
 }
 
+const deleteTodoServiceDeskRequest = `-- name: DeleteTodoServiceDeskRequest :execrows
+DELETE FROM todo_service_desk_requests WHERE todo_id = ? AND issue_key = ?
+`
+
+type DeleteTodoServiceDeskRequestParams struct {
+	TodoID   int64
+	IssueKey string
+}
+
+func (q *Queries) DeleteTodoServiceDeskRequest(ctx context.Context, arg DeleteTodoServiceDeskRequestParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteTodoServiceDeskRequest, arg.TodoID, arg.IssueKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteTodoServiceDeskRequestsOfTask = `-- name: DeleteTodoServiceDeskRequestsOfTask :exec
+DELETE FROM todo_service_desk_requests WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = ?)
+`
+
+func (q *Queries) DeleteTodoServiceDeskRequestsOfTask(ctx context.Context, taskID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTodoServiceDeskRequestsOfTask, taskID)
+	return err
+}
+
+const deleteTodoServiceDeskRequestsOfTodo = `-- name: DeleteTodoServiceDeskRequestsOfTodo :exec
+DELETE FROM todo_service_desk_requests WHERE todo_id = ?
+`
+
+func (q *Queries) DeleteTodoServiceDeskRequestsOfTodo(ctx context.Context, todoID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTodoServiceDeskRequestsOfTodo, todoID)
+	return err
+}
+
 const deleteTodosOfTask = `-- name: DeleteTodosOfTask :exec
 DELETE FROM todos WHERE id IN (SELECT todo_id FROM task_todos WHERE task_id = ?)
 `
@@ -319,6 +332,17 @@ SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?)
 
 func (q *Queries) ExistsTask(ctx context.Context, id string) (bool, error) {
 	row := q.db.QueryRowContext(ctx, existsTask, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const existsTodo = `-- name: ExistsTodo :one
+SELECT EXISTS (SELECT 1 FROM todos WHERE id = ?)
+`
+
+func (q *Queries) ExistsTodo(ctx context.Context, id int64) (bool, error) {
+	row := q.db.QueryRowContext(ctx, existsTodo, id)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -410,43 +434,6 @@ func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]string, e
 			return nil, err
 		}
 		items = append(items, id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listTaskServiceDeskRequests = `-- name: ListTaskServiceDeskRequests :many
-SELECT service_desk_requests.issue_key, service_desk_requests.title, service_desk_requests.status, service_desk_requests.created_at, service_desk_requests.status_at
-FROM task_service_desk_requests
-JOIN service_desk_requests ON service_desk_requests.issue_key = task_service_desk_requests.issue_key
-WHERE task_service_desk_requests.task_id = ?
-ORDER BY service_desk_requests.issue_key
-`
-
-func (q *Queries) ListTaskServiceDeskRequests(ctx context.Context, taskID string) ([]ServiceDeskRequest, error) {
-	rows, err := q.db.QueryContext(ctx, listTaskServiceDeskRequests, taskID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ServiceDeskRequest
-	for rows.Next() {
-		var i ServiceDeskRequest
-		if err := rows.Scan(
-			&i.IssueKey,
-			&i.Title,
-			&i.Status,
-			&i.CreatedAt,
-			&i.StatusAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -586,8 +573,70 @@ func (q *Queries) ListTodoReminders(ctx context.Context, arg ListTodoRemindersPa
 	return items, nil
 }
 
+const listTodoServiceDeskRequests = `-- name: ListTodoServiceDeskRequests :many
+SELECT todo_service_desk_requests.todo_id, service_desk_requests.issue_key, service_desk_requests.title, service_desk_requests.status, service_desk_requests.status_category, service_desk_requests.created_at, service_desk_requests.status_at
+FROM todo_service_desk_requests
+JOIN service_desk_requests ON service_desk_requests.issue_key = todo_service_desk_requests.issue_key
+JOIN todos ON todos.id = todo_service_desk_requests.todo_id
+JOIN task_todos ON task_todos.todo_id = todo_service_desk_requests.todo_id
+WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
+  AND (todos.start_date <= ?2 OR todos.start_date IS NULL OR ?2 IS NULL)
+  AND (todos.end_date = ?3 OR ?3 IS NULL)
+  AND (todos.is_done = ?4 OR ?4 IS NULL)
+ORDER BY todo_service_desk_requests.todo_id, service_desk_requests.issue_key
+`
+
+type ListTodoServiceDeskRequestsParams struct {
+	TaskID  sql.NullString
+	Today   sql.NullString
+	EndDate sql.NullString
+	IsDone  sql.NullBool
+}
+
+type ListTodoServiceDeskRequestsRow struct {
+	TodoID             int64
+	ServiceDeskRequest ServiceDeskRequest
+}
+
+// Takes the ListTodos filters, as ListTodoReminders does.
+func (q *Queries) ListTodoServiceDeskRequests(ctx context.Context, arg ListTodoServiceDeskRequestsParams) ([]ListTodoServiceDeskRequestsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTodoServiceDeskRequests,
+		arg.TaskID,
+		arg.Today,
+		arg.EndDate,
+		arg.IsDone,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTodoServiceDeskRequestsRow
+	for rows.Next() {
+		var i ListTodoServiceDeskRequestsRow
+		if err := rows.Scan(
+			&i.TodoID,
+			&i.ServiceDeskRequest.IssueKey,
+			&i.ServiceDeskRequest.Title,
+			&i.ServiceDeskRequest.Status,
+			&i.ServiceDeskRequest.StatusCategory,
+			&i.ServiceDeskRequest.CreatedAt,
+			&i.ServiceDeskRequest.StatusAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTodos = `-- name: ListTodos :many
-SELECT todos.id, todos.description, todos.is_done, todos.start_date, todos.end_date, task_todos.task_id, task_todos.position
+SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_at, todos.start_date, todos.end_date, task_todos.task_id, task_todos.position
 FROM todos
 JOIN task_todos ON task_todos.todo_id = todos.id
 WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
@@ -607,7 +656,9 @@ type ListTodosParams struct {
 type ListTodosRow struct {
 	ID          int64
 	Description string
+	Note        string
 	IsDone      bool
+	CompletedAt sql.NullTime
 	StartDate   sql.NullString
 	EndDate     sql.NullString
 	TaskID      string
@@ -632,7 +683,9 @@ func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]ListTod
 		if err := rows.Scan(
 			&i.ID,
 			&i.Description,
+			&i.Note,
 			&i.IsDone,
+			&i.CompletedAt,
 			&i.StartDate,
 			&i.EndDate,
 			&i.TaskID,
@@ -717,25 +770,32 @@ func (q *Queries) UpdateLocalTask(ctx context.Context, arg UpdateLocalTaskParams
 
 const updateTodo = `-- name: UpdateTodo :execrows
 UPDATE todos SET
-    description = ?,
-    is_done     = ?,
-    start_date  = ?,
-    end_date    = ?
-WHERE id = ?
+    description  = ?1,
+    note         = ?2,
+    is_done      = ?3,
+    completed_at = CASE WHEN ?3 THEN COALESCE(completed_at, ?4) END,
+    start_date   = ?5,
+    end_date     = ?6
+WHERE id = ?7
 `
 
 type UpdateTodoParams struct {
 	Description string
+	Note        string
 	IsDone      bool
+	CompletedAt sql.NullTime
 	StartDate   sql.NullString
 	EndDate     sql.NullString
 	ID          int64
 }
 
+// A todo that stays done keeps its completed_at.
 func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updateTodo,
 		arg.Description,
+		arg.Note,
 		arg.IsDone,
+		arg.CompletedAt,
 		arg.StartDate,
 		arg.EndDate,
 		arg.ID,
@@ -748,23 +808,25 @@ func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, 
 
 const upsertServiceDeskRequest = `-- name: UpsertServiceDeskRequest :exec
 INSERT INTO service_desk_requests (
-    issue_key, title, status, created_at, status_at
+    issue_key, title, status, status_category, created_at, status_at
 ) VALUES (
-    ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?
 )
 ON CONFLICT (issue_key) DO UPDATE SET
-    title      = excluded.title,
-    status     = excluded.status,
-    created_at = excluded.created_at,
-    status_at  = excluded.status_at
+    title           = excluded.title,
+    status          = excluded.status,
+    status_category = excluded.status_category,
+    created_at      = excluded.created_at,
+    status_at       = excluded.status_at
 `
 
 type UpsertServiceDeskRequestParams struct {
-	IssueKey  string
-	Title     string
-	Status    string
-	CreatedAt time.Time
-	StatusAt  time.Time
+	IssueKey       string
+	Title          string
+	Status         string
+	StatusCategory string
+	CreatedAt      time.Time
+	StatusAt       time.Time
 }
 
 func (q *Queries) UpsertServiceDeskRequest(ctx context.Context, arg UpsertServiceDeskRequestParams) error {
@@ -772,6 +834,7 @@ func (q *Queries) UpsertServiceDeskRequest(ctx context.Context, arg UpsertServic
 		arg.IssueKey,
 		arg.Title,
 		arg.Status,
+		arg.StatusCategory,
 		arg.CreatedAt,
 		arg.StatusAt,
 	)

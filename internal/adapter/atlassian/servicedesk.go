@@ -20,6 +20,7 @@ var (
 	ErrMissingRequestKey        = errors.New("atlassian: missing service desk request key")
 	ErrMissingRequestTitle      = errors.New("atlassian: missing service desk request title")
 	ErrMissingRequestStatus     = errors.New("atlassian: missing service desk request status")
+	ErrMissingRequestCategory   = errors.New("atlassian: missing service desk request status category")
 	ErrMissingRequestCreated    = errors.New("atlassian: missing service desk request created date")
 	ErrMissingRequestStatusDate = errors.New("atlassian: missing service desk request status date")
 	ErrTooManyRequestPages      = errors.New("atlassian: service desk request list exceeded the page limit")
@@ -52,8 +53,9 @@ type customerRequest struct {
 }
 
 type customerRequestStatus struct {
-	Status     string  `json:"status"`
-	StatusDate dateDTO `json:"statusDate"`
+	Status         string  `json:"status"`
+	StatusCategory string  `json:"statusCategory"`
+	StatusDate     dateDTO `json:"statusDate"`
 }
 
 type customerRequestFieldValue struct {
@@ -177,6 +179,11 @@ func toRequest(raw json.RawMessage, index int) (servicedesk.Request, error) {
 		return servicedesk.Request{}, fmt.Errorf("%w: key=%s", ErrMissingRequestStatus, key)
 	}
 
+	category := item.CurrentStatus.StatusCategory
+	if strings.TrimSpace(category) == "" {
+		return servicedesk.Request{}, fmt.Errorf("%w: key=%s", ErrMissingRequestCategory, key)
+	}
+
 	if item.CreatedDate.EpochMillis == 0 {
 		return servicedesk.Request{}, fmt.Errorf("%w: key=%s", ErrMissingRequestCreated, key)
 	}
@@ -186,11 +193,12 @@ func toRequest(raw json.RawMessage, index int) (servicedesk.Request, error) {
 	}
 
 	return servicedesk.Request{
-		Key:      key,
-		Title:    title,
-		Status:   status,
-		Created:  time.UnixMilli(item.CreatedDate.EpochMillis).UTC(),
-		StatusAt: time.UnixMilli(item.CurrentStatus.StatusDate.EpochMillis).UTC(),
+		Key:            key,
+		Title:          title,
+		Status:         status,
+		StatusCategory: category,
+		Created:        time.UnixMilli(item.CreatedDate.EpochMillis).UTC(),
+		StatusAt:       time.UnixMilli(item.CurrentStatus.StatusDate.EpochMillis).UTC(),
 	}, nil
 }
 

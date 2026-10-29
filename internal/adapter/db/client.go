@@ -45,16 +45,15 @@ var (
 	ErrFailedToDeleteTaskTodosOfTask        = errors.New("db: failed to delete task todos of task")
 	ErrFailedToUpsertServiceDeskRequest     = errors.New("db: failed to upsert service desk request")
 	ErrFailedToDeleteServiceDeskLinksOfTask = errors.New(
-		"db: failed to delete service desk request links of task",
+		"db: failed to delete service desk request links of todos of task",
 	)
 	ErrFailedToLinkServiceDeskRequest         = errors.New("db: failed to link service desk request")
-	ErrFailedToCheckTaskToLink                = errors.New("db: failed to check task to link")
-	ErrTaskToLinkNotFound                     = errors.New("db: task to link not found")
+	ErrFailedToCheckTodoToLink                = errors.New("db: failed to check todo to link")
+	ErrTodoToLinkNotFound                     = errors.New("db: todo to link not found")
 	ErrFailedToCheckServiceDeskRequestToLink  = errors.New("db: failed to check service desk request to link")
 	ErrServiceDeskRequestToLinkNotFound       = errors.New("db: service desk request to link not found")
 	ErrFailedToUnlinkServiceDeskRequest       = errors.New("db: failed to unlink service desk request")
 	ErrServiceDeskRequestLinkToDeleteNotFound = errors.New("db: service desk request link to delete not found")
-	ErrFailedToListTaskServiceDeskRequests    = errors.New("db: failed to list service desk requests of task")
 )
 
 // localTaskCounter is the counters row seeded by the initial migration.
@@ -75,9 +74,8 @@ type Manager interface {
 	UpdateTodo(ctx context.Context, t todo.Todo) error
 	DeleteTodo(ctx context.Context, id int64) error
 	UpsertServiceDeskRequests(ctx context.Context, requests []servicedesk.Request) error
-	LinkServiceDeskRequest(ctx context.Context, taskID, key string) error
-	UnlinkServiceDeskRequest(ctx context.Context, taskID, key string) error
-	ListTaskServiceDeskRequests(ctx context.Context, taskID string) ([]servicedesk.Request, error)
+	LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
+	UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
 
 	// DB Management
 
@@ -267,10 +265,10 @@ func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 }
 
 // DeleteTask deletes the task with id and every relation it is part of, as
-// child, parent, or either side of a link, together with its links to Service
-// Desk requests, its todos and their reminders. Other tasks, their todos and
-// links, and the requests are kept. It fails
-// with ErrTaskToDeleteNotFound when no task has id.
+// child, parent, or either side of a link, together with its todos, their
+// reminders, and their links to Service Desk requests. Other tasks, their
+// todos and links, and the requests are kept. It fails with
+// ErrTaskToDeleteNotFound when no task has id.
 func (m *manager) DeleteTask(ctx context.Context, id string) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -294,11 +292,12 @@ func (m *manager) DeleteTask(ctx context.Context, id string) error {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskLinksOf, err), id)
 		}
 
-		if err := queries.DeleteTaskServiceDeskRequestsOfTask(ctx, id); err != nil {
+		// Links, reminders, and todos are found through task_todos, so it goes
+		// last.
+		if err := queries.DeleteTodoServiceDeskRequestsOfTask(ctx, id); err != nil {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteServiceDeskLinksOfTask, err), id)
 		}
 
-		// Reminders and todos are found through task_todos, so it goes last.
 		if err := queries.DeleteTodoRemindersOfTask(ctx, id); err != nil {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTodoRemindersOfTask, err), id)
 		}
@@ -331,11 +330,12 @@ func (m *manager) UpsertServiceDeskRequests(ctx context.Context, requests []serv
 	return m.inTx(ctx, func(queries *Queries) error {
 		for _, request := range requests {
 			err := queries.UpsertServiceDeskRequest(ctx, UpsertServiceDeskRequestParams{
-				IssueKey:  request.Key,
-				Title:     request.Title,
-				Status:    request.Status,
-				CreatedAt: request.Created,
-				StatusAt:  request.StatusAt,
+				IssueKey:       request.Key,
+				Title:          request.Title,
+				Status:         request.Status,
+				StatusCategory: request.StatusCategory,
+				CreatedAt:      request.Created,
+				StatusAt:       request.StatusAt,
 			})
 			if err != nil {
 				return fmt.Errorf("%w: key=%s", errors.Join(ErrFailedToUpsertServiceDeskRequest, err), request.Key)
@@ -346,12 +346,12 @@ func (m *manager) UpsertServiceDeskRequests(ctx context.Context, requests []serv
 	})
 }
 
-// LinkServiceDeskRequest stores a relates-to link between the stored task
-// taskID and the stored Service Desk request key. Linking them again is a
-// no-op. It fails with ErrTaskToLinkNotFound when no task has taskID and with
+// LinkServiceDeskRequest stores a relates-to link between the stored todo
+// todoID and the stored Service Desk request key. Linking them again is a
+// no-op. It fails with ErrTodoToLinkNotFound when no todo has todoID and with
 // ErrServiceDeskRequestToLinkNotFound when no request has key, storing
 // nothing.
-func (m *manager) LinkServiceDeskRequest(ctx context.Context, taskID, key string) error {
+func (m *manager) LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
 	if err := m.checkConnected(); err != nil {
 		return err
 	}
@@ -360,14 +360,14 @@ func (m *manager) LinkServiceDeskRequest(ctx context.Context, taskID, key string
 		// The insert checks both sides, keeping the write-first rule described
 		// at busyTimeoutPragma. Only when it inserts nothing do the reads below
 		// tell a missing side from an existing link.
-		params := CreateTaskServiceDeskRequestParams{TaskID: taskID, IssueKey: key}
+		params := CreateTodoServiceDeskRequestParams{TodoID: todoID, IssueKey: key}
 
-		created, err := queries.CreateTaskServiceDeskRequest(ctx, params)
+		created, err := queries.CreateTodoServiceDeskRequest(ctx, params)
 		if err != nil {
 			return fmt.Errorf(
-				"%w: task_id=%s, key=%s",
+				"%w: todo_id=%d, key=%s",
 				errors.Join(ErrFailedToLinkServiceDeskRequest, err),
-				taskID,
+				todoID,
 				key,
 			)
 		}
@@ -376,13 +376,13 @@ func (m *manager) LinkServiceDeskRequest(ctx context.Context, taskID, key string
 			return nil
 		}
 
-		taskExists, err := queries.ExistsTask(ctx, taskID)
+		todoExists, err := queries.ExistsTodo(ctx, todoID)
 		if err != nil {
-			return fmt.Errorf("%w: task_id=%s", errors.Join(ErrFailedToCheckTaskToLink, err), taskID)
+			return fmt.Errorf("%w: todo_id=%d", errors.Join(ErrFailedToCheckTodoToLink, err), todoID)
 		}
 
-		if !taskExists {
-			return fmt.Errorf("%w: task_id=%s", ErrTaskToLinkNotFound, taskID)
+		if !todoExists {
+			return fmt.Errorf("%w: todo_id=%d", ErrTodoToLinkNotFound, todoID)
 		}
 
 		requestExists, err := queries.ExistsServiceDeskRequest(ctx, key)
@@ -398,54 +398,27 @@ func (m *manager) LinkServiceDeskRequest(ctx context.Context, taskID, key string
 	})
 }
 
-// UnlinkServiceDeskRequest deletes the link between the task taskID and the
-// Service Desk request key. The task, the request, and their other links are
+// UnlinkServiceDeskRequest deletes the link between the todo todoID and the
+// Service Desk request key. The todo, the request, and their other links are
 // kept. It fails with ErrServiceDeskRequestLinkToDeleteNotFound when they are
 // not linked.
-func (m *manager) UnlinkServiceDeskRequest(ctx context.Context, taskID, key string) error {
+func (m *manager) UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
 	if err := m.checkConnected(); err != nil {
 		return err
 	}
 
-	params := DeleteTaskServiceDeskRequestParams{TaskID: taskID, IssueKey: key}
+	params := DeleteTodoServiceDeskRequestParams{TodoID: todoID, IssueKey: key}
 
-	deleted, err := m.queries.DeleteTaskServiceDeskRequest(ctx, params)
+	deleted, err := m.queries.DeleteTodoServiceDeskRequest(ctx, params)
 	if err != nil {
-		return fmt.Errorf("%w: task_id=%s, key=%s", errors.Join(ErrFailedToUnlinkServiceDeskRequest, err), taskID, key)
+		return fmt.Errorf("%w: todo_id=%d, key=%s", errors.Join(ErrFailedToUnlinkServiceDeskRequest, err), todoID, key)
 	}
 
 	if deleted == 0 {
-		return fmt.Errorf("%w: task_id=%s, key=%s", ErrServiceDeskRequestLinkToDeleteNotFound, taskID, key)
+		return fmt.Errorf("%w: todo_id=%d, key=%s", ErrServiceDeskRequestLinkToDeleteNotFound, todoID, key)
 	}
 
 	return nil
-}
-
-// ListTaskServiceDeskRequests returns the stored Service Desk requests linked
-// to the task taskID in issue key order, or an empty slice when there are
-// none.
-func (m *manager) ListTaskServiceDeskRequests(ctx context.Context, taskID string) ([]servicedesk.Request, error) {
-	if err := m.checkConnected(); err != nil {
-		return nil, err
-	}
-
-	rows, err := m.queries.ListTaskServiceDeskRequests(ctx, taskID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: task_id=%s", errors.Join(ErrFailedToListTaskServiceDeskRequests, err), taskID)
-	}
-
-	requests := make([]servicedesk.Request, 0, len(rows))
-	for _, row := range rows {
-		requests = append(requests, servicedesk.Request{
-			Key:      row.IssueKey,
-			Title:    row.Title,
-			Status:   row.Status,
-			Created:  row.CreatedAt,
-			StatusAt: row.StatusAt,
-		})
-	}
-
-	return requests, nil
 }
 
 // inTx runs fn in a transaction and commits it when fn succeeds.

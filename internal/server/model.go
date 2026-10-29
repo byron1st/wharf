@@ -51,17 +51,16 @@ type taskDetailResponse struct {
 	Parent      *taskSummary  `json:"parent"`
 	Children    []taskSummary `json:"children"`
 	Linked      []taskSummary `json:"linked"`
-
-	ServiceDeskRequests []serviceDeskRequestResponse `json:"service_desk_requests"`
 }
 
-// serviceDeskRequestResponse is a Service Desk request linked to a task.
+// serviceDeskRequestResponse is a Service Desk request linked to a todo.
 type serviceDeskRequestResponse struct {
-	Key       string    `json:"key"`
-	Title     string    `json:"title"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	StatusAt  time.Time `json:"status_at"`
+	Key            string    `json:"key"`
+	Title          string    `json:"title"`
+	Status         string    `json:"status"`
+	StatusCategory string    `json:"status_category"`
+	CreatedAt      time.Time `json:"created_at"`
+	StatusAt       time.Time `json:"status_at"`
 }
 
 type createTaskResponse struct {
@@ -72,6 +71,7 @@ type createTaskResponse struct {
 type todoRequest struct {
 	TaskID      string      `json:"task_id"`
 	Description string      `json:"description"`
+	Note        string      `json:"note"`
 	IsDone      bool        `json:"is_done"`
 	StartDate   *string     `json:"start_date"`
 	EndDate     *string     `json:"end_date"`
@@ -83,11 +83,15 @@ type todoResponse struct {
 	ID          int64       `json:"id"`
 	TaskID      string      `json:"task_id"`
 	Description string      `json:"description"`
+	Note        string      `json:"note"`
 	IsDone      bool        `json:"is_done"`
+	CompletedAt *time.Time  `json:"completed_at"`
 	StartDate   *string     `json:"start_date"`
 	EndDate     *string     `json:"end_date"`
 	Reminders   []time.Time `json:"reminders"`
 	Position    *int        `json:"position"`
+
+	ServiceDeskRequests []serviceDeskRequestResponse `json:"service_desk_requests"`
 }
 
 type todoListResponse struct {

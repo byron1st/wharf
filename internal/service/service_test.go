@@ -9,7 +9,6 @@ import (
 
 	"github.com/byron1st/wharf/internal/adapter/db"
 	"github.com/byron1st/wharf/internal/pkg/mocks"
-	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/service"
 )
@@ -102,16 +101,14 @@ func TestGetTask(t *testing.T) {
 		ListTasksByIDs(mock.Anything, []string{"P", "C2", "C1", "C9", "L1", "L9"}).
 		Return([]task.Task{c1, c2, l1, parent}, nil).
 		Once()
-	manager.EXPECT().ListTaskServiceDeskRequests(mock.Anything, "T1").Return(requests, nil).Once()
 
 	got, err := service.NewService(mocks.NewMockClient(t), manager).GetTask(t.Context(), "T1")
 	require.NoError(t, err)
 	require.Equal(t, service.TaskDetail{
-		Task:                stored,
-		Parent:              &parent,
-		Children:            []task.Task{c2, c1},
-		Linked:              []task.Task{l1},
-		ServiceDeskRequests: requests,
+		Task:     stored,
+		Parent:   &parent,
+		Children: []task.Task{c2, c1},
+		Linked:   []task.Task{l1},
 	}, got)
 }
 
@@ -122,15 +119,12 @@ func TestGetTaskWithoutStoredRelations(t *testing.T) {
 	manager.EXPECT().GetTask(mock.Anything, "T1").Return(stored, nil).Once()
 	manager.EXPECT().ListTasksByIDs(mock.Anything, []string{"P"}).Return([]task.Task{}, nil).Once()
 
-	manager.EXPECT().ListTaskServiceDeskRequests(mock.Anything, "T1").Return([]servicedesk.Request{}, nil).Once()
-
 	got, err := service.NewService(mocks.NewMockClient(t), manager).GetTask(t.Context(), "T1")
 	require.NoError(t, err)
 	require.Equal(t, service.TaskDetail{
-		Task:                stored,
-		Children:            []task.Task{},
-		Linked:              []task.Task{},
-		ServiceDeskRequests: []servicedesk.Request{},
+		Task:     stored,
+		Children: []task.Task{},
+		Linked:   []task.Task{},
 	}, got)
 }
 
@@ -141,15 +135,12 @@ func TestGetTaskWithoutRelations(t *testing.T) {
 	manager := mocks.NewMockManager(t)
 	manager.EXPECT().GetTask(mock.Anything, "T1").Return(stored, nil).Once()
 
-	manager.EXPECT().ListTaskServiceDeskRequests(mock.Anything, "T1").Return([]servicedesk.Request{}, nil).Once()
-
 	got, err := service.NewService(mocks.NewMockClient(t), manager).GetTask(t.Context(), "T1")
 	require.NoError(t, err)
 	require.Equal(t, service.TaskDetail{
-		Task:                stored,
-		Children:            []task.Task{},
-		Linked:              []task.Task{},
-		ServiceDeskRequests: []servicedesk.Request{},
+		Task:     stored,
+		Children: []task.Task{},
+		Linked:   []task.Task{},
 	}, got)
 }
 
@@ -168,17 +159,6 @@ func TestGetTaskFailures(t *testing.T) {
 	require.ErrorContains(t, err, "id=MISSING")
 
 	_, err = svc.GetTask(t.Context(), "T1")
-	require.ErrorIs(t, err, failure)
-}
-
-func TestGetTaskServiceDeskRequestsFailure(t *testing.T) {
-	failure := errors.New("join failed")
-
-	manager := mocks.NewMockManager(t)
-	manager.EXPECT().GetTask(mock.Anything, "T1").Return(task.Task{ID: "T1"}, nil).Once()
-	manager.EXPECT().ListTaskServiceDeskRequests(mock.Anything, "T1").Return(nil, failure).Once()
-
-	_, err := service.NewService(mocks.NewMockClient(t), manager).GetTask(t.Context(), "T1")
 	require.ErrorIs(t, err, failure)
 }
 

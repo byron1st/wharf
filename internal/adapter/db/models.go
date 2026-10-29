@@ -20,11 +20,12 @@ type SchemaMigration struct {
 }
 
 type ServiceDeskRequest struct {
-	IssueKey  string
-	Title     string
-	Status    string
-	CreatedAt time.Time
-	StatusAt  time.Time
+	IssueKey       string
+	Title          string
+	Status         string
+	StatusCategory string
+	CreatedAt      time.Time
+	StatusAt       time.Time
 }
 
 type Task struct {
@@ -47,11 +48,6 @@ type TaskLink struct {
 	LinkedID string
 }
 
-type TaskServiceDeskRequest struct {
-	TaskID   string
-	IssueKey string
-}
-
 type TaskTodo struct {
 	TodoID   int64
 	TaskID   string
@@ -61,7 +57,9 @@ type TaskTodo struct {
 type Todo struct {
 	ID          int64
 	Description string
+	Note        string
 	IsDone      bool
+	CompletedAt sql.NullTime
 	StartDate   sql.NullString
 	EndDate     sql.NullString
 }
@@ -69,4 +67,9 @@ type Todo struct {
 type TodoReminder struct {
 	TodoID   int64
 	RemindAt time.Time
+}
+
+type TodoServiceDeskRequest struct {
+	TodoID   int64
+	IssueKey string
 }

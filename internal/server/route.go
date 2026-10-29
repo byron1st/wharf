@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/service"
 )
@@ -38,12 +37,12 @@ func NewHandler(svc service.Service, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /tasks/{id}", getTask(svc, logger))
 	mux.HandleFunc("PUT /tasks/{id}", updateTask(svc, logger))
 	mux.HandleFunc("DELETE /tasks/{id}", deleteTask(svc, logger))
-	mux.HandleFunc("PUT /tasks/{id}/service-desk-requests/{key}", linkServiceDeskRequest(svc, logger))
-	mux.HandleFunc("DELETE /tasks/{id}/service-desk-requests/{key}", unlinkServiceDeskRequest(svc, logger))
 	mux.HandleFunc("GET /todos", listTodos(svc, logger))
 	mux.HandleFunc("POST /todos", createTodo(svc, logger))
 	mux.HandleFunc("PUT /todos/{id}", updateTodo(svc, logger))
 	mux.HandleFunc("DELETE /todos/{id}", deleteTodo(svc, logger))
+	mux.HandleFunc("PUT /todos/{id}/service-desk-requests/{key}", linkServiceDeskRequest(svc, logger))
+	mux.HandleFunc("DELETE /todos/{id}/service-desk-requests/{key}", unlinkServiceDeskRequest(svc, logger))
 
 	return mux
 }
@@ -137,12 +136,11 @@ func getTask(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 
 		t := detail.Task
 		resp := taskDetailResponse{
-			taskSummary:         toSummary(t),
-			ChildrenIDs:         nonNil(t.ChildrenIDs),
-			LinkedIDs:           nonNil(t.LinkedIDs),
-			Children:            toSummaries(detail.Children),
-			Linked:              toSummaries(detail.Linked),
-			ServiceDeskRequests: toServiceDeskRequests(detail.ServiceDeskRequests),
+			taskSummary: toSummary(t),
+			ChildrenIDs: nonNil(t.ChildrenIDs),
+			LinkedIDs:   nonNil(t.LinkedIDs),
+			Children:    toSummaries(detail.Children),
+			Linked:      toSummaries(detail.Linked),
 		}
 		// The detail carries the full description that toSummary cut.
 		resp.taskSummary.Description = t.Description
@@ -209,31 +207,6 @@ func deleteTask(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 	}
 }
 
-// linkServiceDeskRequest takes no body; repeating it is a no-op.
-func linkServiceDeskRequest(svc service.Service, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		err := svc.LinkServiceDeskRequest(r.Context(), r.PathValue("id"), r.PathValue("key"))
-		if err != nil {
-			writeError(w, r, logger, "failed to link service desk request", err)
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-func unlinkServiceDeskRequest(svc service.Service, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		err := svc.UnlinkServiceDeskRequest(r.Context(), r.PathValue("id"), r.PathValue("key"))
-		if err != nil {
-			writeError(w, r, logger, "failed to unlink service desk request", err)
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
 // decodeTask reads a taskRequest body, rejecting unknown fields such as id
 // and originated, and anything but whitespace after the object.
 func decodeTask(w http.ResponseWriter, r *http.Request) (task.Task, error) {
@@ -274,21 +247,6 @@ func toSummaries(tasks []task.Task) []taskSummary {
 	}
 
 	return summaries
-}
-
-func toServiceDeskRequests(requests []servicedesk.Request) []serviceDeskRequestResponse {
-	responses := make([]serviceDeskRequestResponse, 0, len(requests))
-	for _, request := range requests {
-		responses = append(responses, serviceDeskRequestResponse{
-			Key:       request.Key,
-			Title:     request.Title,
-			Status:    request.Status,
-			CreatedAt: request.Created,
-			StatusAt:  request.StatusAt,
-		})
-	}
-
-	return responses
 }
 
 // toSummary cuts a description longer than summaryDescriptionRunes runes to

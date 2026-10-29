@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: Task ID `{originated}-{key}` 가 만들어지는 곳(task.NewID·atlassian ToTask·db CreateLocalTask)과 local key(WHF-001) 카운터, parent/children(task_hierarchies)·linked(task_links) 관계 테이블의 쓰기 소유 규칙과 그 근거(Jira subtasks/issuelinks 특성, cross-origin 관계·local parent 유지 예외)·읽기 쿼리(양방향 links·조회 인덱스)·중복·FK 제약, SQLite 쓰기 우선 트랜잭션 제약, task 삭제 시 todo·Service Desk 연결 cascade, task ↔ Service Desk 요청 연결 테이블(`task_service_desk_requests`)의 쓰기 규칙, ID 와 관계 테이블에 의존하는 테스트 위치를 정리한다.
+Description: Task ID `{originated}-{key}` 가 만들어지는 곳(task.NewID·atlassian ToTask·db CreateLocalTask)과 local key(WHF-001) 카운터, parent/children(task_hierarchies)·linked(task_links) 관계 테이블의 쓰기 소유 규칙과 그 근거(Jira subtasks/issuelinks 특성, cross-origin 관계·local parent 유지 예외)·읽기 쿼리(양방향 links·조회 인덱스)·중복·FK 제약, SQLite 쓰기 우선 트랜잭션 제약, task 삭제 시 todo·Service Desk 연결 cascade, todo ↔ Service Desk 요청 연결 테이블(`todo_service_desk_requests`)의 쓰기 규칙, ID 와 관계 테이블에 의존하는 테스트 위치를 정리한다.
 ---
 
 # Task ID 와 관계(parent/children/linked) 저장 구조
@@ -51,7 +51,7 @@ flowchart LR
 - links 는 T 가 선언한 행만 교체: `task_id = T` 행을 지우고 `LinkedIDs` 를 넣는다. 다른 task 가 T 로 선언한 행은 남는다.
 - 중복된 children/links 는 한 행으로 저장된다.
 - `UpdateLocalTask`(PUT) 는 예외로 children 을 전체 교체한다: `parent_id = T` 행을 모두 지운 뒤 선언한 children 을 넣는다. links 도 양방향 전체 교체다: `DeleteTaskLinksOf` 로 `task_id = T`·`linked_id = T` 행을 모두 지운 뒤 `T > linked` 로 넣는다. `GetTask` 가 links 를 양방향 합집합으로 읽으므로, GET 결과를 그대로 PUT 해도 역방향 행이 복제되지 않고 PUT 으로 역방향 링크도 지울 수 있다. 지워진 Jira 쪽 선언 링크는 그 Jira task 의 다음 동기화에서 다시 생긴다. PUT 은 빠진 필드를 빈 값으로 보는 전체 교체이므로, 클라이언트는 GET 의 `parent_id`·`children_ids`·`linked_ids` 를 모두 다시 보내야 관계가 유지된다(부분 수정이 필요해지면 별도 PATCH 로 다룬다).
-- `DeleteTask` 는 T 의 행과 T 가 child·parent·선언자·대상인 관계 행, T 의 Service Desk 연결 행(`task_service_desk_requests` 의 `task_id = T`)을 지우고 다른 task 는 건드리지 않는다.
+- `DeleteTask` 는 T 의 행과 T 가 child·parent·선언자·대상인 관계 행, T 에 속한 todo 들의 Service Desk 연결 행(`todo_service_desk_requests`)을 지우고 다른 task 는 건드리지 않는다.
 
 근거:
 
@@ -71,17 +71,18 @@ flowchart LR
 - `db.Connect` 는 `busy_timeout(5000)` 을 붙이고 연결을 1개로 제한한다 (`internal/adapter/db/client_management.go`, `busyTimeoutPragma` 주석). `BeginTx` 는 DEFERRED 라 "읽고 나서 쓰는" 트랜잭션은 다른 프로세스와 경합 시 즉시 SQLITE_BUSY 가 난다. 그래서 트랜잭션은 쓰기로 시작한다.
 - `CreateLocalTask` 는 `IncrementCounter`, `UpdateLocalTask` 는 `UpdateLocalTask` 쿼리, `DeleteTask` 는 `DeleteTask` 쿼리를 첫 문장으로 실행해 이 규칙을 지키고, 존재 여부는 영향 행 수(0 이면 `ErrLocalTaskToUpdateNotFound`/`ErrTaskToDeleteNotFound`)로 판별한다. 읽기(`ListTasks`, `GetTask` 등)는 트랜잭션 없이 실행한다. `SELECT MAX(...)+1` 은 읽기로 시작하고, 마지막 task 삭제 시 번호를 재사용하므로 쓰지 않았다.
 - todo 쓰기(DEV-18)도 같은 규칙이다: `CreateTodo` 는 `INSERT ... SELECT ... WHERE EXISTS (SELECT 1 FROM tasks ...)` 로 task 확인과 쓰기를 한 문장에서 하고, `UpdateTodo`·`DeleteTodo` 는 todos 의 `UPDATE`/`DELETE` 영향 행 수로 존재를 판별한 뒤 읽는다(`ExistsTask`, `CountTaskTodos`).
-- Service Desk 연결 추가(DEV-22, `LinkServiceDeskRequest`)도 같은 규칙이다: 첫 문장 `CreateTaskServiceDeskRequest` 는 `INSERT ... SELECT ... WHERE EXISTS (task) AND EXISTS (request) ON CONFLICT DO NOTHING` 의 `:execrows` 다. 영향 행 수가 0 일 때만 `ExistsTask`·`ExistsServiceDeskRequest` 를 읽어 task 없음(`ErrTaskToLinkNotFound`) / 요청 없음(`ErrServiceDeskRequestToLinkNotFound`) / 이미 연결됨(no-op 성공)을 가른다. 둘 다 없으면 task 없음이 먼저다. 연결 삭제 `UnlinkServiceDeskRequest` 는 단일 `DELETE` `:execrows` 라 트랜잭션 없이 실행하고 0 이면 `ErrServiceDeskRequestLinkToDeleteNotFound` 다.
+- Service Desk 연결 추가(`LinkServiceDeskRequest`)도 같은 규칙이다: 첫 문장 `CreateTodoServiceDeskRequest` 는 `INSERT ... SELECT ... WHERE EXISTS (todo) AND EXISTS (request) ON CONFLICT DO NOTHING` 의 `:execrows` 다. 영향 행 수가 0 일 때만 `ExistsTodo`·`ExistsServiceDeskRequest` 를 읽어 todo 없음(`ErrTodoToLinkNotFound`) / 요청 없음(`ErrServiceDeskRequestToLinkNotFound`) / 이미 연결됨(no-op 성공)을 가른다. 둘 다 없으면 task 없음이 먼저다. 연결 삭제 `UnlinkServiceDeskRequest` 는 단일 `DELETE` `:execrows` 라 트랜잭션 없이 실행하고 0 이면 `ErrServiceDeskRequestLinkToDeleteNotFound` 다.
 - 카운터 행이 없으면 `RETURNING` 이 행을 돌려주지 않아 `sql.ErrNoRows` 가 되고 `ErrFailedToIncrementLocalTaskCounter` 로 드러난다.
 
 ## task 삭제와 todo (DEV-18)
 
 - todo 는 `task_todos.task_id` 로 task 에 귀속된다(`todo_id` PK 라 task 하나). `DeleteTask` 는 관계 행 삭제 뒤 같은 트랜잭션에서 `DeleteTodoRemindersOfTask`·`DeleteTodosOfTask`(둘 다 `task_todos` 를 subquery 로 참조) → `DeleteTaskTodosOfTask` 순으로 지운다. `UpsertTasks` 는 task 를 지우지 않으므로 Jira 동기화 후에도 todo 가 남는다(`TestDeleteTaskDeletesItsTodos`, `internal/adapter/db/todo_test.go`).
 
-## task ↔ Service Desk 요청 연결 (DEV-22)
+## todo ↔ Service Desk 요청 연결
 
-- `task_service_desk_requests (task_id, issue_key, PK(task_id, issue_key))` 는 방향 없는 relates-to 이고 `issue_key` 는 `service_desk_requests` 의 PK 다. FK 는 없고 정합성은 `db.Manager` 가 지킨다(추가 시 양쪽 존재 확인, `DeleteTask` cascade). Jira 동기화(`storeTask`)는 이 테이블을 쓰지 않으므로 동기화 후에도 연결이 남는다. 자세한 API·응답은 [service-desk-requests](./service-desk-requests.md) 에 있다.
-- 테스트: `internal/adapter/db/servicedesk_test.go` 의 `TestLinkServiceDeskRequest*`·`TestUnlinkServiceDeskRequest`·`TestListTaskServiceDeskRequests`·`TestDeleteTaskDeletesItsServiceDeskLinks` 가 `serviceDeskLinks` 헬퍼(`task>key` 문자열)로 직접 SQL 확인한다.
+- 요청은 task 가 아니라 todo 에 붙는다. `todo_service_desk_requests (todo_id, issue_key, PK(todo_id, issue_key))` 는 방향 없는 relates-to 이고 `issue_key` 는 `service_desk_requests` 의 PK 다. FK 는 없고 정합성은 `db.Manager` 가 지킨다(추가 시 양쪽 존재 확인, `DeleteTodo`·`DeleteTask` cascade). Jira 동기화(`storeTask`)와 todo 이동(`UpdateTodo`)은 이 테이블을 쓰지 않으므로 동기화·이동 후에도 연결이 남는다. 자세한 API·결정은 [service-desk-requests](./service-desk-requests.md) 의 "todo 와의 relates-to 연결" 절에 있다.
+- `DeleteTask` 의 cascade 는 `DeleteTodoServiceDeskRequestsOfTask` 가 `task_todos` 를 subquery 로 참조하므로 reminder·todo 삭제와 함께 `DeleteTaskTodosOfTask` 보다 먼저 실행한다.
+- 테스트: `internal/adapter/db/servicedesk_test.go` 의 `TestLinkServiceDeskRequest*`·`TestUnlinkServiceDeskRequest`·`TestListTodosWithServiceDeskRequests`·`TestDeleteTodoAndTaskDeleteServiceDeskLinks` 가 `serviceDeskLinks` 헬퍼(`todo>key` 문자열)로 직접 SQL 확인한다.
 
 ## ID 와 관계 테이블에 의존하는 테스트
 

@@ -77,11 +77,12 @@ func sdRequest(key, summary, status string, created, statusAt int64) map[string]
 
 func wantRequest(key, title, status string) servicedesk.Request {
 	return servicedesk.Request{
-		Key:      key,
-		Title:    title,
-		Status:   status,
-		Created:  time.UnixMilli(createdMillis).UTC(),
-		StatusAt: time.UnixMilli(statusAtMillis).UTC(),
+		Key:            key,
+		Title:          title,
+		Status:         status,
+		StatusCategory: "NEW",
+		Created:        time.UnixMilli(createdMillis).UTC(),
+		StatusAt:       time.UnixMilli(statusAtMillis).UTC(),
 	}
 }
 
@@ -246,6 +247,8 @@ func TestGetOwnedRequestsSkipsBadItems(t *testing.T) {
 	missingCreated := sdRequest("SD-4", "Title", "Open", 0, statusAtMillis)
 	missingStatusAt := sdRequest("SD-5", "Title", "Open", createdMillis, 0)
 	blankStatus := sdRequest("SD-6", "Title", "   ", createdMillis, statusAtMillis)
+	blankCategory := sdRequest("SD-8", "Title", "Open", createdMillis, statusAtMillis)
+	blankCategory["currentStatus"].(map[string]any)["statusCategory"] = " "
 	objectTitle := sdRequest("SD-7", "", "Open", createdMillis, statusAtMillis)
 	objectTitle["requestFieldValues"] = []any{
 		map[string]any{"fieldId": "summary", "value": map[string]any{"text": "no"}},
@@ -259,6 +262,7 @@ func TestGetOwnedRequestsSkipsBadItems(t *testing.T) {
 		sdItem(t, missingStatusAt),
 		sdItem(t, blankStatus),
 		sdItem(t, objectTitle),
+		sdItem(t, blankCategory),
 		sdItem(t, good),
 	}
 
@@ -273,10 +277,12 @@ func TestGetOwnedRequestsSkipsBadItems(t *testing.T) {
 	require.ErrorIs(t, err, atlassian.ErrMissingRequestCreated)
 	require.ErrorIs(t, err, atlassian.ErrMissingRequestStatusDate)
 	require.ErrorIs(t, err, atlassian.ErrMissingRequestStatus)
+	require.ErrorIs(t, err, atlassian.ErrMissingRequestCategory)
 	require.ErrorContains(t, err, "index=0")
 	require.ErrorContains(t, err, "index=1")
 	require.ErrorContains(t, err, "key=SD-3")
 	require.ErrorContains(t, err, "key=SD-6")
+	require.ErrorContains(t, err, "key=SD-8")
 }
 
 func TestGetOwnedRequestsCanceledContext(t *testing.T) {

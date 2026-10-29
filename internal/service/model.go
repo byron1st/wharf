@@ -1,9 +1,6 @@
 package service
 
-import (
-	"github.com/byron1st/wharf/internal/pkg/servicedesk"
-	"github.com/byron1st/wharf/internal/pkg/task"
-)
+import "github.com/byron1st/wharf/internal/pkg/task"
 
 // SyncResult is the outcome of a sync that stored what its source returned.
 type SyncResult struct {
@@ -15,8 +12,7 @@ type SyncResult struct {
 	Partial error
 }
 
-// TaskDetail is a task with its relations, the stored tasks they point at,
-// and its linked Service Desk requests.
+// TaskDetail is a task with its relations and the stored tasks they point at.
 type TaskDetail struct {
 	// Task holds the task fields and the related IDs, which may include
 	// tasks that are not stored.
@@ -28,7 +24,4 @@ type TaskDetail struct {
 	// Task.LinkedIDs, in the same order.
 	Children []task.Task
 	Linked   []task.Task
-	// ServiceDeskRequests are the stored Service Desk requests linked to the
-	// task, in issue key order.
-	ServiceDeskRequests []servicedesk.Request
 }

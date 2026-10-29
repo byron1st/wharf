@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Flow
-Description: Jira 동기화가 꽂혀 있는 현재 경로(atlassian.Client.GetMyTasks, service.SyncJiraTasks, POST /tasks/jira, 0001 tasks 스키마, httputil.Get)와, 그 옆에 둘 Service Desk 수집의 공식 계약 — GET /rest/servicedeskapi/request 의 CustomerRequestDTO(assignee·updated 없음), OWNED_REQUESTS·ALL_REQUESTS·start/limit/size/isLastPage, Basic 인증과 site URL 경로 결합, DEV-22 의 task ↔ 요청 relates-to 연결(`task_service_desk_requests`, `PUT`/`DELETE /tasks/{id}/service-desk-requests/{key}`, `GET /tasks/{id}` 의 `service_desk_requests`)을 정리한다.
+Description: Jira 동기화가 꽂혀 있는 현재 경로(atlassian.Client.GetMyTasks, service.SyncJiraTasks, POST /tasks/jira, 0001 tasks 스키마, httputil.Get)와, 그 옆에 둘 Service Desk 수집의 공식 계약 — GET /rest/servicedeskapi/request 의 CustomerRequestDTO(assignee·updated 없음), OWNED_REQUESTS·ALL_REQUESTS·start/limit/size/isLastPage, Basic 인증과 site URL 경로 결합, `currentStatus.statusCategory` 저장(닫힌 요청 구분), todo ↔ 요청 relates-to 연결(`todo_service_desk_requests`, `PUT`/`DELETE /todos/{id}/service-desk-requests/{key}`, `GET /todos` 의 `service_desk_requests`)을 정리한다.
 ---
 
 # Service Desk 요청 수집을 붙일 현재 경로와 공식 계약
@@ -51,6 +51,7 @@ sequenceDiagram
 
 - `summary` 는 문자열이다. 공식 예시는 최상위 `summary` 가 빠진 항목에 `requestFieldValues[].fieldId == "summary"` 를 둔다. 그 `value` 스키마는 타입이 없고, 예시에서는 JSON 문자열이다.
 - `currentStatus.status` 는 상태 이름 문자열이다. `currentStatus.statusDate` 는 "Date on which the status was attained" 다.
+- `currentStatus.statusCategory` 는 Jira 상태 카테고리(`NEW`·`INDETERMINATE`·`DONE`·`UNDEFINED`)다. 상태 이름은 프로젝트마다 다르므로("Done"·"Canceled"·"Resolved" 등) 닫힌 요청은 이름이 아니라 `DONE` 카테고리로 가른다. `toRequest` 는 이 값을 `servicedesk.Request.StatusCategory` 로 원문 그대로 옮기고, 공백뿐이면 `ErrMissingRequestCategory` 로 그 항목을 뺀다 (`internal/adapter/atlassian/servicedesk.go:182`). 테이블 컬럼은 `service_desk_requests.status_category` 다.
 - `createdDate` 와 `statusDate` 는 `DateDTO`: `epochMillis`, `friendly`, `iso8601`, `jira`. 공식 예시의 `iso8601` 은 `2015-10-08T14:42:00+0700` 처럼 타임존 콜론이 없다. `epochMillis` 는 UTC 밀리초다.
 - `reporter` 는 `UserDTO` (`displayName` 등)이고 요청을 올린 고객이다. 담당 에이전트가 아니다.
 
@@ -61,12 +62,12 @@ Base URL (JSM REST intro):
 
 인증은 Jira Cloud 와 같다. 이 저장소는 `Authorization: Basic base64(email:token)` 을 이미 만든다 (`client.go:52`).
 
-## task 와의 relates-to 연결 (DEV-22)
+## todo 와의 relates-to 연결
 
-결정 근거는 [DEV-22 plan](../dev/20261027212216_DEV-22_PLAN_service-desk-task-relation.md) 의 Key decisions 에 있다.
+연결은 처음(DEV-22)에는 task 와 요청 사이였다. 웹앱 디자인(`docs/design`)이 Inspector 에서 todo 마다 요청을 붙이고, 요청 Inspector 에서 연결된 todo 를 보여주므로 연결 대상을 todo 로 옮겼다(DEV-25). 쓰기 규칙과 API 모양은 task 때와 같다.
 
-- 스키마: `task_service_desk_requests (task_id, issue_key, PRIMARY KEY (task_id, issue_key))` (`scripts/migrations/0001_initial_migration.sql:79`, 배포 전 예외로 0001 에 직접 추가). 행 하나가 방향 없는 연결 하나이고 다대다다. FK·추가 인덱스는 없다(역방향 조회 API 가 없고 PK 가 `task_id` 조회를 덮는다).
-- API: `PUT /tasks/{id}/service-desk-requests/{key}` → 204(멱등, 다시 PUT 해도 204·행 하나), task 없음·요청 없음은 각각 404. `DELETE /tasks/{id}/service-desk-requests/{key}` → 204, 연결이 없으면 404. 본문은 없다. task origin(local·jira)은 상관없다(`internal/server/route.go:40-41`).
-- `GET /tasks/{id}` 응답에 `service_desk_requests` 배열(`{"key","title","status","created_at","status_at"}`, `issue_key` 오름차순, 없으면 `[]`)이 붙는다. JOIN 쿼리 `ListTaskServiceDeskRequests` 로 읽는다.
-- 연결은 wharf 소유다. `UpsertTasks`(Jira 동기화)·`UpsertServiceDeskRequests` 는 연결을 건드리지 않고, `DeleteTask` 만 그 task 의 연결 행을 같은 트랜잭션에서 지운다. 동기화가 요청 행을 지우지 않으므로 요청 쪽 cascade 는 없다. Jira 쪽(issue link)에는 연결을 쓰지 않는다.
-- 계층: `db.Manager.LinkServiceDeskRequest`·`UnlinkServiceDeskRequest`·`ListTaskServiceDeskRequests` (`internal/adapter/db/client.go:354`·`:405`·`:427`) → `service.LinkServiceDeskRequest`·`UnlinkServiceDeskRequest` (`internal/service/service.go:221`·`:237`), `service.GetTask` 가 `TaskDetail.ServiceDeskRequests` (`internal/service/model.go:33`) 를 채운다. `servicedesk.Request`·`task.Task` 는 바뀌지 않았다.
+- 스키마: `todo_service_desk_requests (todo_id INTEGER, issue_key, PRIMARY KEY (todo_id, issue_key))` (`scripts/migrations/0001_initial_migration.sql:86`, 배포 전 예외로 0001 에 직접 둔다). 행 하나가 방향 없는 연결 하나이고 다대다다. FK·추가 인덱스는 없다(PK 가 `todo_id` 조회를 덮는다).
+- API: `PUT /todos/{id}/service-desk-requests/{key}` → 204(멱등, 다시 PUT 해도 204·행 하나), todo 없음·요청 없음은 각각 404, 정수가 아닌 todo id 도 404. `DELETE /todos/{id}/service-desk-requests/{key}` → 204, 연결이 없으면 404. 본문은 없다 (`internal/server/route.go:44-45`).
+- `GET /todos` 의 todo 마다 `service_desk_requests` 배열(`{"key","title","status","status_category","created_at","status_at"}`, `issue_key` 오름차순, 없으면 `[]`)이 붙는다. `ListTodoServiceDeskRequests` 는 `ListTodoReminders` 처럼 `ListTodos` 필터를 그대로 받아 같은 todo 들의 연결만 한 번에 JOIN 해 읽는다(바인드 변수 수가 todo 수와 무관). `GET /tasks/{id}` 에는 요청이 더 이상 붙지 않는다.
+- 연결은 wharf 소유다. `UpsertTasks`(Jira 동기화)·`UpsertServiceDeskRequests`·`UpdateTodo`(다른 task 로 이동 포함)는 연결을 건드리지 않는다. `DeleteTodo` 는 그 todo 의 연결 행을, `DeleteTask` 는 그 task 에 속한 todo 들의 연결 행을 같은 트랜잭션에서 지운다(`task_todos` 로 찾으므로 `task_todos` 행보다 먼저). 동기화가 요청 행을 지우지 않으므로 요청 쪽 cascade 는 없다. Jira 쪽(issue link)에는 연결을 쓰지 않는다.
+- 계층: `db.Manager.LinkServiceDeskRequest(ctx, todoID, key)`·`UnlinkServiceDeskRequest(ctx, todoID, key)` (`internal/adapter/db/client.go:354`·`:405`) 와 `ListTodos` 가 채우는 `todo.Todo.ServiceDeskRequests` → `service.LinkServiceDeskRequest`·`UnlinkServiceDeskRequest` (`internal/service/service.go:215`·`:231`, sentinel `ErrTodoToLinkNotFound`·`ErrServiceDeskRequestToLinkNotFound`·`ErrServiceDeskRequestLinkToDeleteNotFound`) → 핸들러는 `internal/server/todo.go` 에 있다.

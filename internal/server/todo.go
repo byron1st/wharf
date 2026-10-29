@@ -120,6 +120,41 @@ func deleteTodo(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 	}
 }
 
+// linkServiceDeskRequest takes no body; repeating it is a no-op.
+func linkServiceDeskRequest(svc service.Service, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := todoID(r)
+		if err != nil {
+			writeError(w, r, logger, "failed to link service desk request", err)
+			return
+		}
+
+		if err := svc.LinkServiceDeskRequest(r.Context(), id, r.PathValue("key")); err != nil {
+			writeError(w, r, logger, "failed to link service desk request", err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func unlinkServiceDeskRequest(svc service.Service, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := todoID(r)
+		if err != nil {
+			writeError(w, r, logger, "failed to unlink service desk request", err)
+			return
+		}
+
+		if err := svc.UnlinkServiceDeskRequest(r.Context(), id, r.PathValue("key")); err != nil {
+			writeError(w, r, logger, "failed to unlink service desk request", err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func todoID(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -158,6 +193,7 @@ func decodeTodo(w http.ResponseWriter, r *http.Request) (todo.Todo, error) {
 	return todo.Todo{
 		TaskID:      req.TaskID,
 		Description: req.Description,
+		Note:        req.Note,
 		IsDone:      req.IsDone,
 		StartDate:   deref(req.StartDate),
 		EndDate:     deref(req.EndDate),
@@ -168,16 +204,30 @@ func decodeTodo(w http.ResponseWriter, r *http.Request) (todo.Todo, error) {
 
 func toTodoResponse(t todo.Todo) todoResponse {
 	resp := todoResponse{
-		ID:          t.ID,
-		TaskID:      t.TaskID,
-		Description: t.Description,
-		IsDone:      t.IsDone,
-		Reminders:   t.Reminders,
-		Position:    t.Position,
+		ID:                  t.ID,
+		TaskID:              t.TaskID,
+		Description:         t.Description,
+		Note:                t.Note,
+		IsDone:              t.IsDone,
+		CompletedAt:         t.CompletedAt,
+		Reminders:           t.Reminders,
+		Position:            t.Position,
+		ServiceDeskRequests: make([]serviceDeskRequestResponse, 0, len(t.ServiceDeskRequests)),
 	}
 
 	if resp.Reminders == nil {
 		resp.Reminders = []time.Time{}
+	}
+
+	for _, request := range t.ServiceDeskRequests {
+		resp.ServiceDeskRequests = append(resp.ServiceDeskRequests, serviceDeskRequestResponse{
+			Key:            request.Key,
+			Title:          request.Title,
+			Status:         request.Status,
+			StatusCategory: request.StatusCategory,
+			CreatedAt:      request.Created,
+			StatusAt:       request.StatusAt,
+		})
 	}
 
 	if t.StartDate != "" {
