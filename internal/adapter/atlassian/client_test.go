@@ -470,7 +470,7 @@ func TestUnconfiguredClient(t *testing.T) {
 	_, err = c.GetTask(t.Context(), "WHF-1")
 	require.ErrorIs(t, err, atlassian.ErrNotConfigured)
 
-	require.ErrorIs(t, c.Check(t.Context(), "", email, apiToken), atlassian.ErrNotConfigured)
+	require.ErrorIs(t, c.Check(t.Context(), "", email, apiToken), atlassian.ErrMissingSiteURLToCheck)
 }
 
 func TestConfigure(t *testing.T) {

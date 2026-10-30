@@ -93,6 +93,22 @@ func TestSyncAtlassianCompleteHasNoErrors(t *testing.T) {
 	require.Zero(t, got.Record.Issues)
 }
 
+func TestSyncAtlassianTreatsNilWithoutErrorAsEmpty(t *testing.T) {
+	jira := mocks.NewMockClient(t)
+	jira.EXPECT().GetMyTasks(mock.Anything).Return(nil, nil).Once()
+	jira.EXPECT().GetOwnedRequests(mock.Anything).Return(nil, nil).Once()
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().ListServiceDeskRequests(mock.Anything, false).Return(nil, nil).Once()
+	manager.EXPECT().UpsertTasks(mock.Anything, []task.Task(nil)).Return(nil).Once()
+	manager.EXPECT().UpsertServiceDeskRequests(mock.Anything, []servicedesk.Request(nil)).Return(nil).Once()
+	manager.EXPECT().CreateAtlassianSync(mock.Anything, mock.Anything).Return(nil).Once()
+
+	got, err := service.NewService(jira, manager).SyncAtlassian(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, got.Record.Issues)
+}
+
 func TestSyncAtlassianChangesNothingWhenAFetchFails(t *testing.T) {
 	failure := errors.New("page failed")
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,10 +13,11 @@ import (
 )
 
 var (
-	ErrInvalidAtlassianSettings = errors.New("service: invalid atlassian settings")
-	ErrInvalidConfigFile        = errors.New("service: invalid config file")
-	ErrConfigChoiceCanceled     = errors.New("service: config file choice was canceled")
-	ErrUnsupportedOS            = errors.New("service: not supported on this operating system")
+	ErrInvalidAtlassianSettings        = errors.New("service: invalid atlassian settings")
+	ErrInvalidAtlassianSettingsToCheck = errors.New("service: invalid atlassian settings to check")
+	ErrInvalidConfigFile               = errors.New("service: invalid config file")
+	ErrConfigChoiceCanceled            = errors.New("service: config file choice was canceled")
+	ErrUnsupportedOS                   = errors.New("service: not supported on this operating system")
 )
 
 // AtlassianSettings are the Atlassian site and credentials. All empty means
@@ -116,8 +118,18 @@ func (s *settings) SaveAtlassianSettings(_ context.Context, a AtlassianSettings)
 
 // CheckAtlassianSettings reports whether Jira and Service Desk accept a,
 // saved or not, and returns when it checked. It fails with
-// ErrAtlassianNotConfigured when a has no site URL.
+// ErrInvalidAtlassianSettingsToCheck, sending nothing, when a is not settings
+// SaveAtlassianSettings would accept, so the token never goes to an
+// unvalidated or plain http site.
 func (s *settings) CheckAtlassianSettings(ctx context.Context, a AtlassianSettings) (time.Time, error) {
+	if a.SiteURL == "" {
+		return time.Time{}, fmt.Errorf("%w: site_url is empty", ErrInvalidAtlassianSettingsToCheck)
+	}
+
+	if err := config.ValidateAtlassian(a.SiteURL, a.Email, a.APIToken); err != nil {
+		return time.Time{}, errors.Join(ErrInvalidAtlassianSettingsToCheck, err)
+	}
+
 	if err := s.jira.Check(ctx, a.SiteURL, a.Email, a.APIToken); err != nil {
 		return time.Time{}, classifyAtlassianError(err)
 	}

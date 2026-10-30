@@ -139,14 +139,25 @@ func withRecover(logger *slog.Logger, next http.Handler) http.Handler {
 	})
 }
 
-// withLocalOrigin answers 403 unless the request is for a loopback host name
-// and, when it has an Origin, comes from that same host. wharf has no
-// authentication and returns the Atlassian token, so this keeps other web
-// sites from reaching it through the user's browser: a Host check stops DNS
-// rebinding, and an Origin check stops cross-site requests such as a bodiless
-// POST, which the browser sends without a CORS preflight.
+// withLocalOrigin answers 403 unless the request comes from this machine, is
+// for a loopback host name, and, when it has an Origin, comes from that same
+// host. wharf has no authentication and returns the Atlassian token, so this
+// keeps everyone but the local user out: the remote address check stops other
+// machines, whatever Host they send; the Host check stops DNS rebinding; and
+// the Origin check stops cross-site requests such as a bodiless POST, which
+// the browser sends without a CORS preflight.
 func withLocalOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackRemote(r.RemoteAddr) {
+			writeJSON(
+				w,
+				http.StatusForbidden,
+				errorResponse{Error: "server: client is not local", Code: "forbidden_remote"},
+			)
+
+			return
+		}
+
 		if !isLoopbackHost(r.Host) {
 			writeJSON(
 				w,
@@ -172,6 +183,19 @@ func withLocalOrigin(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isLoopbackRemote reports whether addr, a request's "ip:port" RemoteAddr, is
+// a loopback IP address.
+func isLoopbackRemote(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && ip.IsLoopback()
 }
 
 // isLoopbackHost reports whether hostport, with or without a port, names

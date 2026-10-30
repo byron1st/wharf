@@ -32,13 +32,14 @@ var (
 // that failed to read are counted and their messages returned; a Jira issue
 // whose fields failed to convert is still stored, as GetMyTasks returns it.
 func (s *service) SyncAtlassian(ctx context.Context) (AtlassianSync, error) {
+	// A nil slice with an error is a failed fetch; see atlassian.Client.
 	tasks, taskErr := s.jira.GetMyTasks(ctx)
-	if tasks == nil {
+	if tasks == nil && taskErr != nil {
 		return AtlassianSync{}, classifyAtlassianError(taskErr)
 	}
 
 	requests, requestErr := s.jira.GetOwnedRequests(ctx)
-	if requests == nil {
+	if requests == nil && requestErr != nil {
 		return AtlassianSync{}, classifyAtlassianError(requestErr)
 	}
 

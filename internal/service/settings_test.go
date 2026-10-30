@@ -97,7 +97,7 @@ func TestSaveAtlassianSettingsWriteFailure(t *testing.T) {
 	require.NoError(t, os.Mkdir(f.path, 0o700))
 
 	err := f.settings.SaveAtlassianSettings(t.Context(), saved)
-	require.ErrorIs(t, err, config.ErrFailedToReadConfigFile)
+	require.ErrorIs(t, err, config.ErrFailedToReadConfigFileToSave)
 	require.NotErrorIs(t, err, service.ErrInvalidAtlassianSettings)
 }
 
@@ -121,6 +121,23 @@ func TestCheckAtlassianSettings(t *testing.T) {
 		SiteURL: "https://x.atlassian.net", Email: "a@b.c", APIToken: "bad",
 	})
 	require.ErrorIs(t, err, service.ErrAtlassianUnauthorized)
+}
+
+func TestCheckAtlassianSettingsRejectsInvalidWithoutSending(t *testing.T) {
+	// No Check expectation: the mock fails the test if anything is sent.
+	f := newSettings(t)
+
+	for _, a := range []service.AtlassianSettings{
+		{},
+		{SiteURL: "http://x.atlassian.net", Email: "a@b.c", APIToken: "t"},
+		{SiteURL: "https://user@x.atlassian.net", Email: "a@b.c", APIToken: "t"},
+		{SiteURL: "https://x.atlassian.net", APIToken: "t"},
+		{SiteURL: "https://x.atlassian.net", Email: "a@b.c"},
+	} {
+		_, err := f.settings.CheckAtlassianSettings(t.Context(), a)
+		require.ErrorIs(t, err, service.ErrInvalidAtlassianSettingsToCheck, "%+v", a)
+		require.NotErrorIs(t, err, service.ErrInvalidAtlassianSettings)
+	}
 }
 
 func TestChooseConfigFile(t *testing.T) {

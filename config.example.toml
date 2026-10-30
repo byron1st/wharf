@@ -6,9 +6,10 @@
 # The atlassian_* keys go together: set all three or none. Saving Settings › Atlassian Cloud
 # in the web app rewrites only those three lines, keeping comments and other keys.
 
-# TCP address the server listens on. Default: ":8080"
-# Requests must name a loopback host (localhost, 127.0.0.1, [::1]); others get 403.
-# addr = ":8080"
+# TCP address the server listens on. Default: "127.0.0.1:8080" (this machine only)
+# Requests must come from this machine and name a loopback host (localhost, 127.0.0.1,
+# [::1]); others get 403, so listening on other interfaces does not open the API to them.
+# addr = "127.0.0.1:8080"
 
 # SQLite database file path.
 # Default: <os.UserConfigDir()>/wharf/wharf.db (its directory is created when missing)

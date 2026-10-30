@@ -55,6 +55,7 @@ var errorStatuses = []struct {
 	{err: service.ErrTaskNotJira, status: http.StatusConflict},
 	{err: service.ErrJiraIssueNotFound, status: http.StatusNotFound, code: "jira_issue_not_found"},
 	{err: service.ErrInvalidAtlassianSettings, status: http.StatusBadRequest},
+	{err: service.ErrInvalidAtlassianSettingsToCheck, status: http.StatusBadRequest},
 	{err: service.ErrInvalidConfigFile, status: http.StatusBadRequest, code: "invalid_config_file"},
 	{err: service.ErrUnsupportedOS, status: http.StatusNotImplemented, code: "unsupported_os"},
 	{err: service.ErrTaskOfNewTodoNotFound, status: http.StatusBadRequest},

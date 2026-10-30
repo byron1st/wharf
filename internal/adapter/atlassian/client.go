@@ -21,6 +21,7 @@ var (
 	ErrRepeatedSearchPageToken     = errors.New("atlassian: search returned the page token it was sent")
 	ErrTooManySearchPages          = errors.New("atlassian: search exceeded the page limit")
 	ErrNotConfigured               = errors.New("atlassian: site is not configured")
+	ErrMissingSiteURLToCheck       = errors.New("atlassian: site url to check is empty")
 	ErrFailedToReachJira           = errors.New("atlassian: failed to reach jira")
 	ErrFailedToReachServiceDesk    = errors.New("atlassian: failed to reach service desk")
 )
@@ -28,6 +29,9 @@ var (
 // myselfPath is the cheapest authenticated Jira call, used by Check.
 const myselfPath = "/rest/api/3/myself"
 
+// Client reaches Jira and Service Desk. GetMyTasks and GetOwnedRequests
+// return nil only with an error, when nothing could be read; a non-nil slice,
+// possibly empty, comes with the joined errors of the items that failed.
 type Client interface {
 	GetMyTasks(ctx context.Context) ([]task.Task, error)
 	GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, error)
@@ -71,7 +75,7 @@ func (c *client) Configure(siteURL, email, apiToken string) {
 func (c *client) Check(ctx context.Context, siteURL, email, apiToken string) error {
 	a := newAPI(siteURL, email, apiToken)
 	if a.base == "" {
-		return ErrNotConfigured
+		return ErrMissingSiteURLToCheck
 	}
 
 	if _, err := c.http.Get(ctx, a.base+myselfPath, a.header); err != nil {

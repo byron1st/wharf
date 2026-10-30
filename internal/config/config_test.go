@@ -70,7 +70,7 @@ func TestLoad(t *testing.T) {
 		cfg, err := config.Load(path)
 		require.NoError(t, err)
 		require.Equal(t, config.Config{
-			Addr:              ":8080",
+			Addr:              "127.0.0.1:8080",
 			DBPath:            filepath.Join(dir, "wharf", "wharf.db"),
 			AtlassianSiteURL:  "https://example.atlassian.net",
 			AtlassianEmail:    "me@example.com",
@@ -125,7 +125,7 @@ func TestLoad(t *testing.T) {
 
 		cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
 		require.NoError(t, err)
-		require.Equal(t, config.Config{Addr: ":8080", DBPath: filepath.Join(dir, "wharf", "wharf.db")}, cfg)
+		require.Equal(t, config.Config{Addr: "127.0.0.1:8080", DBPath: filepath.Join(dir, "wharf", "wharf.db")}, cfg)
 	})
 
 	t.Run("allows no atlassian keys", func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestLoad(t *testing.T) {
 
 		cfg, err := config.Load(path)
 		require.NoError(t, err)
-		require.Equal(t, config.Config{Addr: ":8080", DBPath: "/data/w.db"}, cfg)
+		require.Equal(t, config.Config{Addr: "127.0.0.1:8080", DBPath: "/data/w.db"}, cfg)
 	})
 
 	t.Run("fails when file cannot be read", func(t *testing.T) {
@@ -311,10 +311,57 @@ func TestSaveAtlassian(t *testing.T) {
 		require.Equal(t, atlassianKeys, string(data))
 	})
 
-	t.Run("fails when the file is not valid afterwards", func(t *testing.T) {
-		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "adr = \":8080\"\n", 0o644)
+	t.Run("keeps the file when it would not load afterwards", func(t *testing.T) {
+		dir := t.TempDir()
+		path := writeFile(t, filepath.Join(dir, "config.toml"), "adr = \":8080\"\n", 0o644)
 
 		err := config.SaveAtlassian(path, "https://example.atlassian.net", "me@example.com", "secret-token")
 		require.ErrorIs(t, err, config.ErrUnknownConfigKeys)
+		require.ErrorContains(t, err, "path="+path)
+
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, "adr = \":8080\"\n", string(data))
+
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "the temp file is removed")
 	})
+
+	t.Run("writes through a symlink and keeps it", func(t *testing.T) {
+		target := writeFile(t, filepath.Join(t.TempDir(), "real.toml"), "# dotfiles\n", 0o600)
+		link := filepath.Join(t.TempDir(), "config.toml")
+		require.NoError(t, os.Symlink(target, link))
+
+		require.NoError(
+			t,
+			config.SaveAtlassian(link, "https://example.atlassian.net", "me@example.com", "secret-token"),
+		)
+
+		info, err := os.Lstat(link)
+		require.NoError(t, err)
+		require.Equal(t, os.ModeSymlink, info.Mode()&os.ModeSymlink)
+
+		data, err := os.ReadFile(target)
+		require.NoError(t, err)
+		require.Equal(t, "# dotfiles\n"+atlassianKeys, string(data))
+	})
+
+	t.Run("fails when the file cannot be read", func(t *testing.T) {
+		err := config.SaveAtlassian(t.TempDir(), "https://example.atlassian.net", "me@example.com", "secret-token")
+		require.ErrorIs(t, err, config.ErrFailedToReadConfigFileToSave)
+		require.NotErrorIs(t, err, config.ErrFailedToReadConfigFile)
+	})
+}
+
+func TestValidateAtlassian(t *testing.T) {
+	require.NoError(t, config.ValidateAtlassian("https://example.atlassian.net", "me@example.com", "secret-token"))
+	require.NoError(t, config.ValidateAtlassian("", "", ""), "all empty is not configured, not invalid")
+
+	err := config.ValidateAtlassian("http://example.atlassian.net", "me@example.com", "secret-token")
+	require.ErrorIs(t, err, config.ErrInvalidAtlassianSiteURL)
+	require.NotContains(t, err.Error(), "secret-token")
+
+	err = config.ValidateAtlassian("https://example.atlassian.net", "", "secret-token")
+	require.ErrorIs(t, err, config.ErrMissingConfigKey)
 }

@@ -16,20 +16,25 @@ import (
 const PathEnv = "WHARF_CONFIG"
 
 const (
-	defaultAddr       = ":8080"
+	defaultAddr       = "127.0.0.1:8080"
 	defaultDBFileName = "wharf.db"
 )
 
 var (
-	ErrFailedToFindUserConfigDir = errors.New("config: failed to find user config dir")
-	ErrFailedToReadConfigFile    = errors.New("config: failed to read config file")
-	ErrFailedToParseConfigFile   = errors.New("config: failed to parse config file")
-	ErrUnknownConfigKeys         = errors.New("config: unknown config keys")
-	ErrFailedToCreateDBDir       = errors.New("config: failed to create default db dir")
-	ErrMissingConfigKey          = errors.New("config: missing required config key")
-	ErrInvalidAtlassianSiteURL   = errors.New("config: invalid atlassian site url")
-	ErrFailedToEncodeConfigValue = errors.New("config: failed to encode config value")
-	ErrFailedToWriteConfigFile   = errors.New("config: failed to write config file")
+	ErrFailedToFindUserConfigDir    = errors.New("config: failed to find user config dir")
+	ErrFailedToReadConfigFile       = errors.New("config: failed to read config file")
+	ErrFailedToParseConfigFile      = errors.New("config: failed to parse config file")
+	ErrUnknownConfigKeys            = errors.New("config: unknown config keys")
+	ErrFailedToCreateDBDir          = errors.New("config: failed to create default db dir")
+	ErrMissingConfigKey             = errors.New("config: missing required config key")
+	ErrInvalidAtlassianSiteURL      = errors.New("config: invalid atlassian site url")
+	ErrFailedToEncodeConfigValue    = errors.New("config: failed to encode config value")
+	ErrFailedToResolveConfigPath    = errors.New("config: failed to resolve config file path")
+	ErrFailedToReadConfigFileToSave = errors.New("config: failed to read config file to save")
+	ErrFailedToCreateConfigDir      = errors.New("config: failed to create config dir")
+	ErrFailedToCreateTempConfigFile = errors.New("config: failed to create temp config file")
+	ErrFailedToWriteTempConfigFile  = errors.New("config: failed to write temp config file")
+	ErrFailedToReplaceConfigFile    = errors.New("config: failed to replace config file")
 )
 
 // atlassianKeys are the keys SaveAtlassian writes, in file order.
@@ -143,20 +148,37 @@ func validateAtlassian(path, siteURL, email, apiToken string) error {
 	return nil
 }
 
+// ValidateAtlassian checks Atlassian settings that are not saved yet as Load
+// checks the saved keys, so nothing is sent to an unvalidated site.
+func ValidateAtlassian(siteURL, email, apiToken string) error {
+	return validateAtlassian("", siteURL, email, apiToken)
+}
+
 // SaveAtlassian sets the Atlassian keys in the config file at path, creating
 // it when missing. Only the lines of those keys change, so comments and other
 // keys are kept: an existing top-level "key = ..." line is replaced and a
-// missing one is appended. The values are validated as Load does. The file is
-// replaced atomically and left readable only by its owner, since it holds the
-// token.
+// missing one is appended. The values are validated as Load does, and so is
+// the new file before it replaces the old one, which is kept on any failure.
+// When path is a symlink, its target is written and the link kept. The file
+// is replaced atomically and left readable only by its owner, since it holds
+// the token.
 func SaveAtlassian(path, siteURL, email, apiToken string) error {
 	if err := validateAtlassian(path, siteURL, email, apiToken); err != nil {
 		return err
 	}
 
-	data, err := os.ReadFile(path)
+	target, err := filepath.EvalSymlinks(path)
+	if errors.Is(err, os.ErrNotExist) {
+		target, err = path, nil
+	}
+
+	if err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToResolveConfigPath, path), err)
+	}
+
+	data, err := os.ReadFile(target)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReadConfigFile, path), err)
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReadConfigFileToSave, target), err)
 	}
 
 	lines := strings.SplitAfter(string(data), "\n")
@@ -173,13 +195,7 @@ func SaveAtlassian(path, siteURL, email, apiToken string) error {
 		lines = setLine(lines, atlassianKeys[i], string(line))
 	}
 
-	if err := writeFileAtomic(path, []byte(strings.Join(lines, ""))); err != nil {
-		return err
-	}
-
-	_, err = Load(path)
-
-	return err
+	return writeFileAtomic(target, []byte(strings.Join(lines, "")))
 }
 
 // setLine replaces the first top-level assignment of key in lines with line,
@@ -201,17 +217,18 @@ func setLine(lines []string, key, line string) []string {
 	return append(lines, line)
 }
 
-// writeFileAtomic writes data to a temp file next to path with mode 0600 and
-// renames it over path, creating path's directory when missing.
+// writeFileAtomic writes data to a temp file next to path with mode 0600,
+// checks it loads, and renames it over path, creating path's directory when
+// missing.
 func writeFileAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToWriteConfigFile, path), err)
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToCreateConfigDir, dir), err)
 	}
 
 	f, err := os.CreateTemp(dir, ".config-*.toml")
 	if err != nil {
-		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToWriteConfigFile, path), err)
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToCreateTempConfigFile, path), err)
 	}
 
 	// Removing after a successful rename fails harmlessly.
@@ -222,12 +239,16 @@ func writeFileAtomic(path string, data []byte) error {
 		err = closeErr
 	}
 
-	if err == nil {
-		err = os.Rename(f.Name(), path)
+	if err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToWriteTempConfigFile, path), err)
 	}
 
-	if err != nil {
-		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToWriteConfigFile, path), err)
+	if _, err := Load(f.Name()); err != nil {
+		return fmt.Errorf("%w: path=%s", err, path)
+	}
+
+	if err := os.Rename(f.Name(), path); err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReplaceConfigFile, path), err)
 	}
 
 	return nil

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -262,6 +263,41 @@ func TestLocalOriginGuard(t *testing.T) {
 			defer func() { _ = resp.Body.Close() }()
 
 			require.Equal(t, tt.status, resp.StatusCode)
+		})
+	}
+}
+
+func TestLocalOriginGuardRejectsRemoteClients(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+
+	for _, tt := range []struct {
+		remote string
+		status int
+	}{
+		{remote: "127.0.0.1:50000", status: http.StatusNoContent},
+		{remote: "[::1]:50000", status: http.StatusNoContent},
+		{remote: "192.168.0.20:50000", status: http.StatusForbidden},
+		{remote: "[fe80::1]:50000", status: http.StatusForbidden},
+		{remote: "not an address", status: http.StatusForbidden},
+	} {
+		t.Run(tt.remote, func(t *testing.T) {
+			// A LAN client can send a loopback Host; its address gives it away.
+			req := httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodGet,
+				"http://localhost:8080/api/settings/atlassian",
+				nil,
+			)
+			req.RemoteAddr = tt.remote
+
+			rec := httptest.NewRecorder()
+			server.WithLocalOrigin(ok).ServeHTTP(rec, req)
+
+			require.Equal(t, tt.status, rec.Code)
+
+			if tt.status == http.StatusForbidden {
+				require.Contains(t, rec.Body.String(), `"code":"forbidden_remote"`)
+			}
 		})
 	}
 }
