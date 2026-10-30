@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/byron1st/wharf/internal/pkg/mocks"
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/todo"
 	"github.com/byron1st/wharf/internal/service"
 )
@@ -23,8 +24,12 @@ func TestListTodos(t *testing.T) {
 		TaskID: "jira-WHF-1", Today: "2026-10-01", EndDate: "2026-10-02", IsDone: new(false),
 	}).Return([]todo.Todo{
 		{
-			ID: 1, TaskID: "jira-WHF-1", Description: "a", IsDone: false, StartDate: "2026-10-01",
-			EndDate: "2026-10-02", Reminders: []time.Time{at}, Position: new(0),
+			ID: 1, TaskID: "jira-WHF-1", Description: "a", Note: "n", IsDone: true, CompletedAt: &at,
+			StartDate: "2026-10-01", EndDate: "2026-10-02", Reminders: []time.Time{at}, Position: new(0),
+			ServiceDeskRequests: []servicedesk.Request{{
+				Key: "SD-1", Title: "Mouse", Status: "Open", StatusCategory: "NEW",
+				Created: at, StatusAt: at.Add(time.Hour),
+			}},
 		},
 		{ID: 2, TaskID: "jira-WHF-1", Description: "b", Position: new(1)},
 	}, nil).Once()
@@ -34,10 +39,13 @@ func TestListTodos(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{"todos":[
-		{"id":1,"task_id":"jira-WHF-1","description":"a","is_done":false,"start_date":"2026-10-01",
-		 "end_date":"2026-10-02","reminders":["2026-10-01T09:00:00Z"],"position":0},
-		{"id":2,"task_id":"jira-WHF-1","description":"b","is_done":false,"start_date":null,
-		 "end_date":null,"reminders":[],"position":1}
+		{"id":1,"task_id":"jira-WHF-1","description":"a","note":"n","is_done":true,
+		 "completed_at":"2026-10-01T09:00:00Z","start_date":"2026-10-01",
+		 "end_date":"2026-10-02","reminders":["2026-10-01T09:00:00Z"],"position":0,
+		 "service_desk_requests":[{"key":"SD-1","title":"Mouse","status":"Open","status_category":"NEW",
+		  "created_at":"2026-10-01T09:00:00Z","status_at":"2026-10-01T10:00:00Z"}]},
+		{"id":2,"task_id":"jira-WHF-1","description":"b","note":"","is_done":false,"completed_at":null,
+		 "start_date":null,"end_date":null,"reminders":[],"position":1,"service_desk_requests":[]}
 	]}`, rec.Body.String())
 }
 
@@ -73,13 +81,13 @@ func TestCreateTodo(t *testing.T) {
 
 	svc := mocks.NewMockService(t)
 	svc.EXPECT().CreateTodo(mock.Anything, mock.MatchedBy(func(got todo.Todo) bool {
-		return got.TaskID == "local-WHF-001" && got.Description == "d" && got.IsDone &&
+		return got.TaskID == "local-WHF-001" && got.Description == "d" && got.Note == "n" && got.IsDone &&
 			got.StartDate == "2026-10-01" && got.EndDate == "" && len(got.Reminders) == 1 &&
 			got.Reminders[0].Equal(at) && got.Position != nil && *got.Position == 2
 	})).Return(5, nil).Once()
 
 	rec, _ := serveBody(t, svc, http.MethodPost, "/todos", strings.NewReader(`{
-		"task_id":"local-WHF-001","description":"d","is_done":true,"start_date":"2026-10-01","end_date":null,
+		"task_id":"local-WHF-001","description":"d","note":"n","is_done":true,"start_date":"2026-10-01","end_date":null,
 		"reminders":["2026-10-01T18:00:00+09:00"],"position":2
 	}`))
 
@@ -104,10 +112,15 @@ func TestTodoRoutesRejectInvalidBody(t *testing.T) {
 	}{
 		"malformed":     {`{"task_id":`, "server: failed to decode todo request", http.StatusBadRequest},
 		"unknown field": {`{"task_id":"T","id":3}`, "server: failed to decode todo request", http.StatusBadRequest},
-		"bad reminder":  {`{"reminders":["2026-10-01"]}`, "server: failed to decode todo request", http.StatusBadRequest},
-		"bad position":  {`{"position":1.5}`, "server: failed to decode todo request", http.StatusBadRequest},
-		"trailing":      {`{"task_id":"T"} {}`, "server: todo request has trailing data", http.StatusBadRequest},
-		"empty date":    {`{"start_date":""}`, "server: todo request date is an empty string", http.StatusBadRequest},
+		"read-only field": {
+			`{"task_id":"T","completed_at":"2026-10-01T09:00:00Z"}`,
+			"server: failed to decode todo request",
+			http.StatusBadRequest,
+		},
+		"bad reminder": {`{"reminders":["2026-10-01"]}`, "server: failed to decode todo request", http.StatusBadRequest},
+		"bad position": {`{"position":1.5}`, "server: failed to decode todo request", http.StatusBadRequest},
+		"trailing":     {`{"task_id":"T"} {}`, "server: todo request has trailing data", http.StatusBadRequest},
+		"empty date":   {`{"start_date":""}`, "server: todo request date is an empty string", http.StatusBadRequest},
 		"too large": {
 			`{"description":"` + strings.Repeat("x", 1<<20) + `"}`,
 			"server: todo request is too large",
@@ -155,6 +168,11 @@ func TestTodoRoutesRejectNonIntegerID(t *testing.T) {
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
 		// No service expectation: the mock fails the test if it is called.
 		rec, _ := serveBody(t, mocks.NewMockService(t), method, "/todos/abc", strings.NewReader(`{}`))
+
+		require.Equal(t, http.StatusNotFound, rec.Code, method)
+		require.Contains(t, rec.Body.String(), "server: todo id is not an integer")
+
+		rec, _ = serve(t, mocks.NewMockService(t), method, "/todos/abc/service-desk-requests/SD-1")
 
 		require.Equal(t, http.StatusNotFound, rec.Code, method)
 		require.Contains(t, rec.Body.String(), "server: todo id is not an integer")

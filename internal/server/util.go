@@ -27,7 +27,7 @@ var errorStatuses = []struct {
 	{err: service.ErrLocalTaskToUpdateNotFound, status: http.StatusNotFound},
 	{err: service.ErrTaskToDeleteNotFound, status: http.StatusNotFound},
 	{err: service.ErrTaskNotLocal, status: http.StatusConflict},
-	{err: service.ErrTaskToLinkNotFound, status: http.StatusNotFound},
+	{err: service.ErrTodoToLinkNotFound, status: http.StatusNotFound},
 	{err: service.ErrServiceDeskRequestToLinkNotFound, status: http.StatusNotFound},
 	{err: service.ErrServiceDeskRequestLinkToDeleteNotFound, status: http.StatusNotFound},
 	{err: ErrFailedToDecodeTodoRequest, status: http.StatusBadRequest},

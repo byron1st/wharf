@@ -88,18 +88,21 @@ DELETE FROM task_todos WHERE task_id = ?;
 -- name: CreateTodo :one
 -- Inserts nothing, failing with no rows, when the task is not stored, so the
 -- check is a write as the transaction's first statement.
-INSERT INTO todos (description, is_done, start_date, end_date)
-SELECT sqlc.arg(description), sqlc.arg(is_done), sqlc.narg(start_date), sqlc.narg(end_date)
+INSERT INTO todos (description, note, is_done, completed_at, start_date, end_date)
+SELECT sqlc.arg(description), sqlc.arg(note), sqlc.arg(is_done), sqlc.narg(completed_at), sqlc.narg(start_date), sqlc.narg(end_date)
 WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = sqlc.arg(task_id))
 RETURNING id;
 
 -- name: UpdateTodo :execrows
+-- A todo that stays done keeps its completed_at.
 UPDATE todos SET
-    description = ?,
-    is_done     = ?,
-    start_date  = ?,
-    end_date    = ?
-WHERE id = ?;
+    description  = sqlc.arg(description),
+    note         = sqlc.arg(note),
+    is_done      = sqlc.arg(is_done),
+    completed_at = CASE WHEN sqlc.arg(is_done) THEN COALESCE(completed_at, sqlc.narg(completed_at)) END,
+    start_date   = sqlc.narg(start_date),
+    end_date     = sqlc.narg(end_date)
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteTodo :execrows
 DELETE FROM todos WHERE id = ?;
@@ -166,37 +169,50 @@ INSERT INTO schema_migrations (version) VALUES (?);
 
 -- name: UpsertServiceDeskRequest :exec
 INSERT INTO service_desk_requests (
-    issue_key, title, status, created_at, status_at
+    issue_key, title, status, status_category, created_at, status_at
 ) VALUES (
-    ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?
 )
 ON CONFLICT (issue_key) DO UPDATE SET
-    title      = excluded.title,
-    status     = excluded.status,
-    created_at = excluded.created_at,
-    status_at  = excluded.status_at;
+    title           = excluded.title,
+    status          = excluded.status,
+    status_category = excluded.status_category,
+    created_at      = excluded.created_at,
+    status_at       = excluded.status_at;
 
--- name: CreateTaskServiceDeskRequest :execrows
--- Inserts nothing when the task or the request is not stored or the link
+-- name: CreateTodoServiceDeskRequest :execrows
+-- Inserts nothing when the todo or the request is not stored or the link
 -- exists, so the check is a write as the transaction's first statement.
-INSERT INTO task_service_desk_requests (task_id, issue_key)
-SELECT sqlc.arg(task_id), sqlc.arg(issue_key)
-WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = sqlc.arg(task_id))
+INSERT INTO todo_service_desk_requests (todo_id, issue_key)
+SELECT sqlc.arg(todo_id), sqlc.arg(issue_key)
+WHERE EXISTS (SELECT 1 FROM todos WHERE todos.id = sqlc.arg(todo_id))
   AND EXISTS (SELECT 1 FROM service_desk_requests WHERE service_desk_requests.issue_key = sqlc.arg(issue_key))
-ON CONFLICT (task_id, issue_key) DO NOTHING;
+ON CONFLICT (todo_id, issue_key) DO NOTHING;
+
+-- name: ExistsTodo :one
+SELECT EXISTS (SELECT 1 FROM todos WHERE id = ?);
 
 -- name: ExistsServiceDeskRequest :one
 SELECT EXISTS (SELECT 1 FROM service_desk_requests WHERE issue_key = ?);
 
--- name: DeleteTaskServiceDeskRequest :execrows
-DELETE FROM task_service_desk_requests WHERE task_id = ? AND issue_key = ?;
+-- name: DeleteTodoServiceDeskRequest :execrows
+DELETE FROM todo_service_desk_requests WHERE todo_id = ? AND issue_key = ?;
 
--- name: DeleteTaskServiceDeskRequestsOfTask :exec
-DELETE FROM task_service_desk_requests WHERE task_id = ?;
+-- name: DeleteTodoServiceDeskRequestsOfTodo :exec
+DELETE FROM todo_service_desk_requests WHERE todo_id = ?;
 
--- name: ListTaskServiceDeskRequests :many
-SELECT service_desk_requests.*
-FROM task_service_desk_requests
-JOIN service_desk_requests ON service_desk_requests.issue_key = task_service_desk_requests.issue_key
-WHERE task_service_desk_requests.task_id = ?
-ORDER BY service_desk_requests.issue_key;
+-- name: DeleteTodoServiceDeskRequestsOfTask :exec
+DELETE FROM todo_service_desk_requests WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = ?);
+
+-- name: ListTodoServiceDeskRequests :many
+-- Takes the ListTodos filters, as ListTodoReminders does.
+SELECT todo_service_desk_requests.todo_id, sqlc.embed(service_desk_requests)
+FROM todo_service_desk_requests
+JOIN service_desk_requests ON service_desk_requests.issue_key = todo_service_desk_requests.issue_key
+JOIN todos ON todos.id = todo_service_desk_requests.todo_id
+JOIN task_todos ON task_todos.todo_id = todo_service_desk_requests.todo_id
+WHERE (task_todos.task_id = sqlc.narg(task_id) OR sqlc.narg(task_id) IS NULL)
+  AND (todos.start_date <= sqlc.narg(today) OR todos.start_date IS NULL OR sqlc.narg(today) IS NULL)
+  AND (todos.end_date = sqlc.narg(end_date) OR sqlc.narg(end_date) IS NULL)
+  AND (todos.is_done = sqlc.narg(is_done) OR sqlc.narg(is_done) IS NULL)
+ORDER BY todo_service_desk_requests.todo_id, service_desk_requests.issue_key;

@@ -457,16 +457,16 @@ func (_c *MockManager_GetTask_Call) RunAndReturn(run func(ctx context.Context, i
 }
 
 // LinkServiceDeskRequest provides a mock function for the type MockManager
-func (_mock *MockManager) LinkServiceDeskRequest(ctx context.Context, taskID string, key string) error {
-	ret := _mock.Called(ctx, taskID, key)
+func (_mock *MockManager) LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
+	ret := _mock.Called(ctx, todoID, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for LinkServiceDeskRequest")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, taskID, key)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, string) error); ok {
+		r0 = returnFunc(ctx, todoID, key)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -480,21 +480,21 @@ type MockManager_LinkServiceDeskRequest_Call struct {
 
 // LinkServiceDeskRequest is a helper method to define mock.On call
 //   - ctx context.Context
-//   - taskID string
+//   - todoID int64
 //   - key string
-func (_e *MockManager_Expecter) LinkServiceDeskRequest(ctx any, taskID any, key any) *MockManager_LinkServiceDeskRequest_Call {
-	return &MockManager_LinkServiceDeskRequest_Call{Call: _e.mock.On("LinkServiceDeskRequest", ctx, taskID, key)}
+func (_e *MockManager_Expecter) LinkServiceDeskRequest(ctx any, todoID any, key any) *MockManager_LinkServiceDeskRequest_Call {
+	return &MockManager_LinkServiceDeskRequest_Call{Call: _e.mock.On("LinkServiceDeskRequest", ctx, todoID, key)}
 }
 
-func (_c *MockManager_LinkServiceDeskRequest_Call) Run(run func(ctx context.Context, taskID string, key string)) *MockManager_LinkServiceDeskRequest_Call {
+func (_c *MockManager_LinkServiceDeskRequest_Call) Run(run func(ctx context.Context, todoID int64, key string)) *MockManager_LinkServiceDeskRequest_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 int64
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(int64)
 		}
 		var arg2 string
 		if args[2] != nil {
@@ -514,75 +514,7 @@ func (_c *MockManager_LinkServiceDeskRequest_Call) Return(err error) *MockManage
 	return _c
 }
 
-func (_c *MockManager_LinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, taskID string, key string) error) *MockManager_LinkServiceDeskRequest_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ListTaskServiceDeskRequests provides a mock function for the type MockManager
-func (_mock *MockManager) ListTaskServiceDeskRequests(ctx context.Context, taskID string) ([]servicedesk.Request, error) {
-	ret := _mock.Called(ctx, taskID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListTaskServiceDeskRequests")
-	}
-
-	var r0 []servicedesk.Request
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]servicedesk.Request, error)); ok {
-		return returnFunc(ctx, taskID)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []servicedesk.Request); ok {
-		r0 = returnFunc(ctx, taskID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]servicedesk.Request)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, taskID)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockManager_ListTaskServiceDeskRequests_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListTaskServiceDeskRequests'
-type MockManager_ListTaskServiceDeskRequests_Call struct {
-	*mock.Call
-}
-
-// ListTaskServiceDeskRequests is a helper method to define mock.On call
-//   - ctx context.Context
-//   - taskID string
-func (_e *MockManager_Expecter) ListTaskServiceDeskRequests(ctx any, taskID any) *MockManager_ListTaskServiceDeskRequests_Call {
-	return &MockManager_ListTaskServiceDeskRequests_Call{Call: _e.mock.On("ListTaskServiceDeskRequests", ctx, taskID)}
-}
-
-func (_c *MockManager_ListTaskServiceDeskRequests_Call) Run(run func(ctx context.Context, taskID string)) *MockManager_ListTaskServiceDeskRequests_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockManager_ListTaskServiceDeskRequests_Call) Return(requests []servicedesk.Request, err error) *MockManager_ListTaskServiceDeskRequests_Call {
-	_c.Call.Return(requests, err)
-	return _c
-}
-
-func (_c *MockManager_ListTaskServiceDeskRequests_Call) RunAndReturn(run func(ctx context.Context, taskID string) ([]servicedesk.Request, error)) *MockManager_ListTaskServiceDeskRequests_Call {
+func (_c *MockManager_LinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, todoID int64, key string) error) *MockManager_LinkServiceDeskRequest_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -837,16 +769,16 @@ func (_c *MockManager_Migrate_Call) RunAndReturn(run func(ctx context.Context) e
 }
 
 // UnlinkServiceDeskRequest provides a mock function for the type MockManager
-func (_mock *MockManager) UnlinkServiceDeskRequest(ctx context.Context, taskID string, key string) error {
-	ret := _mock.Called(ctx, taskID, key)
+func (_mock *MockManager) UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
+	ret := _mock.Called(ctx, todoID, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UnlinkServiceDeskRequest")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, taskID, key)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, string) error); ok {
+		r0 = returnFunc(ctx, todoID, key)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -860,21 +792,21 @@ type MockManager_UnlinkServiceDeskRequest_Call struct {
 
 // UnlinkServiceDeskRequest is a helper method to define mock.On call
 //   - ctx context.Context
-//   - taskID string
+//   - todoID int64
 //   - key string
-func (_e *MockManager_Expecter) UnlinkServiceDeskRequest(ctx any, taskID any, key any) *MockManager_UnlinkServiceDeskRequest_Call {
-	return &MockManager_UnlinkServiceDeskRequest_Call{Call: _e.mock.On("UnlinkServiceDeskRequest", ctx, taskID, key)}
+func (_e *MockManager_Expecter) UnlinkServiceDeskRequest(ctx any, todoID any, key any) *MockManager_UnlinkServiceDeskRequest_Call {
+	return &MockManager_UnlinkServiceDeskRequest_Call{Call: _e.mock.On("UnlinkServiceDeskRequest", ctx, todoID, key)}
 }
 
-func (_c *MockManager_UnlinkServiceDeskRequest_Call) Run(run func(ctx context.Context, taskID string, key string)) *MockManager_UnlinkServiceDeskRequest_Call {
+func (_c *MockManager_UnlinkServiceDeskRequest_Call) Run(run func(ctx context.Context, todoID int64, key string)) *MockManager_UnlinkServiceDeskRequest_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 int64
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(int64)
 		}
 		var arg2 string
 		if args[2] != nil {
@@ -894,7 +826,7 @@ func (_c *MockManager_UnlinkServiceDeskRequest_Call) Return(err error) *MockMana
 	return _c
 }
 
-func (_c *MockManager_UnlinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, taskID string, key string) error) *MockManager_UnlinkServiceDeskRequest_Call {
+func (_c *MockManager_UnlinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, todoID int64, key string) error) *MockManager_UnlinkServiceDeskRequest_Call {
 	_c.Call.Return(run)
 	return _c
 }

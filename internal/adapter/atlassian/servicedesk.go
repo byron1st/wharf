@@ -1,6 +1,7 @@
 package atlassian
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -36,6 +37,8 @@ const (
 	maxRequestPages = 100
 
 	summaryFieldID = "summary"
+
+	undefinedStatusCategory = "UNDEFINED"
 )
 
 type requestPage struct {
@@ -52,8 +55,9 @@ type customerRequest struct {
 }
 
 type customerRequestStatus struct {
-	Status     string  `json:"status"`
-	StatusDate dateDTO `json:"statusDate"`
+	Status         string  `json:"status"`
+	StatusCategory string  `json:"statusCategory"`
+	StatusDate     dateDTO `json:"statusDate"`
 }
 
 type customerRequestFieldValue struct {
@@ -177,6 +181,10 @@ func toRequest(raw json.RawMessage, index int) (servicedesk.Request, error) {
 		return servicedesk.Request{}, fmt.Errorf("%w: key=%s", ErrMissingRequestStatus, key)
 	}
 
+	// A blank category is UNDEFINED, so the request still syncs and counts as
+	// not closed.
+	category := cmp.Or(strings.TrimSpace(item.CurrentStatus.StatusCategory), undefinedStatusCategory)
+
 	if item.CreatedDate.EpochMillis == 0 {
 		return servicedesk.Request{}, fmt.Errorf("%w: key=%s", ErrMissingRequestCreated, key)
 	}
@@ -186,11 +194,12 @@ func toRequest(raw json.RawMessage, index int) (servicedesk.Request, error) {
 	}
 
 	return servicedesk.Request{
-		Key:      key,
-		Title:    title,
-		Status:   status,
-		Created:  time.UnixMilli(item.CreatedDate.EpochMillis).UTC(),
-		StatusAt: time.UnixMilli(item.CurrentStatus.StatusDate.EpochMillis).UTC(),
+		Key:            key,
+		Title:          title,
+		Status:         status,
+		StatusCategory: category,
+		Created:        time.UnixMilli(item.CreatedDate.EpochMillis).UTC(),
+		StatusAt:       time.UnixMilli(item.CurrentStatus.StatusDate.EpochMillis).UTC(),
 	}, nil
 }
 

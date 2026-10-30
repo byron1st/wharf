@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/todo"
 )
 
@@ -29,13 +30,16 @@ var (
 	ErrFailedToDeleteTodo          = errors.New("db: failed to delete todo")
 	ErrTodoToDeleteNotFound        = errors.New("db: todo to delete not found")
 	ErrFailedToDeleteTodoReminders = errors.New("db: failed to delete todo reminders")
+	ErrFailedToDeleteTodoLinks     = errors.New("db: failed to delete service desk request links of todo")
+	ErrFailedToListTodoRequests    = errors.New("db: failed to list service desk requests of todos")
 )
 
 // CreateTodo stores t as a new todo of the stored task t.TaskID and returns
 // its ID. The todo goes at t.Position, which must not be negative, shifting
 // the todos from there down, or at the end when t.Position is nil or past it.
-// Duplicate reminders are stored once. t.ID is ignored. It fails with
-// ErrTaskOfTodoToCreateNotFound when no task has t.TaskID.
+// Duplicate reminders are stored once. A done todo is completed now. t.ID and
+// t.CompletedAt are ignored. It fails with ErrTaskOfTodoToCreateNotFound when
+// no task has t.TaskID.
 func (m *manager) CreateTodo(ctx context.Context, t todo.Todo) (int64, error) {
 	if err := m.checkConnected(); err != nil {
 		return 0, err
@@ -50,7 +54,9 @@ func (m *manager) CreateTodo(ctx context.Context, t todo.Todo) (int64, error) {
 		// at busyTimeoutPragma.
 		id, err = queries.CreateTodo(ctx, CreateTodoParams{
 			Description: t.Description,
+			Note:        t.Note,
 			IsDone:      t.IsDone,
+			CompletedAt: completedAt(t.IsDone),
 			StartDate:   toNullString(t.StartDate),
 			EndDate:     toNullString(t.EndDate),
 			TaskID:      t.TaskID,
@@ -77,7 +83,8 @@ func (m *manager) CreateTodo(ctx context.Context, t todo.Todo) (int64, error) {
 }
 
 // ListTodos returns the todos that match every set field of f, ordered by
-// task ID and position, each with its reminders in ascending order.
+// task ID and position, each with its reminders in ascending order and its
+// linked Service Desk requests in issue key order.
 func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error) {
 	if err := m.checkConnected(); err != nil {
 		return nil, err
@@ -105,7 +112,9 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 			ID:          row.ID,
 			TaskID:      row.TaskID,
 			Description: row.Description,
+			Note:        row.Note,
 			IsDone:      row.IsDone,
+			CompletedAt: fromNullTime(row.CompletedAt),
 			StartDate:   row.StartDate.String,
 			EndDate:     row.EndDate.String,
 			Position:    &position,
@@ -127,8 +136,19 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 		byTodo[r.TodoID] = append(byTodo[r.TodoID], r.RemindAt)
 	}
 
+	links, err := m.queries.ListTodoServiceDeskRequests(ctx, ListTodoServiceDeskRequestsParams(params))
+	if err != nil {
+		return nil, errors.Join(ErrFailedToListTodoRequests, err)
+	}
+
+	requests := map[int64][]servicedesk.Request{}
+	for _, l := range links {
+		requests[l.TodoID] = append(requests[l.TodoID], fromServiceDeskRequest(l.ServiceDeskRequest))
+	}
+
 	for i := range todos {
 		todos[i].Reminders = byTodo[todos[i].ID]
+		todos[i].ServiceDeskRequests = requests[todos[i].ID]
 	}
 
 	return todos, nil
@@ -137,7 +157,9 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 // UpdateTodo replaces every field of the stored todo t.ID and its reminders.
 // When t.TaskID is the current task, a nil t.Position keeps its place;
 // otherwise the todo moves to t.TaskID as CreateTodo places it. Both tasks
-// renumber their todos from 0 without gaps. It fails with
+// renumber their todos from 0 without gaps. A todo that becomes done is
+// completed now, one that stays done keeps its completion time, and one that
+// is not done has none. Its Service Desk request links are kept. It fails with
 // ErrTodoToUpdateNotFound when no todo has t.ID and with
 // ErrTaskOfTodoToUpdateNotFound when no task has t.TaskID.
 func (m *manager) UpdateTodo(ctx context.Context, t todo.Todo) error {
@@ -148,7 +170,9 @@ func (m *manager) UpdateTodo(ctx context.Context, t todo.Todo) error {
 	return m.inTx(ctx, func(queries *Queries) error {
 		updated, err := queries.UpdateTodo(ctx, UpdateTodoParams{
 			Description: t.Description,
+			Note:        t.Note,
 			IsDone:      t.IsDone,
+			CompletedAt: completedAt(t.IsDone),
 			StartDate:   toNullString(t.StartDate),
 			EndDate:     toNullString(t.EndDate),
 			ID:          t.ID,
@@ -193,9 +217,9 @@ func (m *manager) UpdateTodo(ctx context.Context, t todo.Todo) error {
 	})
 }
 
-// DeleteTodo deletes the todo with id and its reminders, and moves the later
-// todos of its task up. It fails with ErrTodoToDeleteNotFound when no todo
-// has id.
+// DeleteTodo deletes the todo with id, its reminders, and its links to
+// Service Desk requests, and moves the later todos of its task up. It fails
+// with ErrTodoToDeleteNotFound when no todo has id.
 func (m *manager) DeleteTodo(ctx context.Context, id int64) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -217,6 +241,10 @@ func (m *manager) DeleteTodo(ctx context.Context, id int64) error {
 
 		if err := queries.DeleteTodoReminders(ctx, id); err != nil {
 			return fmt.Errorf("%w: id=%d", errors.Join(ErrFailedToDeleteTodoReminders, err), id)
+		}
+
+		if err := queries.DeleteTodoServiceDeskRequestsOfTodo(ctx, id); err != nil {
+			return fmt.Errorf("%w: id=%d", errors.Join(ErrFailedToDeleteTodoLinks, err), id)
 		}
 
 		return nil
@@ -274,6 +302,22 @@ func storeReminders(ctx context.Context, queries *Queries, id int64, reminders [
 	}
 
 	return nil
+}
+
+// completedAt is the completion time to store for a todo that is done.
+func completedAt(isDone bool) sql.NullTime {
+	return sql.NullTime{Time: time.Now().UTC(), Valid: isDone}
+}
+
+func fromServiceDeskRequest(row ServiceDeskRequest) servicedesk.Request {
+	return servicedesk.Request{
+		Key:            row.IssueKey,
+		Title:          row.Title,
+		Status:         row.Status,
+		StatusCategory: row.StatusCategory,
+		Created:        row.CreatedAt,
+		StatusAt:       row.StatusAt,
+	}
 }
 
 // toNullString stores an empty s as NULL.

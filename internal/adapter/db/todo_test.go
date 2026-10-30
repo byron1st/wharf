@@ -173,7 +173,10 @@ func TestListTodos(t *testing.T) {
 	require.True(t, early.Equal(got.Reminders[0]))
 	require.True(t, late.Equal(got.Reminders[1]))
 
+	require.NotNil(t, got.CompletedAt)
+
 	got.Reminders = nil
+	got.CompletedAt = nil
 	require.Equal(t, todo.Todo{
 		ID: started, TaskID: "J1", Description: "started", IsDone: true,
 		StartDate: "2026-10-01", EndDate: "2026-10-05", Position: new(1),
@@ -246,6 +249,56 @@ func TestUpdateTodo(t *testing.T) {
 
 	_, reminders := stored(t, path)
 	require.Equal(t, []string{fmt.Sprint(b)}, reminders, "a's reminders were replaced by none")
+}
+
+func TestTodoNoteAndCompletedAt(t *testing.T) {
+	manager, _ := newTodoManager(t)
+	ctx := context.Background()
+
+	get := func(id int64) todo.Todo {
+		t.Helper()
+
+		todos, err := manager.ListTodos(ctx, todo.Filter{})
+		require.NoError(t, err)
+
+		for _, td := range todos {
+			if td.ID == id {
+				return td
+			}
+		}
+
+		require.FailNow(t, "todo not found", "id=%d", id)
+
+		return todo.Todo{}
+	}
+
+	before := time.Now().Add(-time.Second)
+	a := create(t, manager, todo.Todo{TaskID: "J1", Description: "a", Note: "first", IsDone: true})
+	b := create(t, manager, todo.Todo{TaskID: "J1", Description: "b"})
+
+	created := get(a)
+	require.Equal(t, "first", created.Note)
+	require.NotNil(t, created.CompletedAt)
+	require.WithinRange(t, *created.CompletedAt, before, time.Now())
+	require.Nil(t, get(b).CompletedAt)
+
+	// Staying done keeps the completion time, and the note is replaced.
+	require.NoError(
+		t,
+		manager.UpdateTodo(ctx, todo.Todo{ID: a, TaskID: "J1", Description: "a", Note: "", IsDone: true}),
+	)
+	require.Empty(t, get(a).Note)
+	require.True(t, created.CompletedAt.Equal(*get(a).CompletedAt))
+
+	// Undoing clears it; becoming done sets it.
+	require.NoError(t, manager.UpdateTodo(ctx, todo.Todo{ID: a, TaskID: "J1", Description: "a"}))
+	require.Nil(t, get(a).CompletedAt)
+
+	before = time.Now().Add(-time.Second)
+
+	require.NoError(t, manager.UpdateTodo(ctx, todo.Todo{ID: b, TaskID: "J1", Description: "b", IsDone: true}))
+	require.NotNil(t, get(b).CompletedAt)
+	require.WithinRange(t, *get(b).CompletedAt, before, time.Now())
 }
 
 func TestUpdateTodoRejectsMissingTodoOrTask(t *testing.T) {

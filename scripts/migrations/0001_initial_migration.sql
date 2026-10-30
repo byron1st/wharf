@@ -39,12 +39,16 @@ INSERT INTO counters (name, value) VALUES ('local_task', 0);
 -- Todos belong to one task through task_todos. Dates are "YYYY-MM-DD" text so
 -- text comparison is date comparison. Like the task relations, there are no
 -- foreign keys; db.Manager keeps the tables consistent in transactions.
+-- completed_at is when the todo was last marked done, and NULL while it is
+-- not done.
 CREATE TABLE todos (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    description TEXT NOT NULL,
-    is_done     BOOLEAN NOT NULL DEFAULT 0,
-    start_date  TEXT,
-    end_date    TEXT
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    description  TEXT NOT NULL,
+    note         TEXT NOT NULL DEFAULT '',
+    is_done      BOOLEAN NOT NULL DEFAULT 0,
+    completed_at DATETIME,
+    start_date   TEXT,
+    end_date     TEXT
 );
 
 -- position orders the todos of a task as 0..n-1 without gaps. It is not
@@ -65,19 +69,22 @@ CREATE TABLE todo_reminders (
 
 -- Service Desk customer requests are not tasks. issue_key is the Jira issue
 -- key. status_at is when the current status was attained, not issue.updated.
+-- status_category is the Jira status category (NEW, INDETERMINATE, DONE, or
+-- UNDEFINED), which tells closed requests apart whatever the status name.
 CREATE TABLE service_desk_requests (
-    issue_key  TEXT PRIMARY KEY NOT NULL,
-    title      TEXT NOT NULL,
-    status     TEXT NOT NULL,
-    created_at DATETIME NOT NULL,
-    status_at  DATETIME NOT NULL
+    issue_key       TEXT PRIMARY KEY NOT NULL,
+    title           TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    status_category TEXT NOT NULL,
+    created_at      DATETIME NOT NULL,
+    status_at       DATETIME NOT NULL
 );
 
--- A task relates to Service Desk requests and a request to tasks. A row is
+-- A todo relates to Service Desk requests and a request to todos. A row is
 -- one undirected relates-to link. Like the task relations, there are no
 -- foreign keys; db.Manager checks both sides exist when it links them.
-CREATE TABLE task_service_desk_requests (
-    task_id   TEXT NOT NULL,
+CREATE TABLE todo_service_desk_requests (
+    todo_id   INTEGER NOT NULL,
     issue_key TEXT NOT NULL,
-    PRIMARY KEY (task_id, issue_key)
+    PRIMARY KEY (todo_id, issue_key)
 );

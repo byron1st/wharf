@@ -362,16 +362,16 @@ func (_c *MockService_GetTask_Call) RunAndReturn(run func(ctx context.Context, i
 }
 
 // LinkServiceDeskRequest provides a mock function for the type MockService
-func (_mock *MockService) LinkServiceDeskRequest(ctx context.Context, taskID string, key string) error {
-	ret := _mock.Called(ctx, taskID, key)
+func (_mock *MockService) LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
+	ret := _mock.Called(ctx, todoID, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for LinkServiceDeskRequest")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, taskID, key)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, string) error); ok {
+		r0 = returnFunc(ctx, todoID, key)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -385,21 +385,21 @@ type MockService_LinkServiceDeskRequest_Call struct {
 
 // LinkServiceDeskRequest is a helper method to define mock.On call
 //   - ctx context.Context
-//   - taskID string
+//   - todoID int64
 //   - key string
-func (_e *MockService_Expecter) LinkServiceDeskRequest(ctx any, taskID any, key any) *MockService_LinkServiceDeskRequest_Call {
-	return &MockService_LinkServiceDeskRequest_Call{Call: _e.mock.On("LinkServiceDeskRequest", ctx, taskID, key)}
+func (_e *MockService_Expecter) LinkServiceDeskRequest(ctx any, todoID any, key any) *MockService_LinkServiceDeskRequest_Call {
+	return &MockService_LinkServiceDeskRequest_Call{Call: _e.mock.On("LinkServiceDeskRequest", ctx, todoID, key)}
 }
 
-func (_c *MockService_LinkServiceDeskRequest_Call) Run(run func(ctx context.Context, taskID string, key string)) *MockService_LinkServiceDeskRequest_Call {
+func (_c *MockService_LinkServiceDeskRequest_Call) Run(run func(ctx context.Context, todoID int64, key string)) *MockService_LinkServiceDeskRequest_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 int64
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(int64)
 		}
 		var arg2 string
 		if args[2] != nil {
@@ -419,7 +419,7 @@ func (_c *MockService_LinkServiceDeskRequest_Call) Return(err error) *MockServic
 	return _c
 }
 
-func (_c *MockService_LinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, taskID string, key string) error) *MockService_LinkServiceDeskRequest_Call {
+func (_c *MockService_LinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, todoID int64, key string) error) *MockService_LinkServiceDeskRequest_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -675,16 +675,16 @@ func (_c *MockService_SyncServiceDeskRequests_Call) RunAndReturn(run func(ctx co
 }
 
 // UnlinkServiceDeskRequest provides a mock function for the type MockService
-func (_mock *MockService) UnlinkServiceDeskRequest(ctx context.Context, taskID string, key string) error {
-	ret := _mock.Called(ctx, taskID, key)
+func (_mock *MockService) UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
+	ret := _mock.Called(ctx, todoID, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UnlinkServiceDeskRequest")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, taskID, key)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64, string) error); ok {
+		r0 = returnFunc(ctx, todoID, key)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -698,21 +698,21 @@ type MockService_UnlinkServiceDeskRequest_Call struct {
 
 // UnlinkServiceDeskRequest is a helper method to define mock.On call
 //   - ctx context.Context
-//   - taskID string
+//   - todoID int64
 //   - key string
-func (_e *MockService_Expecter) UnlinkServiceDeskRequest(ctx any, taskID any, key any) *MockService_UnlinkServiceDeskRequest_Call {
-	return &MockService_UnlinkServiceDeskRequest_Call{Call: _e.mock.On("UnlinkServiceDeskRequest", ctx, taskID, key)}
+func (_e *MockService_Expecter) UnlinkServiceDeskRequest(ctx any, todoID any, key any) *MockService_UnlinkServiceDeskRequest_Call {
+	return &MockService_UnlinkServiceDeskRequest_Call{Call: _e.mock.On("UnlinkServiceDeskRequest", ctx, todoID, key)}
 }
 
-func (_c *MockService_UnlinkServiceDeskRequest_Call) Run(run func(ctx context.Context, taskID string, key string)) *MockService_UnlinkServiceDeskRequest_Call {
+func (_c *MockService_UnlinkServiceDeskRequest_Call) Run(run func(ctx context.Context, todoID int64, key string)) *MockService_UnlinkServiceDeskRequest_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 int64
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(int64)
 		}
 		var arg2 string
 		if args[2] != nil {
@@ -732,7 +732,7 @@ func (_c *MockService_UnlinkServiceDeskRequest_Call) Return(err error) *MockServ
 	return _c
 }
 
-func (_c *MockService_UnlinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, taskID string, key string) error) *MockService_UnlinkServiceDeskRequest_Call {
+func (_c *MockService_UnlinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, todoID int64, key string) error) *MockService_UnlinkServiceDeskRequest_Call {
 	_c.Call.Return(run)
 	return _c
 }

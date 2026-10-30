@@ -77,11 +77,12 @@ func sdRequest(key, summary, status string, created, statusAt int64) map[string]
 
 func wantRequest(key, title, status string) servicedesk.Request {
 	return servicedesk.Request{
-		Key:      key,
-		Title:    title,
-		Status:   status,
-		Created:  time.UnixMilli(createdMillis).UTC(),
-		StatusAt: time.UnixMilli(statusAtMillis).UTC(),
+		Key:            key,
+		Title:          title,
+		Status:         status,
+		StatusCategory: "NEW",
+		Created:        time.UnixMilli(createdMillis).UTC(),
+		StatusAt:       time.UnixMilli(statusAtMillis).UTC(),
 	}
 }
 
@@ -277,6 +278,29 @@ func TestGetOwnedRequestsSkipsBadItems(t *testing.T) {
 	require.ErrorContains(t, err, "index=1")
 	require.ErrorContains(t, err, "key=SD-3")
 	require.ErrorContains(t, err, "key=SD-6")
+}
+
+func TestGetOwnedRequestsDefaultsBlankStatusCategory(t *testing.T) {
+	blank := sdRequest("SD-1", "Mouse", "Open", createdMillis, statusAtMillis)
+	blank["currentStatus"].(map[string]any)["statusCategory"] = " "
+
+	missing := sdRequest("SD-2", "Account", "Open", createdMillis, statusAtMillis)
+	delete(missing["currentStatus"].(map[string]any), "statusCategory")
+
+	m := mocks.NewMockHTTPClient(t)
+	m.EXPECT().Get(t.Context(), ownedRequestsURL(0), header).
+		Return(sdPage(t, 2, true, sdItem(t, blank), sdItem(t, missing)), nil).
+		Once()
+
+	got, err := newClient(m).GetOwnedRequests(t.Context())
+	require.NoError(t, err)
+
+	want := []servicedesk.Request{wantRequest("SD-1", "Mouse", "Open"), wantRequest("SD-2", "Account", "Open")}
+	for i := range want {
+		want[i].StatusCategory = "UNDEFINED"
+	}
+
+	require.Equal(t, want, got)
 }
 
 func TestGetOwnedRequestsCanceledContext(t *testing.T) {

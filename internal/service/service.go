@@ -25,7 +25,7 @@ var (
 	ErrLocalTaskToUpdateNotFound        = errors.New("service: local task to update not found")
 	ErrTaskNotLocal                     = errors.New("service: only local tasks can be updated")
 	ErrTaskToDeleteNotFound             = errors.New("service: task to delete not found")
-	ErrTaskToLinkNotFound               = errors.New("service: task to link not found")
+	ErrTodoToLinkNotFound               = errors.New("service: todo to link not found")
 	ErrServiceDeskRequestToLinkNotFound = errors.New(
 		"service: service desk request to link not found",
 	)
@@ -42,8 +42,8 @@ type Service interface {
 	CreateTask(ctx context.Context, t task.Task) (string, error)
 	UpdateTask(ctx context.Context, t task.Task) error
 	DeleteTask(ctx context.Context, id string) error
-	LinkServiceDeskRequest(ctx context.Context, taskID, key string) error
-	UnlinkServiceDeskRequest(ctx context.Context, taskID, key string) error
+	LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
+	UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
 	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
 	CreateTodo(ctx context.Context, t todo.Todo) (int64, error)
 	UpdateTodo(ctx context.Context, t todo.Todo) error
@@ -100,9 +100,8 @@ func (s *service) ListTasks(ctx context.Context) ([]task.Task, error) {
 	return s.db.ListTasks(ctx)
 }
 
-// GetTask returns the task with id, its relations, the stored tasks they
-// point at, and the Service Desk requests linked to it. It fails with
-// ErrTaskNotFound when no task has id.
+// GetTask returns the task with id, its relations, and the stored tasks they
+// point at. It fails with ErrTaskNotFound when no task has id.
 func (s *service) GetTask(ctx context.Context, id string) (TaskDetail, error) {
 	t, err := s.db.GetTask(ctx, id)
 	if errors.Is(err, db.ErrTaskNotFound) {
@@ -134,16 +133,10 @@ func (s *service) GetTask(ctx context.Context, id string) (TaskDetail, error) {
 		}
 	}
 
-	requests, err := s.db.ListTaskServiceDeskRequests(ctx, id)
-	if err != nil {
-		return TaskDetail{}, err
-	}
-
 	detail := TaskDetail{
-		Task:                t,
-		Children:            pick(stored, t.ChildrenIDs),
-		Linked:              pick(stored, t.LinkedIDs),
-		ServiceDeskRequests: requests,
+		Task:     t,
+		Children: pick(stored, t.ChildrenIDs),
+		Linked:   pick(stored, t.LinkedIDs),
 	}
 	if parent, ok := stored[t.ParentID]; ok {
 		detail.Parent = &parent
@@ -215,14 +208,14 @@ func (s *service) DeleteTask(ctx context.Context, id string) error {
 	return err
 }
 
-// LinkServiceDeskRequest links the stored task taskID to the stored Service
-// Desk request key, whatever the task's origin. Linking them again is a
-// no-op. It fails with ErrTaskToLinkNotFound when no task has taskID and with
+// LinkServiceDeskRequest links the stored todo todoID to the stored Service
+// Desk request key. Linking them again is a no-op. It fails with
+// ErrTodoToLinkNotFound when no todo has todoID and with
 // ErrServiceDeskRequestToLinkNotFound when no request has key.
-func (s *service) LinkServiceDeskRequest(ctx context.Context, taskID, key string) error {
-	err := s.db.LinkServiceDeskRequest(ctx, taskID, key)
-	if errors.Is(err, db.ErrTaskToLinkNotFound) {
-		return fmt.Errorf("%w: task_id=%s", ErrTaskToLinkNotFound, taskID)
+func (s *service) LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
+	err := s.db.LinkServiceDeskRequest(ctx, todoID, key)
+	if errors.Is(err, db.ErrTodoToLinkNotFound) {
+		return fmt.Errorf("%w: todo_id=%d", ErrTodoToLinkNotFound, todoID)
 	}
 
 	if errors.Is(err, db.ErrServiceDeskRequestToLinkNotFound) {
@@ -232,13 +225,13 @@ func (s *service) LinkServiceDeskRequest(ctx context.Context, taskID, key string
 	return err
 }
 
-// UnlinkServiceDeskRequest removes the link between the task taskID and the
+// UnlinkServiceDeskRequest removes the link between the todo todoID and the
 // Service Desk request key. It fails with
 // ErrServiceDeskRequestLinkToDeleteNotFound when they are not linked.
-func (s *service) UnlinkServiceDeskRequest(ctx context.Context, taskID, key string) error {
-	err := s.db.UnlinkServiceDeskRequest(ctx, taskID, key)
+func (s *service) UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
+	err := s.db.UnlinkServiceDeskRequest(ctx, todoID, key)
 	if errors.Is(err, db.ErrServiceDeskRequestLinkToDeleteNotFound) {
-		return fmt.Errorf("%w: task_id=%s, key=%s", ErrServiceDeskRequestLinkToDeleteNotFound, taskID, key)
+		return fmt.Errorf("%w: todo_id=%d, key=%s", ErrServiceDeskRequestLinkToDeleteNotFound, todoID, key)
 	}
 
 	return err
