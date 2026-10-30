@@ -75,6 +75,11 @@ type dateDTO struct {
 // that fail to decode or map are omitted and reported in the joined error.
 // A repeated issue key keeps the first occurrence.
 func (c *client) GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, error) {
+	a, err := c.current()
+	if err != nil {
+		return nil, err
+	}
+
 	var (
 		reqs     []servicedesk.Request
 		errs     []error
@@ -83,7 +88,7 @@ func (c *client) GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, e
 	)
 
 	for pages, start := 1, 0; ; pages++ {
-		page, err := c.fetchRequestPage(ctx, start)
+		page, err := c.fetchRequestPage(ctx, a, start)
 		if err != nil {
 			return nil, err
 		}
@@ -121,13 +126,13 @@ func (c *client) GetOwnedRequests(ctx context.Context) ([]servicedesk.Request, e
 	}
 }
 
-func (c *client) fetchRequestPage(ctx context.Context, start int) (requestPage, error) {
-	rawURL, err := ownedRequestsURL(c.requestsURL, start)
+func (c *client) fetchRequestPage(ctx context.Context, a api, start int) (requestPage, error) {
+	rawURL, err := ownedRequestsURL(a.base+requestsPath, start)
 	if err != nil {
 		return requestPage{}, err
 	}
 
-	out, err := c.http.Get(ctx, rawURL, c.header)
+	out, err := c.http.Get(ctx, rawURL, a.header)
 	if err != nil {
 		return requestPage{}, err
 	}

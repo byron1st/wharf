@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -25,7 +27,7 @@ const (
 )
 
 // Server serves an HTTP handler wrapped with the request ID, request logging,
-// and panic recovery middleware.
+// panic recovery, and local origin middleware.
 type Server struct {
 	srv *http.Server
 }
@@ -34,7 +36,7 @@ type Server struct {
 // No WriteTimeout is set because a Jira sync request can take long.
 func New(handler http.Handler, logger *slog.Logger) *Server {
 	return &Server{srv: &http.Server{
-		Handler:           withRequestID(withRequestLog(logger, withRecover(logger, handler))),
+		Handler:           withRequestID(withRequestLog(logger, withRecover(logger, withLocalOrigin(handler)))),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}}
 }
@@ -135,6 +137,58 @@ func withRecover(logger *slog.Logger, next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// withLocalOrigin answers 403 unless the request is for a loopback host name
+// and, when it has an Origin, comes from that same host. wharf has no
+// authentication and returns the Atlassian token, so this keeps other web
+// sites from reaching it through the user's browser: a Host check stops DNS
+// rebinding, and an Origin check stops cross-site requests such as a bodiless
+// POST, which the browser sends without a CORS preflight.
+func withLocalOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackHost(r.Host) {
+			writeJSON(
+				w,
+				http.StatusForbidden,
+				errorResponse{Error: "server: host is not local", Code: "forbidden_host"},
+			)
+
+			return
+		}
+
+		if origin := r.Header.Get("Origin"); origin != "" {
+			u, err := url.Parse(origin)
+			if err != nil || u.Host != r.Host {
+				writeJSON(
+					w,
+					http.StatusForbidden,
+					errorResponse{Error: "server: cross-origin request", Code: "forbidden_origin"},
+				)
+
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// isLoopbackHost reports whether hostport, with or without a port, names
+// localhost or a loopback IP address.
+func isLoopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+
+	if host == "localhost" {
+		return true
+	}
+
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+
+	return ip != nil && ip.IsLoopback()
 }
 
 // statusRecorder captures the response status for the request log; it stays

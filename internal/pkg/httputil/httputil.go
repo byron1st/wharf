@@ -121,14 +121,17 @@ func (c *httpClient) do(
 	}
 
 	if !ok {
-		return nil, fmt.Errorf(
-			"%w: method=%s, url=%s, status=%d, body=%s",
-			ErrUnexpectedStatusCode,
-			method,
-			withoutUserinfo(req.URL),
-			resp.StatusCode,
-			data[:min(len(data), maxErrorBodyBytes)],
-		)
+		return nil, &StatusError{
+			StatusCode: resp.StatusCode,
+			msg: fmt.Sprintf(
+				"%s: method=%s, url=%s, status=%d, body=%s",
+				ErrUnexpectedStatusCode,
+				method,
+				withoutUserinfo(req.URL),
+				resp.StatusCode,
+				data[:min(len(data), maxErrorBodyBytes)],
+			),
+		}
 	}
 
 	if len(data) > maxResponseBodyBytes {
@@ -142,6 +145,23 @@ func (c *httpClient) do(
 	}
 
 	return data, nil
+}
+
+// StatusError is the ErrUnexpectedStatusCode error of a non-2xx response. It
+// carries the status code so callers can branch on it with errors.As.
+type StatusError struct {
+	StatusCode int
+	msg        string
+}
+
+// Error returns the message, which starts with ErrUnexpectedStatusCode's.
+func (e *StatusError) Error() string {
+	return e.msg
+}
+
+// Is reports whether target is ErrUnexpectedStatusCode.
+func (e *StatusError) Is(target error) bool {
+	return target == ErrUnexpectedStatusCode
 }
 
 // withoutUserinfo formats u with its userinfo dropped, since url.URL.Redacted

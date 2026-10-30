@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Structure
-Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks·task_hierarchies·task_links·counters·todos·task_todos·todo_reminders·service_desk_requests·todo_service_desk_requests 스키마와 Task·Todo 구조체 매핑, sqlc SQLite 의 bulk insert 제약과 생성 코드 형태(UPDATE ... RETURNING, ON CONFLICT, :execrows, sqlc.slice, sqlc.embed, sqlc.narg, INSERT ... SELECT ... RETURNING, INSERT ... SELECT ... ON CONFLICT :execrows, UNION)를 정리한다.
+Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks·task_hierarchies·task_links·counters·todos·task_todos·todo_reminders·service_desk_requests·todo_service_desk_requests·atlassian_syncs 스키마와 Task·Todo 구조체 매핑, sqlc SQLite 의 bulk insert 제약과 생성 코드 형태(UPDATE ... RETURNING, ON CONFLICT, :execrows, sqlc.slice, sqlc.embed, sqlc.narg, INSERT ... SELECT ... RETURNING, INSERT ... SELECT ... ON CONFLICT :execrows, UNION)를 정리한다.
 ---
 
 # sqlc + SQLite 초기 설정 현황
@@ -66,6 +66,12 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks�
 - `service_desk_requests (issue_key PK, title, status, status_category, created_at DATETIME, status_at DATETIME)` → sqlc 모델 `ServiceDeskRequest`, 도메인 `servicedesk.Request{Key, Title, Status, StatusCategory, Created, StatusAt}`. 행 → 도메인 변환은 `fromServiceDeskRequest` (`internal/adapter/db/todo.go`).
 - `todo_service_desk_requests (todo_id INTEGER, issue_key, PRIMARY KEY (todo_id, issue_key))` → `TodoServiceDeskRequest`. FK·추가 인덱스 없음.
 - 쿼리: `CreateTodoServiceDeskRequest` (`:execrows`, 아래 형태), `ExistsTodo`·`ExistsServiceDeskRequest` (`:one` bool), `DeleteTodoServiceDeskRequest` (`:execrows`), `DeleteTodoServiceDeskRequestsOfTodo` (`DeleteTodo` cascade), `DeleteTodoServiceDeskRequestsOfTask` (`DeleteTask` cascade, `task_todos` 로 todo 를 찾음), `ListTodoServiceDeskRequests` (`SELECT todo_id, sqlc.embed(service_desk_requests) ... JOIN ...`, `ListTodos` 와 같은 `sqlc.narg` 필터, `ORDER BY todo_id, issue_key`; 생성 struct 가 같아 `ListTodoServiceDeskRequestsParams(params)` 로 변환).
+- `ListTodos`·`ListTodoReminders`·`ListTodoServiceDeskRequests` 는 같은 필터 네 개(`task_id`, `is_done`, `completed_since`(`completed_at >= ?`), `service_desk_request`(`todos.id IN (SELECT todo_id FROM todo_service_desk_requests WHERE issue_key = ?)`))를 똑같은 WHERE 로 쓴다. 생성 Params struct 가 같아 서로 변환된다. 요청 필터는 todo 를 고를 뿐이라, 고른 todo 의 연결 요청은 그 요청만이 아니라 전부 읽는다.
+- `ListServiceDeskRequests` 는 열린 것만 또는 전부(`WHERE status_category != 'DONE' OR CAST(sqlc.arg(include_closed) AS BOOLEAN)`)다. 컬럼 문맥이 없는 `sqlc.arg` 는 `interface{}` 가 되므로 `CAST(... AS BOOLEAN)` 으로 `bool` 파라미터를 얻는다. `CountTodosByTask` 는 `task_todos` JOIN `todos` 를 `GROUP BY task_id` 하고, `SUM` 의 결과 타입을 고정하려고 `CAST(COALESCE(SUM(todos.is_done), 0) AS INTEGER)` 로 `int64` 를 얻는다.
+
+## Atlassian 동기화 기록
+
+- `atlassian_syncs (id INTEGER PK AUTOINCREMENT, synced_at DATETIME, issues, issue_failures, open_requests, closed_requests, request_failures INTEGER)` → `AtlassianSync`, 도메인 `atlassiansync.Record`. 저장까지 간 동기화(완료·부분)만 한 행씩 쌓고, `GetLastAtlassianSync` 가 `ORDER BY id DESC LIMIT 1` 로 마지막을 읽는다. 동기화는 사용자가 누를 때만 일어나 행이 빠르게 늘지 않는다.
 
 ## sqlc SQLite 엔진 제약
 
@@ -75,7 +81,7 @@ Description: sqlc(SQLite 엔진) 설정 경로, Makefile modelgen 동작, tasks�
 - `UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value` + `:one` 은 `IncrementCounter(ctx, name string) (int64, error)` 로 생성된다.
 - `:execrows` 는 `(int64, error)` 로 영향 행 수를 돌려준다(`UpdateLocalTask`, `DeleteTask`). 쓰기로 시작하는 트랜잭션에서 존재 여부를 판별하는 데 쓴다.
 - `sqlc.slice(ids)` 는 `IN (/*SLICE:ids*/?)` 를 실행 시 `?,?,...` 로 바꾸고, 빈 slice 면 `NULL` 로 바꿔 0행이 된다(`ListTasksByIDs`).
-- `sqlc.narg(x)` 는 `x IS NULL` 쪽이 먼저 나오면 타입 추론이 안 돼 `interface{}` 가 된다. 컬럼 비교를 먼저 쓰면(`todos.end_date = sqlc.narg(end_date) OR sqlc.narg(end_date) IS NULL`) `sql.NullString`/`sql.NullBool` 로 생성된다(`ListTodos`).
+- `sqlc.narg(x)` 는 `x IS NULL` 쪽이 먼저 나오면 타입 추론이 안 돼 `interface{}` 가 된다. 컬럼 비교를 먼저 쓰면(`todos.is_done = sqlc.narg(is_done) OR sqlc.narg(is_done) IS NULL`) `sql.NullString`/`sql.NullBool` 로 생성된다(`ListTodos`).
 - `INSERT INTO ... SELECT ... WHERE EXISTS (...) RETURNING id` + `:one` 은 조건이 거짓이면 `sql.ErrNoRows` 를 돌려준다(`CreateTodo`). `DELETE ... RETURNING a, b` + `:one` 은 행 struct(`DeleteTaskTodoRow`)를 돌려준다.
 - `INSERT INTO ... SELECT sqlc.arg(a), sqlc.arg(b) WHERE EXISTS (...) AND EXISTS (...) ON CONFLICT (...) DO NOTHING` + `:execrows` 도 생성된다(`CreateTodoServiceDeskRequest`, `?1`·`?2` 재사용). SELECT 에 WHERE 가 있어 SQLite 의 `INSERT ... SELECT ... ON CONFLICT` 파싱 모호성이 생기지 않는다. 조건 거짓과 충돌 모두 영향 행 수 0 이다.
 - `sqlc.embed(tasks)` 는 행 struct 에 `Task Task` 필드로 들어간다. `LEFT JOIN` 한 nullable 컬럼은 `sql.NullString` 이다(`GetTaskRow`).

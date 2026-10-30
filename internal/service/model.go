@@ -1,15 +1,32 @@
 package service
 
-import "github.com/byron1st/wharf/internal/pkg/task"
+import (
+	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
+	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
+)
 
-// SyncResult is the outcome of a sync that stored what its source returned.
-type SyncResult struct {
-	// Upserted is how many items were passed to storage.
-	Upserted int
-	// Partial joins item errors from the source. It is nil when every returned
-	// item was accepted by the source. Whether a failed item was still stored
-	// depends on the sync method.
-	Partial error
+// AtlassianSync is the outcome of SyncAtlassian.
+type AtlassianSync struct {
+	Record atlassiansync.Record
+	// Errors are the messages of the issues and requests that failed to read,
+	// issues first.
+	Errors []string
+}
+
+// TaskSync is the outcome of SyncJiraTask.
+type TaskSync struct {
+	// Task is the task as stored now, without relations.
+	Task task.Task
+	// Changes names the fields that differ from the copy stored before:
+	// title, description, status, start_date, and due_date, in that order.
+	Changes []string
+}
+
+// TaskSummary is a stored task with how many todos it has.
+type TaskSummary struct {
+	Task  task.Task
+	Todos todo.Count
 }
 
 // TaskDetail is a task with its relations and the stored tasks they point at.

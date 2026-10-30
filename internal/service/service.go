@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/byron1st/wharf/internal/adapter/atlassian"
 	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/pkg/todo"
 )
@@ -35,9 +38,11 @@ var (
 )
 
 type Service interface {
-	SyncJiraTasks(ctx context.Context) (SyncResult, error)
-	SyncServiceDeskRequests(ctx context.Context) (SyncResult, error)
-	ListTasks(ctx context.Context) ([]task.Task, error)
+	SyncAtlassian(ctx context.Context) (AtlassianSync, error)
+	GetLastAtlassianSync(ctx context.Context) (atlassiansync.Record, error)
+	SyncJiraTask(ctx context.Context, id string) (TaskSync, error)
+	ListServiceDeskRequests(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error)
+	ListTasks(ctx context.Context) ([]TaskSummary, error)
 	GetTask(ctx context.Context, id string) (TaskDetail, error)
 	CreateTask(ctx context.Context, t task.Task) (string, error)
 	UpdateTask(ctx context.Context, t task.Task) error
@@ -53,51 +58,33 @@ type Service interface {
 type service struct {
 	jira atlassian.Client
 	db   db.Manager
+	now  func() time.Time
 }
 
 // NewService returns a Service that syncs Atlassian data into db.
 func NewService(jira atlassian.Client, db db.Manager) Service {
-	return &service{jira: jira, db: db}
+	return &service{jira: jira, db: db, now: time.Now}
 }
 
-// SyncJiraTasks upserts the Jira tasks assigned to the current user. When
-// Jira returns no tasks with an error, such as a failed search, nothing is
-// stored and the error is returned. Otherwise every returned task is stored,
-// including a task whose fields failed to convert, and that error is reported
-// in SyncResult.Partial.
-func (s *service) SyncJiraTasks(ctx context.Context) (SyncResult, error) {
-	tasks, err := s.jira.GetMyTasks(ctx)
-	if tasks == nil {
-		return SyncResult{}, err
+// ListTasks returns every stored task in ID order, without relations, each
+// with its todo counts.
+func (s *service) ListTasks(ctx context.Context) ([]TaskSummary, error) {
+	tasks, err := s.db.ListTasks(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := s.db.UpsertTasks(ctx, tasks); err != nil {
-		return SyncResult{}, err
+	counts, err := s.db.CountTodosByTask(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	return SyncResult{Upserted: len(tasks), Partial: err}, nil
-}
-
-// SyncServiceDeskRequests upserts Service Desk requests the current user
-// created. A nil slice, such as a failed page, stores nothing and returns the
-// error. Otherwise every returned request is stored. Requests that failed to
-// convert are omitted, and their error is reported in SyncResult.Partial.
-func (s *service) SyncServiceDeskRequests(ctx context.Context) (SyncResult, error) {
-	requests, err := s.jira.GetOwnedRequests(ctx)
-	if requests == nil {
-		return SyncResult{}, err
+	summaries := make([]TaskSummary, 0, len(tasks))
+	for _, t := range tasks {
+		summaries = append(summaries, TaskSummary{Task: t, Todos: counts[t.ID]})
 	}
 
-	if err := s.db.UpsertServiceDeskRequests(ctx, requests); err != nil {
-		return SyncResult{}, err
-	}
-
-	return SyncResult{Upserted: len(requests), Partial: err}, nil
-}
-
-// ListTasks returns every stored task in ID order, without relations.
-func (s *service) ListTasks(ctx context.Context) ([]task.Task, error) {
-	return s.db.ListTasks(ctx)
+	return summaries, nil
 }
 
 // GetTask returns the task with id, its relations, and the stored tasks they

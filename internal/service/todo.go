@@ -17,7 +17,6 @@ var (
 	ErrInvalidTodoDate           = errors.New("service: todo date is not YYYY-MM-DD")
 	ErrTodoStartsAfterEnd        = errors.New("service: todo start date is after its end date")
 	ErrNegativeTodoPosition      = errors.New("service: todo position is negative")
-	ErrInvalidTodoFilterDate     = errors.New("service: todo filter date is not YYYY-MM-DD")
 	ErrTaskOfNewTodoNotFound     = errors.New("service: task of new todo not found")
 	ErrTaskOfUpdatedTodoNotFound = errors.New("service: task of updated todo not found")
 	ErrTodoToUpdateNotFound      = errors.New("service: todo to update not found")
@@ -25,13 +24,8 @@ var (
 )
 
 // ListTodos returns the todos matching every set field of f, ordered by task
-// ID and position. It fails with ErrInvalidTodoFilterDate when f.Today or
-// f.EndDate is set but not a YYYY-MM-DD date.
+// ID and position.
 func (s *service) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error) {
-	if field, date, ok := firstInvalidDate("today", f.Today, "end_date", f.EndDate); !ok {
-		return nil, fmt.Errorf("%w: %s=%s", ErrInvalidTodoFilterDate, field, date)
-	}
-
 	return s.db.ListTodos(ctx, f)
 }
 

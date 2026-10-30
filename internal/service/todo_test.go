@@ -113,18 +113,12 @@ func TestDeleteTodo(t *testing.T) {
 func TestListTodos(t *testing.T) {
 	svc, manager := newTodoService(t)
 
-	filter := todo.Filter{TaskID: "T", Today: "2026-10-01", EndDate: "2026-10-02", IsDone: new(true)}
+	since := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
+	filter := todo.Filter{TaskID: "T", IsDone: new(true), CompletedSince: &since, ServiceDeskRequest: "SD-1"}
 	want := []todo.Todo{{ID: 1, TaskID: "T", Description: "d"}}
 	manager.EXPECT().ListTodos(mock.Anything, filter).Return(want, nil).Once()
 
 	got, err := svc.ListTodos(t.Context(), filter)
 	require.NoError(t, err)
 	require.Equal(t, want, got)
-
-	_, err = svc.ListTodos(t.Context(), todo.Filter{Today: "today"})
-	require.ErrorIs(t, err, service.ErrInvalidTodoFilterDate)
-
-	_, err = svc.ListTodos(t.Context(), todo.Filter{EndDate: "2026/10/01"})
-	require.ErrorIs(t, err, service.ErrInvalidTodoFilterDate)
-	require.ErrorContains(t, err, "end_date=2026/10/01")
 }

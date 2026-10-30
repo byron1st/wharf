@@ -48,6 +48,127 @@ func (_m *MockClient) EXPECT() *MockClient_Expecter {
 	return &MockClient_Expecter{mock: &_m.Mock}
 }
 
+// Check provides a mock function for the type MockClient
+func (_mock *MockClient) Check(ctx context.Context, siteURL string, email string, apiToken string) error {
+	ret := _mock.Called(ctx, siteURL, email, apiToken)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Check")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = returnFunc(ctx, siteURL, email, apiToken)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_Check_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Check'
+type MockClient_Check_Call struct {
+	*mock.Call
+}
+
+// Check is a helper method to define mock.On call
+//   - ctx context.Context
+//   - siteURL string
+//   - email string
+//   - apiToken string
+func (_e *MockClient_Expecter) Check(ctx any, siteURL any, email any, apiToken any) *MockClient_Check_Call {
+	return &MockClient_Check_Call{Call: _e.mock.On("Check", ctx, siteURL, email, apiToken)}
+}
+
+func (_c *MockClient_Check_Call) Run(run func(ctx context.Context, siteURL string, email string, apiToken string)) *MockClient_Check_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_Check_Call) Return(err error) *MockClient_Check_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_Check_Call) RunAndReturn(run func(ctx context.Context, siteURL string, email string, apiToken string) error) *MockClient_Check_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Configure provides a mock function for the type MockClient
+func (_mock *MockClient) Configure(siteURL string, email string, apiToken string) {
+	_mock.Called(siteURL, email, apiToken)
+	return
+}
+
+// MockClient_Configure_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Configure'
+type MockClient_Configure_Call struct {
+	*mock.Call
+}
+
+// Configure is a helper method to define mock.On call
+//   - siteURL string
+//   - email string
+//   - apiToken string
+func (_e *MockClient_Expecter) Configure(siteURL any, email any, apiToken any) *MockClient_Configure_Call {
+	return &MockClient_Configure_Call{Call: _e.mock.On("Configure", siteURL, email, apiToken)}
+}
+
+func (_c *MockClient_Configure_Call) Run(run func(siteURL string, email string, apiToken string)) *MockClient_Configure_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_Configure_Call) Return() *MockClient_Configure_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockClient_Configure_Call) RunAndReturn(run func(siteURL string, email string, apiToken string)) *MockClient_Configure_Call {
+	_c.Run(run)
+	return _c
+}
+
 // GetMyTasks provides a mock function for the type MockClient
 func (_mock *MockClient) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 	ret := _mock.Called(ctx)
@@ -168,6 +289,72 @@ func (_c *MockClient_GetOwnedRequests_Call) Return(requests []servicedesk.Reques
 }
 
 func (_c *MockClient_GetOwnedRequests_Call) RunAndReturn(run func(ctx context.Context) ([]servicedesk.Request, error)) *MockClient_GetOwnedRequests_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetTask provides a mock function for the type MockClient
+func (_mock *MockClient) GetTask(ctx context.Context, key string) (task.Task, error) {
+	ret := _mock.Called(ctx, key)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTask")
+	}
+
+	var r0 task.Task
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (task.Task, error)); ok {
+		return returnFunc(ctx, key)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) task.Task); ok {
+		r0 = returnFunc(ctx, key)
+	} else {
+		r0 = ret.Get(0).(task.Task)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, key)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_GetTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTask'
+type MockClient_GetTask_Call struct {
+	*mock.Call
+}
+
+// GetTask is a helper method to define mock.On call
+//   - ctx context.Context
+//   - key string
+func (_e *MockClient_Expecter) GetTask(ctx any, key any) *MockClient_GetTask_Call {
+	return &MockClient_GetTask_Call{Call: _e.mock.On("GetTask", ctx, key)}
+}
+
+func (_c *MockClient_GetTask_Call) Run(run func(ctx context.Context, key string)) *MockClient_GetTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_GetTask_Call) Return(task1 task.Task, err error) *MockClient_GetTask_Call {
+	_c.Call.Return(task1, err)
+	return _c
+}
+
+func (_c *MockClient_GetTask_Call) RunAndReturn(run func(ctx context.Context, key string) (task.Task, error)) *MockClient_GetTask_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
 	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/pkg/todo"
@@ -285,6 +286,21 @@ func TestMethodsRequireConnection(t *testing.T) {
 				manager.UnlinkServiceDeskRequest(context.Background(), 1, "SD-1"),
 				db.ErrNotConnected,
 			)
+
+			_, err = manager.CountTodosByTask(context.Background())
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			_, err = manager.ListServiceDeskRequests(context.Background(), false)
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			require.ErrorIs(
+				t,
+				manager.CreateAtlassianSync(context.Background(), atlassiansync.Record{}),
+				db.ErrNotConnected,
+			)
+
+			_, err = manager.GetLastAtlassianSync(context.Background())
+			require.ErrorIs(t, err, db.ErrNotConnected)
 
 			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
 			require.NoError(t, manager.Close())

@@ -6,13 +6,11 @@ import (
 	"github.com/byron1st/wharf/internal/pkg/task"
 )
 
-type syncResponse struct {
-	Upserted int  `json:"upserted"`
-	Partial  bool `json:"partial"`
-}
-
+// errorResponse carries a code when the client must tell the error apart
+// from others with the same status.
 type errorResponse struct {
 	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
 }
 
 // taskRequest is the body of POST /tasks and PUT /tasks/{id}.
@@ -37,8 +35,16 @@ type taskSummary struct {
 	DueDate     *time.Time  `json:"due_date"`
 }
 
+// taskListItem is a summary with the task's todo counts, for GET /api/tasks.
+type taskListItem struct {
+	taskSummary
+
+	TodoCount     int `json:"todo_count"`
+	DoneTodoCount int `json:"done_todo_count"`
+}
+
 type taskListResponse struct {
-	Tasks []taskSummary `json:"tasks"`
+	Tasks []taskListItem `json:"tasks"`
 }
 
 // taskDetailResponse carries the full description, unlike the summaries.
@@ -53,7 +59,7 @@ type taskDetailResponse struct {
 	Linked      []taskSummary `json:"linked"`
 }
 
-// serviceDeskRequestResponse is a Service Desk request linked to a todo.
+// serviceDeskRequestResponse is a Service Desk request.
 type serviceDeskRequestResponse struct {
 	Key            string    `json:"key"`
 	Title          string    `json:"title"`
@@ -100,4 +106,52 @@ type todoListResponse struct {
 
 type createTodoResponse struct {
 	ID int64 `json:"id"`
+}
+
+type serviceDeskRequestListResponse struct {
+	Requests []serviceDeskRequestResponse `json:"requests"`
+}
+
+type atlassianSyncResponse struct {
+	SyncedAt        time.Time `json:"synced_at"`
+	Issues          int       `json:"issues"`
+	IssueFailures   int       `json:"issue_failures"`
+	OpenRequests    int       `json:"open_requests"`
+	ClosedRequests  int       `json:"closed_requests"`
+	RequestFailures int       `json:"request_failures"`
+	// Errors is only in the POST response.
+	Errors []string `json:"errors,omitempty"`
+}
+
+type lastAtlassianSyncResponse struct {
+	LastSync *atlassianSyncResponse `json:"last_sync"`
+}
+
+type taskSyncResponse struct {
+	Task    taskSummary `json:"task"`
+	Changes []string    `json:"changes"`
+}
+
+// atlassianSettingsBody is the body of GET and PUT /api/settings/atlassian
+// and of POST /api/settings/atlassian/test.
+type atlassianSettingsBody struct {
+	SiteURL  string `json:"site_url"`
+	Email    string `json:"email"`
+	APIToken string `json:"api_token"`
+}
+
+type atlassianCheckResponse struct {
+	CheckedAt time.Time `json:"checked_at"`
+}
+
+type appSettingsResponse struct {
+	ConfigPath        string  `json:"config_path"`
+	PendingConfigPath *string `json:"pending_config_path"`
+	Addr              string  `json:"addr"`
+	DBPath            string  `json:"db_path"`
+	Version           string  `json:"version"`
+}
+
+type chosenConfigResponse struct {
+	PendingConfigPath *string `json:"pending_config_path"`
 }

@@ -1,39 +1,46 @@
 ---
 Application: wharf
 ResearchType: Flow
-Description: Jira 동기화가 꽂혀 있는 현재 경로(atlassian.Client.GetMyTasks, service.SyncJiraTasks, POST /tasks/jira, 0001 tasks 스키마, httputil.Get)와, 그 옆에 둘 Service Desk 수집의 공식 계약 — GET /rest/servicedeskapi/request 의 CustomerRequestDTO(assignee·updated 없음), OWNED_REQUESTS·ALL_REQUESTS·start/limit/size/isLastPage, Basic 인증과 site URL 경로 결합, `currentStatus.statusCategory` 저장(닫힌 요청 구분), todo ↔ 요청 relates-to 연결(`todo_service_desk_requests`, `PUT`/`DELETE /todos/{id}/service-desk-requests/{key}`, `GET /todos` 의 `service_desk_requests`)을 정리한다.
+Description: Jira 이슈와 Service Desk 요청을 함께 받는 현재 동기화 경로(atlassian.Client, service.SyncAtlassian, POST /api/sync/atlassian, atlassian_syncs 기록, 닫힌 요청 수 계산)와 Service Desk 수집의 공식 계약 — GET /rest/servicedeskapi/request 의 CustomerRequestDTO(assignee·updated 없음), OWNED_REQUESTS·ALL_REQUESTS·start/limit/size/isLastPage, Basic 인증과 site URL 경로 결합, `currentStatus.statusCategory` 저장(닫힌 요청 구분), todo ↔ 요청 relates-to 연결(`todo_service_desk_requests`, `PUT`/`DELETE /api/todos/{id}/service-desk-requests/{key}`, `GET /api/todos` 의 `service_desk_requests`)을 정리한다.
 ---
 
 # Service Desk 요청 수집을 붙일 현재 경로와 공식 계약
 
 DEV-21 계획 승인 시점의 코드와, 2026-10-27에 받은 Jira Service Management Cloud OpenAPI(`https://dac-static.atlassian.com/cloud/jira/service-desk/swagger.v3.json`, operation `getCustomerRequests`) 및 JSM REST intro의 base URL 규칙이다.
 
-## 현재 Jira 동기화 경로
+## 현재 Atlassian 동기화 경로
+
+Jira 이슈와 Service Desk 요청은 웹앱의 `Sync now` 하나로 함께 동기화된다.
 
 ```mermaid
 sequenceDiagram
-    participant H as POST /tasks/jira
-    participant S as service.SyncJiraTasks
+    participant H as POST /api/sync/atlassian
+    participant S as service.SyncAtlassian
     participant C as atlassian.Client
     participant D as db.Manager
-    H->>S: SyncJiraTasks(ctx)
+    H->>S: SyncAtlassian(ctx)
     S->>C: GetMyTasks(ctx)
-    alt tasks == nil
-        S-->>H: error, no upsert
-    else slice (empty allowed)
+    S->>C: GetOwnedRequests(ctx)
+    alt either returns nil
+        S-->>H: error (classified), nothing stored
+    else both slices (empty allowed)
+        S->>D: ListServiceDeskRequests(open only)
         S->>D: UpsertTasks
-        S-->>H: SyncResult{Upserted, Partial}
+        S->>D: UpsertServiceDeskRequests
+        S->>D: CreateAtlassianSync(record)
+        S-->>H: AtlassianSync{Record, Errors}
     end
 ```
 
-- `atlassian.Client` 는 `GetMyTasks` 하나다 (`internal/adapter/atlassian/client.go:34`). `NewClient` (`client.go:47`) 가 `strings.TrimRight(siteURL, "/") + "/rest/api/3/search/jql"` 과 Basic·JSON 헤더를 만든다. site URL 경로 prefix 는 유지된다.
-- `GetMyTasks` (`client.go:64`) 는 페이지 실패면 `nil, err` (`client.go:74`), `isLast` 또는 토큰 부재면 모은 task 와 join 된 항목 에러를 반환한다 (`client.go:100`). 같은 토큰 반복과 `maxSearchPages`(100) 초과도 `nil, err` 다 (`client.go:104`).
-- `httputil.HTTPClient` 는 `Get` 와 `Post` 를 가진다 (`internal/pkg/httputil/httputil.go:39`). Jira 검색은 `Post` 만 쓴다. `Get` (`httputil.go:61`) 은 같은 헤더·ctx·2xx 본문 규칙이다.
-- `service.SyncJiraTasks` (`internal/service/service.go:53`) 는 `tasks == nil` 이면 upsert 하지 않는다. 그 외에는 받은 task 를 모두 저장하고 항목 에러를 `SyncResult.Partial` (`internal/service/model.go:6`) 에 둔다. 구조체 주석은 변환에 실패한 항목도 저장된다고 적는다.
-- `POST /tasks/jira` (`internal/server/route.go:33`, 핸들러 `route.go:51`) 는 성공 시 `syncResponse` (`internal/server/model.go:9`) `{upserted, partial}` 를 쓰고, 서비스 에러는 500 이다. `writeInternalError` (`internal/server/util.go:67`) 는 `{"error": err.Error()}` 를 쓴다.
-- `cmd/wharf/main.go:61` 이 `httputil.NewHTTPClient()` 와 config 의 site URL·email·token 으로 `atlassian.NewClient` 를 만들고 `service.NewService` 에 넘긴다. 새 config 키는 없다 (`config.example.toml:14`).
-- `tasks` 는 `scripts/migrations/0001_initial_migration.sql:1` 에 있다. 첫 배포 전 스키마 변경은 이 파일만 고친다 (`AGENTS.md:37`). sqlc 스키마는 `scripts/sqlc.yaml` 의 `migrations` 디렉터리다. `UpsertTask` (`scripts/queries.sql:1`) 는 `ON CONFLICT (id) DO UPDATE` 다. `UpsertTasks` (`internal/adapter/db/client.go:87`) 는 빈 목록을 no-op 으로 하고, 한 트랜잭션(`client.go:297`)에서 저장한다. 이번 결과에 없는 task 행은 지우지 않는다.
-- mock 은 `.mockery.yml` 의 `atlassian.Client`, `db.Manager`, `service.Service` 다. 테스트는 외부 패키지 `*_test` 와 `testify/require` 다. `tests/e2e` 디렉터리는 없다.
+- `atlassian.Client` 는 `GetMyTasks`·`GetOwnedRequests`·`GetTask`·`Configure`·`Check` 를 가진다 (`internal/adapter/atlassian/client.go`). 사이트와 Basic·JSON 헤더는 `api{base, header}` 로 묶여 RWMutex 아래에 있고, 웹앱이 설정을 저장하면 `Configure` 로 바뀐다. site URL 이 비면 `ErrNotConfigured` 다. site URL 경로 prefix 는 유지되고 요청 URL 은 `base + requestsPath` 처럼 호출마다 만든다.
+- `GetMyTasks` 는 페이지 실패면 `nil, err`, `isLast` 또는 토큰 부재면 모은 task 와 join 된 항목 에러를 반환한다. `GetOwnedRequests` 도 같은 "nil 이면 전체 실패" 규칙이다(아래).
+- `httputil.HTTPClient` 는 `Get` 와 `Post` 를 가진다 (`internal/pkg/httputil/httputil.go`). Jira 검색은 `Post`, Service Desk 와 `GetTask`·`Check` 는 `Get` 이다. 2xx 가 아니면 `*httputil.StatusError` 로 상태 코드를 담는다.
+- `service.SyncAtlassian` (`internal/service/sync.go`) 은 두 조회가 모두 성공한 뒤에만 저장해, 조회 실패는 아무것도 바꾸지 않는다. `ClosedRequests` 는 저장 전에 열려 있던(`status_category != 'DONE'`) 요청 중 이번에 DONE 으로 받은 수, `OpenRequests` 는 받은 요청 중 DONE 이 아닌 수다. 결과는 `atlassian_syncs` 에 남고 `GET /api/sync/atlassian` 이 마지막 기록을 준다.
+- `POST /api/sync/atlassian` (`internal/server/sync.go`) 는 성공 시 `{synced_at, issues, issue_failures, open_requests, closed_requests, request_failures, errors?}` 를 쓴다. Atlassian 에러는 `code` 로 구분된다: 미설정 409 `atlassian_not_configured`, 401/403 502 `atlassian_unauthorized`, 연결 실패 504 `atlassian_unreachable`.
+- 열린 요청 목록은 `GET /api/service-desk/requests`(`include_closed=true` 면 전부)다.
+- `cmd/wharf/main.go` 가 `httputil.NewHTTPClient()` 와 config 의 site URL·email·token(없으면 빈 값 = 미설정)으로 `atlassian.NewClient` 를 만들어 `service.NewService` 와 `service.NewSettings` 에 같은 인스턴스를 넘긴다.
+- 스키마는 `scripts/migrations/0001_initial_migration.sql` 에 있다. 첫 배포 전 스키마 변경은 이 파일만 고친다 (`AGENTS.md`).
+- mock 은 `.mockery.yml` 의 `atlassian.Client`, `db.Manager`, `service.Service`, `service.Settings`, `system.Desktop` 이다. 테스트는 외부 패키지 `*_test` 와 `testify/require` 다. `tests/e2e` 디렉터리는 없다.
 
 ## 공식 Service Desk 계약
 
@@ -67,7 +74,7 @@ Base URL (JSM REST intro):
 연결은 처음(DEV-22)에는 task 와 요청 사이였다. 웹앱 디자인(`docs/design`)이 Inspector 에서 todo 마다 요청을 붙이고, 요청 Inspector 에서 연결된 todo 를 보여주므로 연결 대상을 todo 로 옮겼다(DEV-25). 쓰기 규칙과 API 모양은 task 때와 같다.
 
 - 스키마: `todo_service_desk_requests (todo_id INTEGER, issue_key, PRIMARY KEY (todo_id, issue_key))` (`scripts/migrations/0001_initial_migration.sql:86`, 배포 전 예외로 0001 에 직접 둔다). 행 하나가 방향 없는 연결 하나이고 다대다다. FK·추가 인덱스는 없다(PK 가 `todo_id` 조회를 덮는다).
-- API: `PUT /todos/{id}/service-desk-requests/{key}` → 204(멱등, 다시 PUT 해도 204·행 하나), todo 없음·요청 없음은 각각 404, 정수가 아닌 todo id 도 404. `DELETE /todos/{id}/service-desk-requests/{key}` → 204, 연결이 없으면 404. 본문은 없다 (`internal/server/route.go:44-45`).
-- `GET /todos` 의 todo 마다 `service_desk_requests` 배열(`{"key","title","status","status_category","created_at","status_at"}`, `issue_key` 오름차순, 없으면 `[]`)이 붙는다. `ListTodoServiceDeskRequests` 는 `ListTodoReminders` 처럼 `ListTodos` 필터를 그대로 받아 같은 todo 들의 연결만 한 번에 JOIN 해 읽는다(바인드 변수 수가 todo 수와 무관). `GET /tasks/{id}` 에는 요청이 더 이상 붙지 않는다.
+- API: `PUT /api/todos/{id}/service-desk-requests/{key}` → 204(멱등, 다시 PUT 해도 204·행 하나), todo 없음·요청 없음은 각각 404, 정수가 아닌 todo id 도 404. `DELETE /api/todos/{id}/service-desk-requests/{key}` → 204, 연결이 없으면 404. 본문은 없다 (`internal/server/route.go`).
+- `GET /api/todos` 의 todo 마다 `service_desk_requests` 배열(`{"key","title","status","status_category","created_at","status_at"}`, `issue_key` 오름차순, 없으면 `[]`)이 붙는다. `ListTodoServiceDeskRequests` 는 `ListTodoReminders` 처럼 `ListTodos` 필터를 그대로 받아 같은 todo 들의 연결만 한 번에 JOIN 해 읽는다(바인드 변수 수가 todo 수와 무관). `GET /tasks/{id}` 에는 요청이 더 이상 붙지 않는다.
 - 연결은 wharf 소유다. `UpsertTasks`(Jira 동기화)·`UpsertServiceDeskRequests`·`UpdateTodo`(다른 task 로 이동 포함)는 연결을 건드리지 않는다. `DeleteTodo` 는 그 todo 의 연결 행을, `DeleteTask` 는 그 task 에 속한 todo 들의 연결 행을 같은 트랜잭션에서 지운다(`task_todos` 로 찾으므로 `task_todos` 행보다 먼저). 동기화가 요청 행을 지우지 않으므로 요청 쪽 cascade 는 없다. Jira 쪽(issue link)에는 연결을 쓰지 않는다.
 - 계층: `db.Manager.LinkServiceDeskRequest(ctx, todoID, key)`·`UnlinkServiceDeskRequest(ctx, todoID, key)` (`internal/adapter/db/client.go:354`·`:405`) 와 `ListTodos` 가 채우는 `todo.Todo.ServiceDeskRequests` → `service.LinkServiceDeskRequest`·`UnlinkServiceDeskRequest` (`internal/service/service.go:215`·`:231`, sentinel `ErrTodoToLinkNotFound`·`ErrServiceDeskRequestToLinkNotFound`·`ErrServiceDeskRequestLinkToDeleteNotFound`) → 핸들러는 `internal/server/todo.go` 에 있다.

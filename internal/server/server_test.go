@@ -226,3 +226,42 @@ func TestRunReturnsServeFailure(t *testing.T) {
 	err = server.New(http.NotFoundHandler(), slog.New(slog.DiscardHandler)).Run(t.Context(), ln)
 	require.ErrorIs(t, err, server.ErrFailedToServe)
 }
+
+func TestLocalOriginGuard(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	base, _, _, _ := start(t, ok)
+	port := strings.TrimPrefix(base, "http://127.0.0.1")
+
+	for _, tt := range []struct {
+		name, host, origin string
+		status             int
+	}{
+		{name: "127.0.0.1", host: "127.0.0.1" + port, status: http.StatusNoContent},
+		{name: "localhost", host: "localhost" + port, status: http.StatusNoContent},
+		{name: "ipv6 loopback", host: "[::1]" + port, status: http.StatusNoContent},
+		{name: "no port", host: "localhost", status: http.StatusNoContent},
+		{name: "same origin", host: "localhost" + port, origin: "http://localhost" + port, status: http.StatusNoContent},
+		{name: "rebound host", host: "evil.example" + port, status: http.StatusForbidden},
+		{name: "lan address", host: "192.168.0.10" + port, status: http.StatusForbidden},
+		{name: "other origin", host: "localhost" + port, origin: "https://evil.example", status: http.StatusForbidden},
+		{name: "other port", host: "localhost" + port, origin: "http://localhost:1", status: http.StatusForbidden},
+		{name: "null origin", host: "localhost" + port, origin: "null", status: http.StatusForbidden},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/api/sync/atlassian", nil)
+			require.NoError(t, err)
+
+			req.Host = tt.host
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+
+			defer func() { _ = resp.Body.Close() }()
+
+			require.Equal(t, tt.status, resp.StatusCode)
+		})
+	}
+}

@@ -3,6 +3,7 @@ package atlassian_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -452,4 +453,129 @@ func TestGetMyTasksOverHTTP(t *testing.T) {
 	require.Equal(t, "application/json", got.Header.Get("Content-Type"))
 	require.Equal(t, "application/json", got.Header.Get("Accept"))
 	require.JSONEq(t, string(searchBody("")), string(body))
+}
+
+func TestUnconfiguredClient(t *testing.T) {
+	// No HTTP expectation: an unconfigured client sends nothing.
+	c := atlassian.NewClient(mocks.NewMockHTTPClient(t), "", "", "")
+
+	tasks, err := c.GetMyTasks(t.Context())
+	require.ErrorIs(t, err, atlassian.ErrNotConfigured)
+	require.Nil(t, tasks)
+
+	requests, err := c.GetOwnedRequests(t.Context())
+	require.ErrorIs(t, err, atlassian.ErrNotConfigured)
+	require.Nil(t, requests)
+
+	_, err = c.GetTask(t.Context(), "WHF-1")
+	require.ErrorIs(t, err, atlassian.ErrNotConfigured)
+
+	require.ErrorIs(t, c.Check(t.Context(), "", email, apiToken), atlassian.ErrNotConfigured)
+}
+
+func TestConfigure(t *testing.T) {
+	other := http.Header{
+		"Authorization": {"Basic b3RoZXJAZXhhbXBsZS5jb206b3RoZXItdG9rZW4="},
+		"Accept":        {"application/json"},
+		"Content-Type":  {"application/json"},
+	}
+
+	m := mocks.NewMockHTTPClient(t)
+	m.EXPECT().
+		Post(t.Context(), "https://other.atlassian.net/rest/api/3/search/jql", other, searchBody("")).
+		Return(page(t, "", true), nil).
+		Once()
+
+	c := atlassian.NewClient(m, "", "", "")
+	c.Configure("https://other.atlassian.net/", "other@example.com", "other-token")
+
+	_, err := c.GetMyTasks(t.Context())
+	require.NoError(t, err)
+
+	c.Configure("", "", "")
+
+	_, err = c.GetMyTasks(t.Context())
+	require.ErrorIs(t, err, atlassian.ErrNotConfigured)
+}
+
+func TestCheck(t *testing.T) {
+	failure := errors.New("refused")
+
+	m := mocks.NewMockHTTPClient(t)
+	m.EXPECT().Get(t.Context(), siteURL+"/rest/api/3/myself", header).Return([]byte(`{}`), nil).Twice()
+	m.EXPECT().
+		Get(t.Context(), siteURL+"/rest/servicedeskapi/request?limit=1", header).
+		Return([]byte(`{}`), nil).
+		Once()
+	m.EXPECT().
+		Get(t.Context(), siteURL+"/rest/servicedeskapi/request?limit=1", header).
+		Return(nil, failure).
+		Once()
+	m.EXPECT().Get(t.Context(), "https://down.atlassian.net/rest/api/3/myself", header).Return(nil, failure).Once()
+
+	// Check uses the given site, not the configured one.
+	c := atlassian.NewClient(m, "", "", "")
+
+	require.NoError(t, c.Check(t.Context(), siteURL+"/", email, apiToken))
+
+	err := c.Check(t.Context(), siteURL, email, apiToken)
+	require.ErrorIs(t, err, atlassian.ErrFailedToReachServiceDesk)
+	require.ErrorIs(t, err, failure)
+
+	err = c.Check(t.Context(), "https://down.atlassian.net", email, apiToken)
+	require.ErrorIs(t, err, atlassian.ErrFailedToReachJira)
+	require.ErrorIs(t, err, failure)
+
+	_, err = c.GetMyTasks(t.Context())
+	require.ErrorIs(t, err, atlassian.ErrNotConfigured)
+}
+
+func TestGetTask(t *testing.T) {
+	issueURL := siteURL + "/rest/api/3/issue/WHF-1?fields=" +
+		"summary%2Cdescription%2Cstatus%2Cduedate%2Cparent%2Csubtasks%2Cissuelinks%2Ccustomfield_10015"
+
+	m := mocks.NewMockHTTPClient(t)
+	m.EXPECT().Get(t.Context(), issueURL, header).Return([]byte(fixture(t, "view_todo.json")), nil).Once()
+
+	got, err := newClient(m).GetTask(t.Context(), "WHF-1")
+	require.NoError(t, err)
+
+	var item atlassian.ViewWorkItem
+	require.NoError(t, json.Unmarshal([]byte(fixture(t, "view_todo.json")), &item))
+
+	want, err := atlassian.ToTask(item)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+func TestGetTaskFailures(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rest/api/3/issue/GONE-1":
+			w.WriteHeader(http.StatusNotFound)
+		case "/rest/api/3/issue/BAD-1":
+			_, _ = w.Write([]byte(`{"key":"BAD-1","fields":{"status":{"name":"Odd","statusCategory":{"key":"x"}}}}`))
+		case "/rest/api/3/issue/JUNK-1":
+			_, _ = w.Write([]byte(`not json`))
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c := atlassian.NewClient(httputil.NewHTTPClient(), srv.URL, email, apiToken)
+
+	_, err := c.GetTask(t.Context(), "GONE-1")
+	require.ErrorIs(t, err, atlassian.ErrWorkItemNotFound)
+	require.ErrorContains(t, err, "key=GONE-1")
+
+	_, err = c.GetTask(t.Context(), "BAD-1")
+	require.ErrorIs(t, err, atlassian.ErrUnknownStatusCategory)
+
+	_, err = c.GetTask(t.Context(), "JUNK-1")
+	require.ErrorIs(t, err, atlassian.ErrFailedToParseWorkItem)
+
+	_, err = c.GetTask(t.Context(), "FAIL-1")
+	require.ErrorIs(t, err, httputil.ErrUnexpectedStatusCode)
+	require.NotErrorIs(t, err, atlassian.ErrWorkItemNotFound)
 }

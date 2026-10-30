@@ -25,93 +25,41 @@ const (
 	summaryDescriptionRunes = 100
 )
 
-// NewHandler returns the API routes backed by svc. It expects the request ID
-// middleware of Server to run first so logs carry the request ID.
-func NewHandler(svc service.Service, logger *slog.Logger) http.Handler {
+// NewHandler returns the API routes, all under /api, backed by svc and
+// settings. It expects the request ID middleware of Server to run first so
+// logs carry the request ID.
+func NewHandler(svc service.Service, settings service.Settings, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", healthz)
-	mux.HandleFunc("POST /tasks/jira", syncJiraTasks(svc, logger))
-	mux.HandleFunc("POST /service-desk/requests", syncServiceDeskRequests(svc, logger))
-	mux.HandleFunc("GET /tasks", listTasks(svc, logger))
-	mux.HandleFunc("POST /tasks", createTask(svc, logger))
-	mux.HandleFunc("GET /tasks/{id}", getTask(svc, logger))
-	mux.HandleFunc("PUT /tasks/{id}", updateTask(svc, logger))
-	mux.HandleFunc("DELETE /tasks/{id}", deleteTask(svc, logger))
-	mux.HandleFunc("GET /todos", listTodos(svc, logger))
-	mux.HandleFunc("POST /todos", createTodo(svc, logger))
-	mux.HandleFunc("PUT /todos/{id}", updateTodo(svc, logger))
-	mux.HandleFunc("DELETE /todos/{id}", deleteTodo(svc, logger))
-	mux.HandleFunc("PUT /todos/{id}/service-desk-requests/{key}", linkServiceDeskRequest(svc, logger))
-	mux.HandleFunc("DELETE /todos/{id}/service-desk-requests/{key}", unlinkServiceDeskRequest(svc, logger))
+	mux.HandleFunc("GET /api/healthz", healthz)
+	mux.HandleFunc("POST /api/sync/atlassian", syncAtlassian(svc, logger))
+	mux.HandleFunc("GET /api/sync/atlassian", getLastAtlassianSync(svc, logger))
+	mux.HandleFunc("GET /api/service-desk/requests", listServiceDeskRequests(svc, logger))
+	mux.HandleFunc("GET /api/tasks", listTasks(svc, logger))
+	mux.HandleFunc("POST /api/tasks", createTask(svc, logger))
+	mux.HandleFunc("GET /api/tasks/{id}", getTask(svc, logger))
+	mux.HandleFunc("PUT /api/tasks/{id}", updateTask(svc, logger))
+	mux.HandleFunc("DELETE /api/tasks/{id}", deleteTask(svc, logger))
+	mux.HandleFunc("POST /api/tasks/{id}/sync", syncJiraTask(svc, logger))
+	mux.HandleFunc("GET /api/todos", listTodos(svc, logger))
+	mux.HandleFunc("POST /api/todos", createTodo(svc, logger))
+	mux.HandleFunc("PUT /api/todos/{id}", updateTodo(svc, logger))
+	mux.HandleFunc("DELETE /api/todos/{id}", deleteTodo(svc, logger))
+	mux.HandleFunc("PUT /api/todos/{id}/service-desk-requests/{key}", linkServiceDeskRequest(svc, logger))
+	mux.HandleFunc("DELETE /api/todos/{id}/service-desk-requests/{key}", unlinkServiceDeskRequest(svc, logger))
+	mux.HandleFunc("GET /api/settings/atlassian", getAtlassianSettings(settings))
+	mux.HandleFunc("PUT /api/settings/atlassian", saveAtlassianSettings(settings, logger))
+	mux.HandleFunc("POST /api/settings/atlassian/test", checkAtlassianSettings(settings, logger))
+	mux.HandleFunc("GET /api/settings/app", getAppSettings(settings))
+	mux.HandleFunc("POST /api/settings/app/config/choose", chooseConfigFile(settings, logger))
+	mux.HandleFunc("DELETE /api/settings/app/config/pending", clearPendingConfigFile(settings))
+	mux.HandleFunc("POST /api/settings/app/config/open", openConfigFile(settings, logger))
+	mux.HandleFunc("POST /api/settings/app/restart", restartServer(settings, logger))
 
 	return mux
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// syncJiraTasks maps every service error to 500, since none is caused by the
-// request yet.
-func syncJiraTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		requestID := r.Header.Get(requestIDHeader)
-
-		result, err := svc.SyncJiraTasks(r.Context())
-		if err != nil {
-			logger.ErrorContext(r.Context(), "failed to sync jira tasks", "request_id", requestID, "error", err)
-			writeInternalError(w, err)
-
-			return
-		}
-
-		if result.Partial != nil {
-			logger.WarnContext(
-				r.Context(),
-				"synced jira tasks partially",
-				"request_id", requestID,
-				"upserted", result.Upserted,
-				"error", result.Partial,
-			)
-		}
-
-		writeJSON(w, http.StatusOK, syncResponse{Upserted: result.Upserted, Partial: result.Partial != nil})
-	}
-}
-
-// syncServiceDeskRequests maps every service error to 500, since none is
-// caused by the request yet.
-func syncServiceDeskRequests(svc service.Service, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		requestID := r.Header.Get(requestIDHeader)
-
-		result, err := svc.SyncServiceDeskRequests(r.Context())
-		if err != nil {
-			logger.ErrorContext(
-				r.Context(),
-				"failed to sync service desk requests",
-				"request_id",
-				requestID,
-				"error",
-				err,
-			)
-			writeInternalError(w, err)
-
-			return
-		}
-
-		if result.Partial != nil {
-			logger.WarnContext(
-				r.Context(),
-				"synced service desk requests partially",
-				"request_id", requestID,
-				"upserted", result.Upserted,
-				"error", result.Partial,
-			)
-		}
-
-		writeJSON(w, http.StatusOK, syncResponse{Upserted: result.Upserted, Partial: result.Partial != nil})
-	}
 }
 
 func listTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
@@ -122,7 +70,16 @@ func listTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, taskListResponse{Tasks: toSummaries(tasks)})
+		resp := taskListResponse{Tasks: make([]taskListItem, 0, len(tasks))}
+		for _, t := range tasks {
+			resp.Tasks = append(resp.Tasks, taskListItem{
+				taskSummary:   toSummary(t.Task),
+				TodoCount:     t.Todos.Todos,
+				DoneTodoCount: t.Todos.Done,
+			})
+		}
+
+		writeJSON(w, http.StatusOK, resp)
 	}
 }
 
@@ -172,7 +129,7 @@ func createTask(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Location", "/tasks/"+id)
+		w.Header().Set("Location", "/api/tasks/"+id)
 		writeJSON(w, http.StatusCreated, createTaskResponse{ID: id})
 	}
 }

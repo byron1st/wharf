@@ -16,3 +16,7 @@ packages:
   github.com/byron1st/wharf/internal/service:
     interfaces:
       Service:
+      Settings:
+  github.com/byron1st/wharf/internal/adapter/system:
+    interfaces:
+      Desktop:

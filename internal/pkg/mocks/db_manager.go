@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
 	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/pkg/todo"
@@ -140,6 +141,125 @@ func (_c *MockManager_Connect_Call) Return(err error) *MockManager_Connect_Call 
 }
 
 func (_c *MockManager_Connect_Call) RunAndReturn(run func(ctx context.Context) error) *MockManager_Connect_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CountTodosByTask provides a mock function for the type MockManager
+func (_mock *MockManager) CountTodosByTask(ctx context.Context) (map[string]todo.Count, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountTodosByTask")
+	}
+
+	var r0 map[string]todo.Count
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (map[string]todo.Count, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) map[string]todo.Count); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]todo.Count)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockManager_CountTodosByTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountTodosByTask'
+type MockManager_CountTodosByTask_Call struct {
+	*mock.Call
+}
+
+// CountTodosByTask is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockManager_Expecter) CountTodosByTask(ctx any) *MockManager_CountTodosByTask_Call {
+	return &MockManager_CountTodosByTask_Call{Call: _e.mock.On("CountTodosByTask", ctx)}
+}
+
+func (_c *MockManager_CountTodosByTask_Call) Run(run func(ctx context.Context)) *MockManager_CountTodosByTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_CountTodosByTask_Call) Return(stringToCount map[string]todo.Count, err error) *MockManager_CountTodosByTask_Call {
+	_c.Call.Return(stringToCount, err)
+	return _c
+}
+
+func (_c *MockManager_CountTodosByTask_Call) RunAndReturn(run func(ctx context.Context) (map[string]todo.Count, error)) *MockManager_CountTodosByTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CreateAtlassianSync provides a mock function for the type MockManager
+func (_mock *MockManager) CreateAtlassianSync(ctx context.Context, r atlassiansync.Record) error {
+	ret := _mock.Called(ctx, r)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateAtlassianSync")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, atlassiansync.Record) error); ok {
+		r0 = returnFunc(ctx, r)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockManager_CreateAtlassianSync_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAtlassianSync'
+type MockManager_CreateAtlassianSync_Call struct {
+	*mock.Call
+}
+
+// CreateAtlassianSync is a helper method to define mock.On call
+//   - ctx context.Context
+//   - r atlassiansync.Record
+func (_e *MockManager_Expecter) CreateAtlassianSync(ctx any, r any) *MockManager_CreateAtlassianSync_Call {
+	return &MockManager_CreateAtlassianSync_Call{Call: _e.mock.On("CreateAtlassianSync", ctx, r)}
+}
+
+func (_c *MockManager_CreateAtlassianSync_Call) Run(run func(ctx context.Context, r atlassiansync.Record)) *MockManager_CreateAtlassianSync_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 atlassiansync.Record
+		if args[1] != nil {
+			arg1 = args[1].(atlassiansync.Record)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_CreateAtlassianSync_Call) Return(err error) *MockManager_CreateAtlassianSync_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockManager_CreateAtlassianSync_Call) RunAndReturn(run func(ctx context.Context, r atlassiansync.Record) error) *MockManager_CreateAtlassianSync_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -390,6 +510,66 @@ func (_c *MockManager_DeleteTodo_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// GetLastAtlassianSync provides a mock function for the type MockManager
+func (_mock *MockManager) GetLastAtlassianSync(ctx context.Context) (atlassiansync.Record, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLastAtlassianSync")
+	}
+
+	var r0 atlassiansync.Record
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (atlassiansync.Record, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) atlassiansync.Record); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Get(0).(atlassiansync.Record)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockManager_GetLastAtlassianSync_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLastAtlassianSync'
+type MockManager_GetLastAtlassianSync_Call struct {
+	*mock.Call
+}
+
+// GetLastAtlassianSync is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockManager_Expecter) GetLastAtlassianSync(ctx any) *MockManager_GetLastAtlassianSync_Call {
+	return &MockManager_GetLastAtlassianSync_Call{Call: _e.mock.On("GetLastAtlassianSync", ctx)}
+}
+
+func (_c *MockManager_GetLastAtlassianSync_Call) Run(run func(ctx context.Context)) *MockManager_GetLastAtlassianSync_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_GetLastAtlassianSync_Call) Return(record atlassiansync.Record, err error) *MockManager_GetLastAtlassianSync_Call {
+	_c.Call.Return(record, err)
+	return _c
+}
+
+func (_c *MockManager_GetLastAtlassianSync_Call) RunAndReturn(run func(ctx context.Context) (atlassiansync.Record, error)) *MockManager_GetLastAtlassianSync_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetTask provides a mock function for the type MockManager
 func (_mock *MockManager) GetTask(ctx context.Context, id string) (task.Task, error) {
 	ret := _mock.Called(ctx, id)
@@ -515,6 +695,74 @@ func (_c *MockManager_LinkServiceDeskRequest_Call) Return(err error) *MockManage
 }
 
 func (_c *MockManager_LinkServiceDeskRequest_Call) RunAndReturn(run func(ctx context.Context, todoID int64, key string) error) *MockManager_LinkServiceDeskRequest_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListServiceDeskRequests provides a mock function for the type MockManager
+func (_mock *MockManager) ListServiceDeskRequests(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error) {
+	ret := _mock.Called(ctx, includeClosed)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListServiceDeskRequests")
+	}
+
+	var r0 []servicedesk.Request
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) ([]servicedesk.Request, error)); ok {
+		return returnFunc(ctx, includeClosed)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) []servicedesk.Request); ok {
+		r0 = returnFunc(ctx, includeClosed)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]servicedesk.Request)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, bool) error); ok {
+		r1 = returnFunc(ctx, includeClosed)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockManager_ListServiceDeskRequests_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListServiceDeskRequests'
+type MockManager_ListServiceDeskRequests_Call struct {
+	*mock.Call
+}
+
+// ListServiceDeskRequests is a helper method to define mock.On call
+//   - ctx context.Context
+//   - includeClosed bool
+func (_e *MockManager_Expecter) ListServiceDeskRequests(ctx any, includeClosed any) *MockManager_ListServiceDeskRequests_Call {
+	return &MockManager_ListServiceDeskRequests_Call{Call: _e.mock.On("ListServiceDeskRequests", ctx, includeClosed)}
+}
+
+func (_c *MockManager_ListServiceDeskRequests_Call) Run(run func(ctx context.Context, includeClosed bool)) *MockManager_ListServiceDeskRequests_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 bool
+		if args[1] != nil {
+			arg1 = args[1].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_ListServiceDeskRequests_Call) Return(requests []servicedesk.Request, err error) *MockManager_ListServiceDeskRequests_Call {
+	_c.Call.Return(requests, err)
+	return _c
+}
+
+func (_c *MockManager_ListServiceDeskRequests_Call) RunAndReturn(run func(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error)) *MockManager_ListServiceDeskRequests_Call {
 	_c.Call.Return(run)
 	return _c
 }

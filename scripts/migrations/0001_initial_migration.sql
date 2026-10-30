@@ -88,3 +88,15 @@ CREATE TABLE todo_service_desk_requests (
     issue_key TEXT NOT NULL,
     PRIMARY KEY (todo_id, issue_key)
 );
+
+-- One row per Atlassian sync that stored its result, complete or partial. A
+-- sync that failed before storing anything is not recorded.
+CREATE TABLE atlassian_syncs (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    synced_at        DATETIME NOT NULL,
+    issues           INTEGER NOT NULL,
+    issue_failures   INTEGER NOT NULL,
+    open_requests    INTEGER NOT NULL,
+    closed_requests  INTEGER NOT NULL,
+    request_failures INTEGER NOT NULL
+);

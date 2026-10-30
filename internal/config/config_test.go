@@ -120,10 +120,25 @@ func TestLoad(t *testing.T) {
 		}, cfg)
 	})
 
-	t.Run("fails when file is missing", func(t *testing.T) {
-		_, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
+	t.Run("uses defaults when file is missing", func(t *testing.T) {
+		dir := isolateUserConfigDir(t)
+
+		cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
+		require.NoError(t, err)
+		require.Equal(t, config.Config{Addr: ":8080", DBPath: filepath.Join(dir, "wharf", "wharf.db")}, cfg)
+	})
+
+	t.Run("allows no atlassian keys", func(t *testing.T) {
+		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "db_path = \"/data/w.db\"\n", 0o644)
+
+		cfg, err := config.Load(path)
+		require.NoError(t, err)
+		require.Equal(t, config.Config{Addr: ":8080", DBPath: "/data/w.db"}, cfg)
+	})
+
+	t.Run("fails when file cannot be read", func(t *testing.T) {
+		_, err := config.Load(t.TempDir())
 		require.ErrorIs(t, err, config.ErrFailedToReadConfigFile)
-		require.ErrorIs(t, err, os.ErrNotExist)
 	})
 
 	t.Run("fails on invalid toml", func(t *testing.T) {
@@ -236,4 +251,70 @@ func TestLoadInvalidSiteURLVariantsDoNotLeakUserinfo(t *testing.T) {
 			require.NotContains(t, err.Error(), "hunter2")
 		})
 	}
+}
+
+func TestSaveAtlassian(t *testing.T) {
+	isolateUserConfigDir(t)
+
+	t.Run("replaces and appends only the atlassian lines", func(t *testing.T) {
+		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"),
+			"# my config\naddr = \":9090\"\n# atlassian_email = \"commented@example.com\"\n"+
+				"atlassian_site_url = \"https://old.atlassian.net\" # old site\ndb_path = \"/data/w.db\"", 0o644)
+
+		require.NoError(t, config.SaveAtlassian(path, "https://new.atlassian.net", "me@example.com", `to"ken`))
+
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t,
+			"# my config\naddr = \":9090\"\n# atlassian_email = \"commented@example.com\"\n"+
+				"atlassian_site_url = \"https://new.atlassian.net\"\ndb_path = \"/data/w.db\"\n"+
+				"atlassian_email = \"me@example.com\"\natlassian_api_token = \"to\\\"ken\"\n",
+			string(data))
+
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+		cfg, err := config.Load(path)
+		require.NoError(t, err)
+		require.Equal(t, ":9090", cfg.Addr)
+		require.Equal(t, "https://new.atlassian.net", cfg.AtlassianSiteURL)
+		require.Equal(t, "me@example.com", cfg.AtlassianEmail)
+		require.Equal(t, `to"ken`, cfg.AtlassianAPIToken)
+	})
+
+	t.Run("creates a missing file and its directory", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "wharf", "config.toml")
+
+		require.NoError(
+			t,
+			config.SaveAtlassian(path, "https://example.atlassian.net", "me@example.com", "secret-token"),
+		)
+
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, atlassianKeys, string(data))
+	})
+
+	t.Run("rejects invalid values and keeps the file", func(t *testing.T) {
+		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), atlassianKeys, 0o644)
+
+		err := config.SaveAtlassian(path, "http://example.atlassian.net", "me@example.com", "new-secret")
+		require.ErrorIs(t, err, config.ErrInvalidAtlassianSiteURL)
+		require.NotContains(t, err.Error(), "new-secret")
+
+		err = config.SaveAtlassian(path, "https://example.atlassian.net", "", "new-secret")
+		require.ErrorIs(t, err, config.ErrMissingConfigKey)
+
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, atlassianKeys, string(data))
+	})
+
+	t.Run("fails when the file is not valid afterwards", func(t *testing.T) {
+		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "adr = \":8080\"\n", 0o644)
+
+		err := config.SaveAtlassian(path, "https://example.atlassian.net", "me@example.com", "secret-token")
+		require.ErrorIs(t, err, config.ErrUnknownConfigKeys)
+	})
 }
