@@ -66,6 +66,6 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 
 - NEVER hand-edit generated code (`internal/pkg/mocks/`, sqlc output `internal/adapter/db/{db,models,queries.sql}.go`); change the source (interface, SQL) and run `make gen`.
 - NEVER run raw `go test`, `go build`, or `golangci-lint` commands; use the matching `make` target so tooling stays consistent.
-- NEVER commit secrets or `.env` files; read configuration through `internal/config` at startup in `cmd/wharf`. The only environment variable is `WHARF_CONFIG` (config file path); add new settings as TOML keys, not environment variables.
+- NEVER commit secrets or `.env` files; read configuration through `internal/config` at startup in `cmd/wharf`. The one runtime exception is `service.Settings`, which writes the Atlassian keys with `config.SaveAtlassian` and validates a chosen file with `config.Load` before a restart; nothing else reads or writes config after startup. The only environment variable is `WHARF_CONFIG` (config file path); add new settings as TOML keys, not environment variables.
 - NEVER import `internal/server` from `internal/service` or `internal/adapter`; pass plain domain types down the layers instead.
 - NEVER add a third-party dependency when the standard library covers the need; justify any new module in the PR description.
