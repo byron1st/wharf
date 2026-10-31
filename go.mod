@@ -2,6 +2,9 @@ module github.com/byron1st/wharf
 
 go 1.27.3
 
+// Some npm packages ship .go files; keep them out of ./... patterns.
+ignore ./web/node_modules
+
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/stretchr/testify v1.12.1

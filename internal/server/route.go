@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 
@@ -26,9 +27,10 @@ const (
 )
 
 // NewHandler returns the API routes, all under /api, backed by svc and
-// settings. It expects the request ID middleware of Server to run first so
-// logs carry the request ID.
-func NewHandler(svc service.Service, settings service.Settings, logger *slog.Logger) http.Handler {
+// settings, and serves the web app in static on every other GET path. It
+// expects the request ID middleware of Server to run first so logs carry the
+// request ID.
+func NewHandler(svc service.Service, settings service.Settings, static fs.FS, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/healthz", healthz)
 	mux.HandleFunc("POST /api/sync/atlassian", syncAtlassian(svc, logger))
@@ -54,6 +56,7 @@ func NewHandler(svc service.Service, settings service.Settings, logger *slog.Log
 	mux.HandleFunc("DELETE /api/settings/app/config/pending", clearPendingConfigFile(settings))
 	mux.HandleFunc("POST /api/settings/app/config/open", openConfigFile(settings, logger))
 	mux.HandleFunc("POST /api/settings/app/restart", restartServer(settings, logger))
+	mux.HandleFunc("GET /", spa(static))
 
 	return mux
 }
