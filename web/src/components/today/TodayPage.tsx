@@ -1,0 +1,168 @@
+import { useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { keys, useRequests, useTaskActions, useTasks, useTodos } from '@/hooks/data'
+import { useNow } from '@/hooks/useNow'
+import type { TaskListItem, Todo } from '@/lib/api'
+import { fromTaskDate, isTodayTodo, startOfToday } from '@/lib/dates'
+import { Header } from './Header'
+import { RequestInspector } from './RequestInspector'
+import { RequestsCard } from './RequestsCard'
+import { TaskInspector } from './TaskInspector'
+import { TodoInspector } from './TodoInspector'
+import { TodosCard, type Selection, type TodoGroup } from './TodosCard'
+
+/** selectionOf reads the Inspector selection from ?todo=, ?task= or ?req=. */
+function selectionOf(params: URLSearchParams): Selection {
+  const todo = Number(params.get('todo'))
+  if (todo) return { kind: 'todo', id: todo }
+  const task = params.get('task')
+  if (task) return { kind: 'task', id: task }
+  const req = params.get('req')
+  if (req) return { kind: 'req', id: req }
+  return null
+}
+
+/** byDue orders task groups by due date, undated last, then by ID. */
+function byDue(a: TaskListItem, b: TaskListItem) {
+  const da = fromTaskDate(a.due_date) ?? '9999'
+  const db = fromTaskDate(b.due_date) ?? '9999'
+  return da === db ? a.id.localeCompare(b.id) : da < db ? -1 : 1
+}
+
+export function TodayPage() {
+  const { now, today } = useNow()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const qc = useQueryClient()
+  const [params, setParams] = useSearchParams()
+  const selection = selectionOf(params)
+  const [adding, setAdding] = useState<string | null>(null)
+  // Tasks created in this session stay on Today before they have todos.
+  const [fresh, setFresh] = useState<string[]>([])
+  const { create } = useTaskActions()
+
+  const { data: tasks = [] } = useTasks()
+  const { data: open = [] } = useTodos({ is_done: false })
+  const since = startOfToday(now)
+  const { data: doneToday = [] } = useTodos({ completed_since: since })
+  const { data: requests = [] } = useRequests()
+
+  // A todo toggled in one list is patched in place, so merge both lists and
+  // sort each todo by its current state.
+  const { todayTodos, completed, all } = useMemo(() => {
+    const byID = new Map<number, Todo>()
+    for (const t of [...open, ...doneToday]) byID.set(t.id, t)
+    const all = [...byID.values()]
+    return {
+      all,
+      todayTodos: all.filter((t) => isTodayTodo(t, today)),
+      completed: all
+        .filter((t) => t.is_done && t.completed_at && t.completed_at >= since)
+        .sort((a, b) => (a.completed_at! < b.completed_at! ? -1 : 1)),
+    }
+  }, [open, doneToday, today, since])
+
+  const taskMap = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks])
+
+  const groups: TodoGroup[] = useMemo(() => {
+    const byTask = new Map<string, Todo[]>()
+    for (const t of todayTodos) byTask.set(t.task_id, [...(byTask.get(t.task_id) ?? []), t])
+    return tasks
+      .filter((t) => byTask.has(t.id) || fresh.includes(t.id) || adding === t.id)
+      .sort(byDue)
+      .map((task) => ({
+        task,
+        todos: (byTask.get(task.id) ?? []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
+      }))
+  }, [tasks, todayTodos, fresh, adding])
+
+  const select = (s: Selection) => {
+    const next = new URLSearchParams()
+    if (s) next.set(s.kind, String(s.id))
+    setParams(next)
+  }
+
+  const openTask = (id: string) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back: location.search } })
+
+  const createTask = async (title: string) => {
+    const id = await create(title)
+    setFresh((f) => [...f, id])
+    setAdding(id)
+    select({ kind: 'task', id })
+  }
+
+  let selectedTodo: Todo | undefined
+  if (selection?.kind === 'todo') {
+    selectedTodo = all.find((t) => t.id === selection.id)
+    // A todo picked from a request may be in neither Today list.
+    for (const [, list] of qc.getQueriesData<Todo[]>({ queryKey: keys.allTodos })) {
+      selectedTodo ??= list?.find((t) => t.id === selection.id)
+    }
+  }
+  const selectedReq = selection?.kind === 'req' ? requests.find((r) => r.key === selection.id) : undefined
+  const close = () => select(null)
+
+  return (
+    <main className="box-border flex min-h-screen flex-col gap-4 px-8 pt-7 pb-10">
+      <Header onCreateTask={createTask} onSettings={() => navigate('/settings/general', { state: { back: location.search } })} />
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
+          <TodosCard
+            groups={groups}
+            completed={completed}
+            selection={selection}
+            onSelect={select}
+            adding={adding}
+            setAdding={setAdding}
+          />
+        </div>
+        <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3">
+          <RequestsCard requests={requests} selection={selection} onSelect={select} />
+          {selection && (
+            <aside aria-label="Inspector" className="flex min-w-0 flex-col rounded-xl border border-[#e4e4e7] bg-white shadow-card">
+              {selection.kind === 'todo' && selectedTodo && (
+                <TodoInspector
+                  key={selectedTodo.id}
+                  todo={selectedTodo}
+                  task={taskMap.get(selectedTodo.task_id)}
+                  requests={requests}
+                  onClose={close}
+                  onSelectTask={(id) => select({ kind: 'task', id })}
+                  onSelectRequest={(id) => select({ kind: 'req', id })}
+                />
+              )}
+              {selection.kind === 'task' && (
+                <TaskInspector
+                  key={selection.id}
+                  id={selection.id}
+                  onClose={close}
+                  onOpen={openTask}
+                  onSelectTask={(id) => select({ kind: 'task', id })}
+                />
+              )}
+              {selection.kind === 'req' && selectedReq && (
+                <RequestInspector
+                  key={selectedReq.key}
+                  request={selectedReq}
+                  tasks={taskMap}
+                  openTodos={open.filter((t) => !t.is_done)}
+                  onClose={close}
+                  onSelectTodo={(id) => select({ kind: 'todo', id })}
+                />
+              )}
+              {((selection.kind === 'todo' && !selectedTodo) || (selection.kind === 'req' && !selectedReq)) && (
+                <div className="flex items-center justify-between px-4 py-3 text-[13px] text-[#71717a]">
+                  Not found. It may have been removed.
+                  <button type="button" onClick={close} className="text-[12px] font-medium text-[#3f3f46] hover:underline">
+                    Close
+                  </button>
+                </div>
+              )}
+            </aside>
+          )}
+        </div>
+      </div>
+    </main>
+  )
+}

@@ -1,0 +1,269 @@
+import { useIsMutating, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import {
+  api,
+  todoInput,
+  taskInput,
+  type ServiceDeskRequest,
+  type TaskDetail,
+  type TaskInput,
+  type TaskListItem,
+  type Todo,
+  type TodoFilter,
+  type TodoInput,
+} from '@/lib/api'
+import { reportSaveError } from '@/lib/errors'
+
+export const keys = {
+  tasks: ['tasks'] as const,
+  task: (id: string) => ['task', id] as const,
+  todos: (f: TodoFilter) => ['todos', f] as const,
+  allTodos: ['todos'] as const,
+  requests: ['requests'] as const,
+  lastSync: ['lastSync'] as const,
+  atlassian: ['settings', 'atlassian'] as const,
+  app: ['settings', 'app'] as const,
+}
+
+export const useTasks = () => useQuery({ queryKey: keys.tasks, queryFn: api.listTasks })
+
+export const useTask = (id: string | null | undefined) =>
+  useQuery({ queryKey: keys.task(id ?? ''), queryFn: () => api.getTask(id!), enabled: !!id })
+
+export const useTodos = (f: TodoFilter, enabled = true) =>
+  useQuery({ queryKey: keys.todos(f), queryFn: () => api.listTodos(f), enabled })
+
+export const useRequests = () => useQuery({ queryKey: keys.requests, queryFn: api.listRequests })
+
+export const useLastSync = () => useQuery({ queryKey: keys.lastSync, queryFn: api.lastSync })
+
+export const useAtlassianSettings = () => useQuery({ queryKey: keys.atlassian, queryFn: api.atlassianSettings })
+
+export const useAppSettings = () => useQuery({ queryKey: keys.app, queryFn: api.appSettings })
+
+type Snapshot = [readonly unknown[], unknown][]
+
+function snapshot(qc: QueryClient): Snapshot {
+  return [
+    ...qc.getQueriesData({ queryKey: keys.allTodos }),
+    ...qc.getQueriesData({ queryKey: keys.tasks }),
+    ...qc.getQueriesData({ queryKey: ['task'] }),
+  ]
+}
+
+function restore(qc: QueryClient, s: Snapshot) {
+  for (const [key, data] of s) qc.setQueryData(key, data)
+}
+
+/** patchTodo applies fn to the todo id in every cached todo list; null removes it. */
+function patchTodo(qc: QueryClient, id: number, fn: (t: Todo) => Todo | null) {
+  qc.setQueriesData<Todo[]>({ queryKey: keys.allTodos }, (old) =>
+    old?.flatMap((t) => {
+      if (t.id !== id) return [t]
+      const next = fn(t)
+      return next ? [next] : []
+    }),
+  )
+}
+
+/** patchCounts moves a task's todo counts, so group progress follows a change before the refetch. */
+function patchCounts(qc: QueryClient, taskID: string, todos: number, done: number) {
+  qc.setQueryData<TaskListItem[]>(keys.tasks, (old) =>
+    old?.map((t) =>
+      t.id === taskID
+        ? { ...t, todo_count: t.todo_count + todos, done_todo_count: t.done_todo_count + done }
+        : t,
+    ),
+  )
+}
+
+function settle(qc: QueryClient) {
+  void qc.invalidateQueries({ queryKey: keys.allTodos })
+  void qc.invalidateQueries({ queryKey: keys.tasks })
+}
+
+interface TodoUpdate {
+  todo: Todo
+  patch: Partial<TodoInput>
+}
+
+/** useSavingTodo reports whether a save of the todo id is in flight. */
+export const useSavingTodo = (id: number | undefined) =>
+  useIsMutating({
+    mutationKey: ['todo-save'],
+    predicate: (m) => (m.state.variables as TodoUpdate | undefined)?.todo.id === id,
+  }) > 0
+
+/** useTodoActions writes todos optimistically; a failed write is undone and reported with Retry. */
+export function useTodoActions() {
+  const qc = useQueryClient()
+
+  const update = useMutation({
+    mutationKey: ['todo-save'],
+    mutationFn: ({ todo, patch }: TodoUpdate) => api.updateTodo(todo.id, todoInput(todo, patch)),
+    onMutate: async ({ todo, patch }) => {
+      await qc.cancelQueries({ queryKey: keys.allTodos })
+      const snap = snapshot(qc)
+      patchTodo(qc, todo.id, (t) => {
+        const next = { ...t, ...patch } as Todo
+        if (patch.is_done !== undefined && patch.is_done !== t.is_done) {
+          next.completed_at = patch.is_done ? new Date().toISOString() : null
+        }
+        return next
+      })
+      if (patch.is_done !== undefined && patch.is_done !== todo.is_done) {
+        patchCounts(qc, todo.task_id, 0, patch.is_done ? 1 : -1)
+      }
+      return snap
+    },
+    onError: (err, vars, snap) => {
+      if (snap) restore(qc, snap)
+      reportSaveError(err, 'todo', () => update.mutate(vars))
+    },
+    onSettled: () => settle(qc),
+  })
+
+  const create = useMutation({
+    mutationFn: (input: TodoInput) => api.createTodo(input),
+    onMutate: (input) => {
+      patchCounts(qc, input.task_id, 1, 0)
+    },
+    onError: (err, input) => {
+      patchCounts(qc, input.task_id, -1, 0)
+      reportSaveError(err, 'todo', () => create.mutate(input))
+    },
+    onSettled: () => settle(qc),
+  })
+
+  const remove = useMutation({
+    mutationFn: (todo: Todo) => api.deleteTodo(todo.id),
+    onMutate: async (todo) => {
+      await qc.cancelQueries({ queryKey: keys.allTodos })
+      const snap = snapshot(qc)
+      patchTodo(qc, todo.id, () => null)
+      patchCounts(qc, todo.task_id, -1, todo.is_done ? -1 : 0)
+      return snap
+    },
+    onError: (err, todo, snap) => {
+      if (snap) restore(qc, snap)
+      reportSaveError(err, 'todo', () => remove.mutate(todo))
+    },
+    onSettled: () => settle(qc),
+  })
+
+  const link = useMutation({
+    mutationFn: ({ todo, request }: { todo: Todo; request: ServiceDeskRequest }) =>
+      api.linkRequest(todo.id, request.key),
+    onMutate: async ({ todo, request }) => {
+      await qc.cancelQueries({ queryKey: keys.allTodos })
+      const snap = snapshot(qc)
+      patchTodo(qc, todo.id, (t) => ({
+        ...t,
+        service_desk_requests: [...t.service_desk_requests.filter((r) => r.key !== request.key), request].sort(
+          (a, b) => a.key.localeCompare(b.key),
+        ),
+      }))
+      return snap
+    },
+    onError: (err, vars, snap) => {
+      if (snap) restore(qc, snap)
+      reportSaveError(err, 'todo', () => link.mutate(vars))
+    },
+    onSettled: () => settle(qc),
+  })
+
+  const unlink = useMutation({
+    mutationFn: ({ todo, key }: { todo: Todo; key: string }) => api.unlinkRequest(todo.id, key),
+    onMutate: async ({ todo, key }) => {
+      await qc.cancelQueries({ queryKey: keys.allTodos })
+      const snap = snapshot(qc)
+      patchTodo(qc, todo.id, (t) => ({
+        ...t,
+        service_desk_requests: t.service_desk_requests.filter((r) => r.key !== key),
+      }))
+      return snap
+    },
+    onError: (err, vars, snap) => {
+      if (snap) restore(qc, snap)
+      reportSaveError(err, 'todo', () => unlink.mutate(vars))
+    },
+    onSettled: () => settle(qc),
+  })
+
+  return {
+    update: (todo: Todo, patch: Partial<TodoInput>) => update.mutate({ todo, patch }),
+    create: (input: TodoInput) => create.mutateAsync(input),
+    remove: (todo: Todo) => remove.mutate(todo),
+    link: (todo: Todo, request: ServiceDeskRequest) => link.mutate({ todo, request }),
+    unlink: (todo: Todo, key: string) => unlink.mutate({ todo, key }),
+  }
+}
+
+/** useSavingTask reports whether a save of the task id is in flight. */
+export const useSavingTask = (id: string | undefined) =>
+  useIsMutating({
+    mutationKey: ['task-save'],
+    predicate: (m) => (m.state.variables as { task: TaskDetail } | undefined)?.task.id === id,
+  }) > 0
+
+/** useTaskActions writes local tasks; updates are optimistic like todo updates. */
+export function useTaskActions() {
+  const qc = useQueryClient()
+
+  const update = useMutation({
+    mutationKey: ['task-save'],
+    mutationFn: ({ task, patch }: { task: TaskDetail; patch: Partial<TaskInput> }) =>
+      api.updateTask(task.id, taskInput(task, patch)),
+    onMutate: async ({ task, patch }) => {
+      await qc.cancelQueries({ queryKey: keys.task(task.id) })
+      const snap = snapshot(qc)
+      const { parent_id: parentID, ...fields } = patch
+      qc.setQueryData<TaskDetail>(keys.task(task.id), (old) =>
+        old ? { ...old, ...fields, ...(parentID !== undefined ? { parent_id: parentID || null } : {}) } : old,
+      )
+      qc.setQueryData<TaskListItem[]>(keys.tasks, (old) =>
+        old?.map((t) => (t.id === task.id ? { ...t, ...fields } : t)),
+      )
+      return snap
+    },
+    onError: (err, vars, snap) => {
+      if (snap) restore(qc, snap)
+      reportSaveError(err, 'task', () => update.mutate(vars))
+    },
+    onSettled: (_d, _e, { task }) => {
+      void qc.invalidateQueries({ queryKey: keys.task(task.id) })
+      void qc.invalidateQueries({ queryKey: keys.tasks })
+    },
+  })
+
+  const create = useMutation({
+    mutationFn: (title: string) =>
+      api.createTask({
+        title,
+        description: '',
+        status: 'todo',
+        start_date: null,
+        due_date: null,
+        parent_id: '',
+        children_ids: [],
+        linked_ids: [],
+      }),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.tasks }),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.deleteTask(id),
+    onError: (err, id) => reportSaveError(err, 'task', () => remove.mutate(id)),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.tasks })
+      void qc.invalidateQueries({ queryKey: keys.allTodos })
+      void qc.invalidateQueries({ queryKey: ['task'] })
+    },
+  })
+
+  return {
+    update: (task: TaskDetail, patch: Partial<TaskInput>) => update.mutate({ task, patch }),
+    updateAsync: (task: TaskDetail, patch: Partial<TaskInput>) => update.mutateAsync({ task, patch }),
+    create: (title: string) => create.mutateAsync(title),
+    remove: (id: string) => remove.mutateAsync(id),
+  }
+}
