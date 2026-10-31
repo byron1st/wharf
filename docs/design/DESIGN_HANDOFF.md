@@ -35,7 +35,7 @@ Wharf SPA 웹앱 디자인을 구현용으로 정리한 문서야. 시각적인 
 
 ```
 Today (full width)
-├─ Header: "Wharf" · 날짜 · 현재 시각(HH:MM) · ⚙ Settings
+├─ Header: "Wharf" · [⟳ Synced 14:02] [+ New task] · 날짜 · 현재 시각(HH:MM) · ⚙ Settings
 ├─ Left  (flex 999 1 600px): Todos card
 └─ Right (flex 1 1 340px): Requests card (접기/펼치기) → Inspector (선택 시에만)
 Modals
@@ -50,7 +50,17 @@ URL 상태 제안 (디자인에는 없음, 구현 판단): `?todo=22`, `?task=WH
 
 ### Header
 - 왼쪽: `Wharf` (24px / 600 / tracking -0.02em). 로고 아이콘 없음.
-- 오른쪽: `Monday, October 26`(orange `#c2410c`, 13px/500) │ `14:07`(15px/600, tabular) │ Settings 아이콘 버튼(36×36, `⌘,`).
+- 오른쪽: Sync 버튼 · New task 버튼 │ `Monday, October 26`(orange `#c2410c`, 13px/500) │ `14:07`(15px/600, tabular) │ Settings 아이콘 버튼(36×36, `⌘,`).
+- **Sync 버튼 (Atlassian Cloud 동기화):** 32px 높이의 pill 모양 outline 버튼이야. 마지막 동기화 시각을 보여주는 상태 표시이자 실행 버튼이야.
+  - 대기: `⟳ Synced 14:02` (gray). 누르면 동기화 시작.
+  - 진행 중: 스피너 + `Syncing…` (teal 배경·테두리), 비활성. 오른쪽 아래에 로딩 토스트가 떠.
+  - 완료: 로딩 토스트가 결과 토스트로 바뀌고(§6), 버튼은 새 시각(`Synced 14:07`)으로 돌아와.
+  - 실패: `Sync failed` (red 배경·테두리). 다음 동기화가 성공할 때까지 유지되고, 누르면 다시 시도해.
+  - Settings › Sync의 `Sync now`와 같은 동작이야.
+- **New task 버튼 (로컬 Task 추가):** Sync 버튼 바로 오른쪽, 같은 pill 스타일(`+ New task`, 단축키 `N`). Wharf에 Task가 들어오는 두 경로(Jira 동기화, 로컬 추가)를 헤더 한 곳에 나란히 둔 거야.
+  - 누르면 버튼이 teal로 활성화되고, 아래에 팝오버(폭 340px, 오른쪽 정렬)가 열려: `New task` + `Local` 배지, 제목 입력(포커스 상태), 안내 "Opens in the inspector so you can add a due date, description and todos next.", `Enter` create · `Esc` cancel, `Cancel` / `Create`(제목이 비면 비활성).
+  - 만들면: 새 Task 그룹(예: `WHF-009`, `No due date`, `0/0`)이 Todo 목록에 추가되고 그 그룹의 Todo 입력 행이 바로 열려. 동시에 Inspector에 새 Task가 열려.
+  - Todo가 아직 없는 새 Task도 Today에 보여 (만든 직후 세션 동안). ID는 저장할 때 서버가 배정해.
 - 시각은 1분마다 갱신.
 
 ### Todos card (`screens/01`, `02`)
@@ -244,7 +254,7 @@ URL 상태 제안 (디자인에는 없음, 구현 판단): `?todo=22`, `?task=WH
 
 | 그룹 | 상태 | 제목 / 설명 | 액션 |
 |---|---|---|---|
-| Atlassian Cloud sync (Settings › Sync now) | 진행 중 | Syncing Atlassian Cloud… / Fetching Jira issues and Service Desk requests. (아래에 진행 바) | — |
+| Atlassian Cloud sync (헤더 ⟳ · Settings › Sync now) | 진행 중 | Syncing Atlassian Cloud… / Fetching Jira issues and Service Desk requests. (아래에 진행 바) | — |
 | | 성공 | Atlassian Cloud synced `14:02` / 6 issues updated · 4 open requests · 2 requests closed | — |
 | | 부분 성공 | Partly synced / 5 of 6 issues updated. SEC-171 couldn't be read. | Sync again |
 | | 인증 실패 | Atlassian Cloud sync failed / 401 Unauthorized. Check the email and API key. Nothing was changed. | Open settings · Retry |
@@ -329,4 +339,7 @@ URL 상태 제안 (디자인에는 없음, 구현 판단): `?todo=22`, `?task=WH
 | `13-settings-general-config-changed` | config 파일 변경 후 재시작 안내 |
 | `14-settings-atlassian` | Settings › Atlassian Cloud |
 | `15-pickers-sheet` | 피커 명세 시트 |
-| `16-toasts-sheet` | 토스트 명세 시트 |
+| `16-toasts-sheet` | 토스트 명세 시트 (헤더 Sync 버튼 상태 포함) |
+| `17-today-sync-running` | 헤더 Sync 진행 중 + 로딩 토스트 |
+| `18-today-new-local-task` | 헤더 New task 팝오버 |
+| `19-today-local-task-created` | 새 Task 생성 직후 (Todo 입력 행 + Task Inspector) |

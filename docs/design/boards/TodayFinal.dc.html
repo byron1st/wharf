@@ -20,6 +20,27 @@ a{color:#0f766e}a:hover{color:#115e59}
     <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px">
       <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em">Wharf</h1>
       <div style="margin-left: auto; display: flex; align-items: center; gap: 12px">
+        <button type="button" onClick="{{sync.run}}" disabled="{{sync.busy}}" aria-label="Sync Atlassian Cloud" title="{{sync.tip}}" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid {{sync.border}}; border-radius: 9999px; background: {{sync.bg}}; font: inherit; font-size: 12px; font-weight: 500; color: {{sync.color}}; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: {{sync.cursor}}"><sc-if value="{{sync.busy}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="12" cy="12" r="9" stroke="#ccfbf1" stroke-width="3"></circle><path d="M21 12a9 9 0 0 0-9-9" stroke="#0f766e" stroke-width="3" stroke-linecap="round"></path></svg></sc-if><sc-if value="{{sync.failed}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg></sc-if><sc-if value="{{sync.ready}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path></svg></sc-if>{{sync.label}}</button>
+        <div style="position: relative">
+          <button type="button" onClick="{{newTask.toggle}}" aria-expanded="{{newTask.open}}" aria-haspopup="dialog" title="New local task (N)" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 12px 0 10px; border: 1px solid {{newTask.border}}; border-radius: 9999px; background: {{newTask.bg}}; box-shadow: {{newTask.ring}}; font: inherit; font-size: 12px; font-weight: 500; color: {{newTask.color}}; white-space: nowrap; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex-shrink: 0"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>New task</button>
+          <sc-if value="{{newTask.open}}" hint-placeholder-val="{{ false }}">
+            <div role="dialog" aria-label="New local task" style="position: absolute; top: 40px; right: 0; z-index: 50; width: 340px; box-sizing: border-box; padding: 14px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 10px; text-align: left">
+              <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">New task<span style="display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 5px; background: #f0fdfa; border: 1px solid #ccfbf1; font-size: 11px; font-weight: 600; color: #0f766e">Local</span></span>
+              <label style="display: flex; flex-direction: column; gap: 6px">
+                <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Task title</span>
+                <input type="text" placeholder="Task title" value="{{newTask.title}}" onChange="{{newTask.setTitle}}" style="height: 36px; box-sizing: border-box; padding: 0 12px; border: 1px solid #0f766e; border-radius: 6px; box-shadow: 0 0 0 3px rgba(15,118,110,0.15); font: inherit; font-size: 14px; color: #09090b; background: #ffffff; outline: none">
+              </label>
+              <span style="font-size: 12px; line-height: 1.5; color: #71717a">Opens in the inspector so you can add a due date, description and todos next.</span>
+              <div style="display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid #f4f4f5; font-size: 12px; color: #71717a">
+                <span style="display: flex; align-items: center; gap: 4px"><kbd style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; border: 1px solid #99f6e4; border-radius: 4px; padding: 0 5px; background: #ffffff; color: #115e59">Enter</kbd>create</span>
+                <span style="display: flex; align-items: center; gap: 4px"><kbd style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; border: 1px solid #e4e4e7; border-radius: 4px; padding: 0 5px; background: #ffffff; color: #52525b">Esc</kbd>cancel</span>
+                <button type="button" onClick="{{newTask.cancel}}" style="margin-left: auto; height: 28px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 6px; background: #ffffff; font: inherit; font-size: 12px; font-weight: 500; color: #09090b; cursor: pointer">Cancel</button>
+                <button type="button" onClick="{{newTask.create}}" disabled="{{newTask.empty}}" style="height: 28px; padding: 0 12px; border: none; border-radius: 6px; background: {{newTask.ctaBg}}; font: inherit; font-size: 12px; font-weight: 500; color: #ffffff; white-space: nowrap; cursor: {{newTask.ctaCursor}}">Create</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+        <span aria-hidden="true" style="width: 1px; height: 16px; background: #e4e4e7"></span>
         <span style="display: flex; align-items: baseline; gap: 10px; font-variant-numeric: tabular-nums">
           <time datetime="2026-10-26" style="font-size: 13px; font-weight: 500; color: #c2410c">Monday, October 26</time>
           <span aria-hidden="true" style="width: 1px; height: 14px; align-self: center; background: #e4e4e7"></span>
@@ -95,6 +116,7 @@ a{color:#0f766e}a:hover{color:#115e59}
               </sc-for>
             </sc-if>
           </sc-for>
+
 
           <sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
             <p style="margin: 0; padding: 40px 16px; text-align: center; font-size: 14px; color: #71717a">All clear for this filter.</p>
@@ -499,6 +521,11 @@ a{color:#0f766e}a:hover{color:#115e59}
       </sc-if>
       </div>
     </div>
+
+    <div aria-live="polite" style="position: fixed; right: 24px; bottom: 24px; z-index: 60; width: 360px; max-width: calc(100vw - 48px); display: flex; flex-direction: column; gap: 8px">
+      <sc-if value="{{sync.toastBusy}}" hint-placeholder-val="{{ false }}"><div role="status" style="position: relative; overflow: hidden; display: flex; gap: 12px; padding: 14px 16px 14px 14px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.04)"><span style="flex-shrink: 0; margin-top: 1px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#e4e4e7" stroke-width="3"></circle><path d="M21 12a9 9 0 0 0-9-9" stroke="#0f766e" stroke-width="3" stroke-linecap="round"></path></svg></span><div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; font-weight: 600; color: #09090b">Syncing Atlassian Cloud…</span></span><span style="font-size: 13px; line-height: 1.5; color: #52525b">Fetching Jira issues and Service Desk requests.</span></div><span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #f0fdfa; display: flex"><span style="width: 36%; margin-left: 24%; background: #0f766e; border-radius: 9999px"></span></span></div></sc-if>
+      <sc-if value="{{sync.toastDone}}" hint-placeholder-val="{{ false }}"><div role="status" style="position: relative; overflow: hidden; display: flex; gap: 12px; padding: 14px 16px 14px 14px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.04)"><span style="flex-shrink: 0; margin-top: 1px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg></span><div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 14px; font-weight: 600; color: #09090b">Atlassian Cloud synced</span><span style="font-size: 11px; color: #a1a1aa; font-variant-numeric: tabular-nums">{{sync.last}}</span></span><span style="font-size: 13px; line-height: 1.5; color: #52525b">6 issues updated · 4 open requests · 2 requests closed</span></div></div></sc-if>
+    </div>
   </main>
 </div>
 </x-dc>
@@ -513,6 +540,8 @@ class Component extends DCLogic {
     picker: (this.props && this.props.initialReq) ? 'todo' : null,
     // Wharf-only links: Service Desk request key -> todo ids (many-to-many)
     links: { 'CIS-12345': [21, 22], 'CIS-12388': [41], 'CIS-12402': [51], 'CIS-12291': [] },
+    // Quick actions in the header: Atlassian Cloud sync and new local task
+    sync: 'idle', lastSync: '14:02', creatingTask: false, newTitle: '', newTasks: [],
     // Date / reminder edits (popover pickers). pop: 'start' | 'end' | 'tstart' | 'tdue' | 'rem-new' | 'rem-<i>'
     dates: {}, tdates: {}, rems: {}, pop: null, pkMonth: 0, remDay: null, remTime: '09:00' };
 
@@ -752,6 +781,11 @@ class Component extends DCLogic {
       'SEC-158': { st: 'todo', start: null, due: 34, parent: 'jira-SEC-131', children: [], linked: [],
         desc: '스테이징부터 **순차 드레인** 후 노드그룹을 교체한다.\n\n```\nkubectl drain <node> --ignore-daemonsets --delete-emptydir-data\n```' }
     };
+    (s.newTasks || []).forEach(function (nt) {
+      TASKS.push({ key: nt.key, origin: 'local', title: nt.title, todos: [], fresh: true });
+      TITLES[nt.key] = nt.title;
+      META[nt.key] = { st: 'todo', start: null, due: null, parent: null, children: [], linked: [], desc: '' };
+    });
     function relItem(id) {
       var key = id.replace(/^(jira|local)-/, '');
       var stored = !!TITLES[key];
@@ -822,7 +856,7 @@ class Component extends DCLogic {
           toggle: toggleFn(t.id), select: selectFn(t.id)
         };
       });
-      if (!items.length) return;
+      if (!items.length && !k.fresh) return;
       var isOpen = !closed[k.key];
       var isTaskSel = s.selKey === k.key;
       var gdue = dueInfo(metaOf(k.key).due);
@@ -833,7 +867,7 @@ class Component extends DCLogic {
         key: k.key, title: k.title, originColor: ORIGIN[k.origin], due: gdue.label,
         dueColor: gdue.tone === 'over' ? '#b91c1c' : gdue.tone === 'today' ? '#9a3412' : '#52525b',
         dueBg: gdue.tone === 'over' ? '#fef2f2' : gdue.tone === 'today' ? '#fff7ed' : '#f4f4f5',
-        progress: dc + '/' + k.todos.length, pct: Math.round(dc / k.todos.length * 100),
+        progress: dc + '/' + k.todos.length, pct: k.todos.length ? Math.round(dc / k.todos.length * 100) : 0,
         items: items, open: isOpen, closed: !isOpen,
         toggle: function () { var n = Object.assign({}, self.state.closed); n[k.key] = isOpen; self.setState({ closed: n }); },
         adding: s.adding === k.key,
@@ -1012,6 +1046,44 @@ class Component extends DCLogic {
       pickAll: function () { self.setState({ task: null }); },
       completed: completed, completedCount: completed.length,
       showCompleted: !!s.showCompleted, hideCompleted: !s.showCompleted,
+      sync: (function () {
+        var st = s.sync || 'idle', busy = st === 'busy', failed = st === 'failed';
+        return {
+          busy: busy, failed: failed, ready: !busy && !failed, last: s.lastSync,
+          label: busy ? 'Syncing…' : failed ? 'Sync failed' : 'Synced ' + s.lastSync,
+          tip: busy ? 'Syncing Atlassian Cloud…' : failed ? 'Last sync failed — click to retry' : 'Sync Atlassian Cloud · last synced ' + s.lastSync,
+          color: busy ? '#0f766e' : failed ? '#b91c1c' : '#52525b',
+          bg: busy ? '#f0fdfa' : failed ? '#fef2f2' : '#ffffff',
+          border: busy ? '#99f6e4' : failed ? '#fecaca' : '#e4e4e7',
+          cursor: busy ? 'default' : 'pointer',
+          toastBusy: busy, toastDone: st === 'done',
+          run: function () {
+            if (self.state.sync === 'busy') return;
+            self.setState({ sync: 'busy' });
+            setTimeout(function () { self.setState({ sync: 'done', lastSync: '14:07' }); }, 1600);
+            setTimeout(function () { if (self.state.sync === 'done') self.setState({ sync: 'idle' }); }, 5600);
+          }
+        };
+      })(),
+      newTask: (function () {
+        var open = !!s.creatingTask, title = s.newTitle || '', empty = !title.trim();
+        return {
+          open: open, title: title, empty: empty,
+          border: open ? '#0f766e' : '#e4e4e7', bg: open ? '#f0fdfa' : '#ffffff', color: open ? '#115e59' : '#3f3f46',
+          ring: open ? '0 0 0 3px rgba(15,118,110,0.15)' : 'none',
+          ctaBg: empty ? '#99c7c2' : '#0f766e', ctaCursor: empty ? 'not-allowed' : 'pointer',
+          toggle: function () { self.setState({ creatingTask: !self.state.creatingTask, newTitle: '' }); },
+          cancel: function () { self.setState({ creatingTask: false, newTitle: '' }); },
+          setTitle: function (e) { var v = e && e.target ? e.target.value : (typeof e === 'string' ? e : ''); self.setState({ newTitle: v }); },
+          create: function () {
+            var t = (self.state.newTitle || '').trim(); if (!t) return;
+            var list = (self.state.newTasks || []).slice(), key = 'WHF-' + String(9 + list.length).padStart(3, '0');
+            list.push({ key: key, title: t });
+            var cl = Object.assign({}, self.state.closed); cl[key] = false;
+            self.setState({ newTasks: list, creatingTask: false, newTitle: '', adding: key, closed: cl, selKey: key, sel: null, selReq: null, picker: null, pop: null });
+          }
+        };
+      })(),
       toggleCompleted: function () { self.setState({ showCompleted: !self.state.showCompleted }); },
       ins: ins, hasSel: !!selTodo, anySel: !!(selTodo || taskObj || reqObj),
       closeSel: function () { self.setState({ sel: null, selKey: null, selReq: null, picker: null }); }
