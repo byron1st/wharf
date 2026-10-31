@@ -27,10 +27,10 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 ## Architecture Overview
 
 - `cmd/wharf/`: Entry point; wires config, adapters, services, and routes only.
-- `internal/config/`: Loads the TOML config file (`config.Path`, `config.Load`), fills defaults, and requires and validates the Atlassian REST API keys (`atlassian_site_url`, `atlassian_email`, `atlassian_api_token`). `config.example.toml` at the repo root documents every key.
-- `internal/server/`: HTTP server, middleware, and handlers; translates requests/responses and calls services.
+- `internal/config/`: Loads the TOML config file (`config.Path`, `config.Load`; a missing file is all defaults), fills defaults, and validates the optional Atlassian REST API keys (`atlassian_site_url`, `atlassian_email`, `atlassian_api_token`, all or none). `config.SaveAtlassian` rewrites only those three lines; `service.Settings` calls it from the settings API. `config.example.toml` at the repo root documents every key.
+- `internal/server/`: HTTP server, middleware (including the loopback RemoteAddr/Host/Origin guard), and handlers under `/api`; translates requests/responses and calls `service.Service` and `service.Settings`.
 - `internal/service/`: Business logic; depends on adapter interfaces, never on HTTP types.
-- `internal/adapter/`: External I/O (database, third-party APIs). `internal/adapter/db/` holds sqlc output (`db.go`, `models.go`, `queries.sql.go`) next to the hand-written `db.Manager` (`client.go`, `client_management.go`).
+- `internal/adapter/`: External I/O (database, third-party APIs, `system` for macOS desktop commands). `internal/adapter/db/` holds sqlc output (`db.go`, `models.go`, `queries.sql.go`) next to the hand-written `db.Manager` (`client.go`, `client_management.go`).
 - `internal/pkg/<topic>/`: Module-private shared code. `internal/pkg/mocks/` holds generated mocks.
 - `pkg/<topic>/`: Public, importable contracts (only when something must be shared outside the module).
 - `scripts/`: Tooling config such as `sqlc.yaml`, SQL schema, and queries. Its Go package (`scripts.Migrations()`) embeds `schema_migrations.sql` and `migrations/` for `db.NewManager`, since `go:embed` cannot reach files outside the package directory.
@@ -66,6 +66,6 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 
 - NEVER hand-edit generated code (`internal/pkg/mocks/`, sqlc output `internal/adapter/db/{db,models,queries.sql}.go`); change the source (interface, SQL) and run `make gen`.
 - NEVER run raw `go test`, `go build`, or `golangci-lint` commands; use the matching `make` target so tooling stays consistent.
-- NEVER commit secrets or `.env` files; read configuration through `internal/config` at startup in `cmd/wharf`. The only environment variable is `WHARF_CONFIG` (config file path); add new settings as TOML keys, not environment variables.
+- NEVER commit secrets or `.env` files; read configuration through `internal/config` at startup in `cmd/wharf`. The one runtime exception is `service.Settings`, which writes the Atlassian keys with `config.SaveAtlassian` and validates a chosen file with `config.Load` before a restart; nothing else reads or writes config after startup. The only environment variable is `WHARF_CONFIG` (config file path); add new settings as TOML keys, not environment variables.
 - NEVER import `internal/server` from `internal/service` or `internal/adapter`; pass plain domain types down the layers instead.
 - NEVER add a third-party dependency when the standard library covers the need; justify any new module in the PR description.

@@ -34,9 +34,15 @@ type Todo struct {
 // Filter selects todos; an empty or nil field does not filter.
 type Filter struct {
 	TaskID string
-	// Today keeps todos that start on or before it, or have no start date.
-	Today string
-	// EndDate keeps todos that end on it.
-	EndDate string
-	IsDone  *bool
+	IsDone *bool
+	// CompletedSince keeps todos completed at or after it.
+	CompletedSince *time.Time
+	// ServiceDeskRequest keeps todos linked to the request with this key.
+	ServiceDeskRequest string
+}
+
+// Count is how many todos a task has, and how many of them are done.
+type Count struct {
+	Todos int
+	Done  int
 }

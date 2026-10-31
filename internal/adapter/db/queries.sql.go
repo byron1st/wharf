@@ -23,6 +23,73 @@ func (q *Queries) CountTaskTodos(ctx context.Context, taskID string) (int64, err
 	return count, err
 }
 
+const countTodosByTask = `-- name: CountTodosByTask :many
+SELECT task_todos.task_id,
+       COUNT(*) AS todos,
+       CAST(COALESCE(SUM(todos.is_done), 0) AS INTEGER) AS done_todos
+FROM task_todos
+JOIN todos ON todos.id = task_todos.todo_id
+GROUP BY task_todos.task_id
+`
+
+type CountTodosByTaskRow struct {
+	TaskID    string
+	Todos     int64
+	DoneTodos int64
+}
+
+func (q *Queries) CountTodosByTask(ctx context.Context) ([]CountTodosByTaskRow, error) {
+	rows, err := q.db.QueryContext(ctx, countTodosByTask)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountTodosByTaskRow
+	for rows.Next() {
+		var i CountTodosByTaskRow
+		if err := rows.Scan(&i.TaskID, &i.Todos, &i.DoneTodos); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const createAtlassianSync = `-- name: CreateAtlassianSync :exec
+INSERT INTO atlassian_syncs (
+    synced_at, issues, issue_failures, open_requests, closed_requests, request_failures
+) VALUES (
+    ?, ?, ?, ?, ?, ?
+)
+`
+
+type CreateAtlassianSyncParams struct {
+	SyncedAt        time.Time
+	Issues          int64
+	IssueFailures   int64
+	OpenRequests    int64
+	ClosedRequests  int64
+	RequestFailures int64
+}
+
+func (q *Queries) CreateAtlassianSync(ctx context.Context, arg CreateAtlassianSyncParams) error {
+	_, err := q.db.ExecContext(ctx, createAtlassianSync,
+		arg.SyncedAt,
+		arg.Issues,
+		arg.IssueFailures,
+		arg.OpenRequests,
+		arg.ClosedRequests,
+		arg.RequestFailures,
+	)
+	return err
+}
+
 const createSchemaMigration = `-- name: CreateSchemaMigration :exec
 INSERT INTO schema_migrations (version) VALUES (?)
 `
@@ -348,6 +415,25 @@ func (q *Queries) ExistsTodo(ctx context.Context, id int64) (bool, error) {
 	return exists, err
 }
 
+const getLastAtlassianSync = `-- name: GetLastAtlassianSync :one
+SELECT id, synced_at, issues, issue_failures, open_requests, closed_requests, request_failures FROM atlassian_syncs ORDER BY id DESC LIMIT 1
+`
+
+func (q *Queries) GetLastAtlassianSync(ctx context.Context) (AtlassianSync, error) {
+	row := q.db.QueryRowContext(ctx, getLastAtlassianSync)
+	var i AtlassianSync
+	err := row.Scan(
+		&i.ID,
+		&i.SyncedAt,
+		&i.Issues,
+		&i.IssueFailures,
+		&i.OpenRequests,
+		&i.ClosedRequests,
+		&i.RequestFailures,
+	)
+	return i, err
+}
+
 const getTask = `-- name: GetTask :one
 SELECT tasks.id, tasks.originated, tasks.title, tasks.description, tasks.status, tasks.start_date, tasks.due_date, task_hierarchies.parent_id
 FROM tasks
@@ -385,6 +471,43 @@ func (q *Queries) IncrementCounter(ctx context.Context, name string) (int64, err
 	var value int64
 	err := row.Scan(&value)
 	return value, err
+}
+
+const listServiceDeskRequests = `-- name: ListServiceDeskRequests :many
+SELECT issue_key, title, status, status_category, created_at, status_at FROM service_desk_requests
+WHERE status_category != 'DONE' OR CAST(?1 AS BOOLEAN)
+ORDER BY issue_key
+`
+
+// 'DONE' is the closed Jira status category.
+func (q *Queries) ListServiceDeskRequests(ctx context.Context, includeClosed bool) ([]ServiceDeskRequest, error) {
+	rows, err := q.db.QueryContext(ctx, listServiceDeskRequests, includeClosed)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ServiceDeskRequest
+	for rows.Next() {
+		var i ServiceDeskRequest
+		if err := rows.Scan(
+			&i.IssueKey,
+			&i.Title,
+			&i.Status,
+			&i.StatusCategory,
+			&i.CreatedAt,
+			&i.StatusAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTaskChildren = `-- name: ListTaskChildren :many
@@ -530,17 +653,20 @@ FROM todo_reminders
 JOIN todos ON todos.id = todo_reminders.todo_id
 JOIN task_todos ON task_todos.todo_id = todo_reminders.todo_id
 WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
-  AND (todos.start_date <= ?2 OR todos.start_date IS NULL OR ?2 IS NULL)
-  AND (todos.end_date = ?3 OR ?3 IS NULL)
-  AND (todos.is_done = ?4 OR ?4 IS NULL)
+  AND (todos.is_done = ?2 OR ?2 IS NULL)
+  AND (todos.completed_at >= ?3 OR ?3 IS NULL)
+  AND (todos.id IN (
+          SELECT linked.todo_id FROM todo_service_desk_requests AS linked
+          WHERE linked.issue_key = ?4
+       ) OR ?4 IS NULL)
 ORDER BY todo_reminders.todo_id, todo_reminders.remind_at
 `
 
 type ListTodoRemindersParams struct {
-	TaskID  sql.NullString
-	Today   sql.NullString
-	EndDate sql.NullString
-	IsDone  sql.NullBool
+	TaskID             sql.NullString
+	IsDone             sql.NullBool
+	CompletedSince     sql.NullTime
+	ServiceDeskRequest sql.NullString
 }
 
 // Takes the ListTodos filters rather than todo IDs, so the number of bind
@@ -548,9 +674,9 @@ type ListTodoRemindersParams struct {
 func (q *Queries) ListTodoReminders(ctx context.Context, arg ListTodoRemindersParams) ([]TodoReminder, error) {
 	rows, err := q.db.QueryContext(ctx, listTodoReminders,
 		arg.TaskID,
-		arg.Today,
-		arg.EndDate,
 		arg.IsDone,
+		arg.CompletedSince,
+		arg.ServiceDeskRequest,
 	)
 	if err != nil {
 		return nil, err
@@ -580,17 +706,20 @@ JOIN service_desk_requests ON service_desk_requests.issue_key = todo_service_des
 JOIN todos ON todos.id = todo_service_desk_requests.todo_id
 JOIN task_todos ON task_todos.todo_id = todo_service_desk_requests.todo_id
 WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
-  AND (todos.start_date <= ?2 OR todos.start_date IS NULL OR ?2 IS NULL)
-  AND (todos.end_date = ?3 OR ?3 IS NULL)
-  AND (todos.is_done = ?4 OR ?4 IS NULL)
+  AND (todos.is_done = ?2 OR ?2 IS NULL)
+  AND (todos.completed_at >= ?3 OR ?3 IS NULL)
+  AND (todos.id IN (
+          SELECT linked.todo_id FROM todo_service_desk_requests AS linked
+          WHERE linked.issue_key = ?4
+       ) OR ?4 IS NULL)
 ORDER BY todo_service_desk_requests.todo_id, service_desk_requests.issue_key
 `
 
 type ListTodoServiceDeskRequestsParams struct {
-	TaskID  sql.NullString
-	Today   sql.NullString
-	EndDate sql.NullString
-	IsDone  sql.NullBool
+	TaskID             sql.NullString
+	IsDone             sql.NullBool
+	CompletedSince     sql.NullTime
+	ServiceDeskRequest sql.NullString
 }
 
 type ListTodoServiceDeskRequestsRow struct {
@@ -602,9 +731,9 @@ type ListTodoServiceDeskRequestsRow struct {
 func (q *Queries) ListTodoServiceDeskRequests(ctx context.Context, arg ListTodoServiceDeskRequestsParams) ([]ListTodoServiceDeskRequestsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listTodoServiceDeskRequests,
 		arg.TaskID,
-		arg.Today,
-		arg.EndDate,
 		arg.IsDone,
+		arg.CompletedSince,
+		arg.ServiceDeskRequest,
 	)
 	if err != nil {
 		return nil, err
@@ -640,17 +769,20 @@ SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_a
 FROM todos
 JOIN task_todos ON task_todos.todo_id = todos.id
 WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
-  AND (todos.start_date <= ?2 OR todos.start_date IS NULL OR ?2 IS NULL)
-  AND (todos.end_date = ?3 OR ?3 IS NULL)
-  AND (todos.is_done = ?4 OR ?4 IS NULL)
+  AND (todos.is_done = ?2 OR ?2 IS NULL)
+  AND (todos.completed_at >= ?3 OR ?3 IS NULL)
+  AND (todos.id IN (
+          SELECT linked.todo_id FROM todo_service_desk_requests AS linked
+          WHERE linked.issue_key = ?4
+       ) OR ?4 IS NULL)
 ORDER BY task_todos.task_id, task_todos.position
 `
 
 type ListTodosParams struct {
-	TaskID  sql.NullString
-	Today   sql.NullString
-	EndDate sql.NullString
-	IsDone  sql.NullBool
+	TaskID             sql.NullString
+	IsDone             sql.NullBool
+	CompletedSince     sql.NullTime
+	ServiceDeskRequest sql.NullString
 }
 
 type ListTodosRow struct {
@@ -669,9 +801,9 @@ type ListTodosRow struct {
 func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]ListTodosRow, error) {
 	rows, err := q.db.QueryContext(ctx, listTodos,
 		arg.TaskID,
-		arg.Today,
-		arg.EndDate,
 		arg.IsDone,
+		arg.CompletedSince,
+		arg.ServiceDeskRequest,
 	)
 	if err != nil {
 		return nil, err

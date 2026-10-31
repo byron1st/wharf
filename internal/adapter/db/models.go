@@ -9,6 +9,16 @@ import (
 	"time"
 )
 
+type AtlassianSync struct {
+	ID              int64
+	SyncedAt        time.Time
+	Issues          int64
+	IssueFailures   int64
+	OpenRequests    int64
+	ClosedRequests  int64
+	RequestFailures int64
+}
+
 type Counter struct {
 	Name  string
 	Value int64

@@ -238,6 +238,74 @@ func TestListTodosWithServiceDeskRequests(t *testing.T) {
 	require.Empty(t, got[0].ServiceDeskRequests)
 }
 
+func TestListTodosByServiceDeskRequest(t *testing.T) {
+	manager, _ := newFileManager(t, scripts.Migrations())
+	a, b := seedLinkable(t, manager)
+	done := create(t, manager, todo.Todo{TaskID: "J2", Description: "done", IsDone: true})
+	ctx := context.Background()
+
+	require.NoError(t, manager.LinkServiceDeskRequest(ctx, a, "SD-1"))
+	require.NoError(t, manager.LinkServiceDeskRequest(ctx, a, "SD-2"))
+	require.NoError(t, manager.LinkServiceDeskRequest(ctx, done, "SD-1"))
+	require.NoError(t, manager.LinkServiceDeskRequest(ctx, b, "SD-2"))
+
+	got, err := manager.ListTodos(ctx, todo.Filter{ServiceDeskRequest: "SD-1"})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, a, got[0].ID)
+	require.Equal(t, done, got[1].ID)
+	// A matching todo still lists every request it is linked to.
+	require.Len(t, got[0].ServiceDeskRequests, 2)
+
+	got, err = manager.ListTodos(ctx, todo.Filter{ServiceDeskRequest: "SD-1", IsDone: new(false)})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, a, got[0].ID)
+
+	got, err = manager.ListTodos(ctx, todo.Filter{ServiceDeskRequest: "SD-9"})
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
+func TestListServiceDeskRequests(t *testing.T) {
+	manager, _ := newFileManager(t, scripts.Migrations())
+	ctx := context.Background()
+
+	closed := newRequest("SD-1")
+	closed.Status, closed.StatusCategory = "Done", "DONE"
+	undefined := newRequest("SD-3")
+	undefined.StatusCategory = "UNDEFINED"
+
+	require.NoError(
+		t,
+		manager.UpsertServiceDeskRequests(ctx, []servicedesk.Request{undefined, closed, newRequest("SD-2")}),
+	)
+
+	keys := func(includeClosed bool) []string {
+		t.Helper()
+
+		requests, err := manager.ListServiceDeskRequests(ctx, includeClosed)
+		require.NoError(t, err)
+
+		got := []string{}
+		for _, r := range requests {
+			got = append(got, r.Key)
+		}
+
+		return got
+	}
+
+	require.Equal(t, []string{"SD-2", "SD-3"}, keys(false))
+	require.Equal(t, []string{"SD-1", "SD-2", "SD-3"}, keys(true))
+
+	requests, err := manager.ListServiceDeskRequests(ctx, true)
+	require.NoError(t, err)
+	require.Equal(t, "Done", requests[0].Status)
+	require.Equal(t, "DONE", requests[0].StatusCategory)
+	require.True(t, closed.Created.Equal(requests[0].Created))
+	require.True(t, closed.StatusAt.Equal(requests[0].StatusAt))
+}
+
 func TestDeleteTodoAndTaskDeleteServiceDeskLinks(t *testing.T) {
 	manager, path := newFileManager(t, scripts.Migrations())
 	a, b := seedLinkable(t, manager)

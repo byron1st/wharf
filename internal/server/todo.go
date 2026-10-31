@@ -14,11 +14,12 @@ import (
 )
 
 var (
-	ErrFailedToDecodeTodoRequest  = errors.New("server: failed to decode todo request")
-	ErrTodoRequestHasTrailingData = errors.New("server: todo request has trailing data")
-	ErrTodoRequestTooLarge        = errors.New("server: todo request is too large")
-	ErrEmptyTodoRequestDate       = errors.New("server: todo request date is an empty string")
-	ErrInvalidTodoIsDoneFilter    = errors.New("server: is_done filter is not a bool")
+	ErrFailedToDecodeTodoRequest   = errors.New("server: failed to decode todo request")
+	ErrTodoRequestHasTrailingData  = errors.New("server: todo request has trailing data")
+	ErrTodoRequestTooLarge         = errors.New("server: todo request is too large")
+	ErrEmptyTodoRequestDate        = errors.New("server: todo request date is an empty string")
+	ErrInvalidTodoIsDoneFilter     = errors.New("server: is_done filter is not a bool")
+	ErrInvalidCompletedSinceFilter = errors.New("server: completed_since filter is not an RFC3339 time")
 	// ErrTodoIDNotInteger maps to 404: no todo has a non-integer ID.
 	ErrTodoIDNotInteger = errors.New("server: todo id is not an integer")
 )
@@ -27,12 +28,23 @@ var (
 // ErrTodoRequestTooLarge.
 const maxTodoRequestBytes = 1 << 20
 
-// listTodos filters by the task_id, today, end_date, and is_done query
-// parameters; an absent or empty one does not filter and others are ignored.
+// listTodos filters by the task_id, is_done, completed_since (RFC3339), and
+// service_desk_request query parameters; an absent or empty one does not
+// filter and others are ignored.
 func listTodos(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
-		filter := todo.Filter{TaskID: query.Get("task_id"), Today: query.Get("today"), EndDate: query.Get("end_date")}
+		filter := todo.Filter{TaskID: query.Get("task_id"), ServiceDeskRequest: query.Get("service_desk_request")}
+
+		if v := query.Get("completed_since"); v != "" {
+			since, err := time.Parse(time.RFC3339, v)
+			if err != nil {
+				writeError(w, r, logger, "failed to list todos", errors.Join(ErrInvalidCompletedSinceFilter, err))
+				return
+			}
+
+			filter.CompletedSince = &since
+		}
 
 		if v := query.Get("is_done"); v != "" {
 			isDone, err := strconv.ParseBool(v)
@@ -73,7 +85,7 @@ func createTodo(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 			return
 		}
 
-		// No Location header: there is no GET /todos/{id}.
+		// No Location header: there is no GET /api/todos/{id}.
 		writeJSON(w, http.StatusCreated, createTodoResponse{ID: id})
 	}
 }
@@ -212,22 +224,11 @@ func toTodoResponse(t todo.Todo) todoResponse {
 		CompletedAt:         t.CompletedAt,
 		Reminders:           t.Reminders,
 		Position:            t.Position,
-		ServiceDeskRequests: make([]serviceDeskRequestResponse, 0, len(t.ServiceDeskRequests)),
+		ServiceDeskRequests: toServiceDeskRequests(t.ServiceDeskRequests),
 	}
 
 	if resp.Reminders == nil {
 		resp.Reminders = []time.Time{}
-	}
-
-	for _, request := range t.ServiceDeskRequests {
-		resp.ServiceDeskRequests = append(resp.ServiceDeskRequests, serviceDeskRequestResponse{
-			Key:            request.Key,
-			Title:          request.Title,
-			Status:         request.Status,
-			StatusCategory: request.StatusCategory,
-			CreatedAt:      request.Created,
-			StatusAt:       request.StatusAt,
-		})
 	}
 
 	if t.StartDate != "" {

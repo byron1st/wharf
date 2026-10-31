@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/byron1st/wharf/internal/pkg/httputil"
 	"github.com/byron1st/wharf/internal/pkg/task"
 )
 
@@ -14,10 +18,12 @@ var (
 	ErrUnknownStatusCategory  = errors.New("atlassian: unknown status category")
 	ErrFailedToParseStartDate = errors.New("atlassian: failed to parse start date")
 	ErrFailedToParseDueDate   = errors.New("atlassian: failed to parse due date")
+	ErrWorkItemNotFound       = errors.New("atlassian: work item not found")
 )
 
 const (
 	searchPath = "/rest/api/3/search/jql"
+	issuePath  = "/rest/api/3/issue/"
 
 	// maxSearchPages caps the pages one GetMyTasks follows (100 pages of
 	// searchMaxResults = 10,000 work items) so a server that never ends the
@@ -40,6 +46,11 @@ const (
 // to decode or convert are reported in the joined error alongside the tasks
 // that succeeded.
 func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
+	a, err := c.current()
+	if err != nil {
+		return nil, err
+	}
+
 	tasks := []task.Task{}
 
 	var (
@@ -49,7 +60,7 @@ func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 	)
 
 	for pages := 1; ; pages++ {
-		page, err := c.search(ctx, token)
+		page, err := c.search(ctx, a, token)
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +102,7 @@ func (c *client) GetMyTasks(ctx context.Context) ([]task.Task, error) {
 	}
 }
 
-func (c *client) search(ctx context.Context, token string) (searchResponse, error) {
+func (c *client) search(ctx context.Context, a api, token string) (searchResponse, error) {
 	body, err := json.Marshal(searchRequest{
 		JQL:           myTasksJQL,
 		Fields:        searchFields(),
@@ -102,7 +113,7 @@ func (c *client) search(ctx context.Context, token string) (searchResponse, erro
 		return searchResponse{}, errors.Join(ErrFailedToEncodeSearchRequest, err)
 	}
 
-	out, err := c.http.Post(ctx, c.searchURL, c.header, body)
+	out, err := c.http.Post(ctx, a.base+searchPath, a.header, body)
 	if err != nil {
 		return searchResponse{}, err
 	}
@@ -113,6 +124,40 @@ func (c *client) search(ctx context.Context, token string) (searchResponse, erro
 	}
 
 	return page, nil
+}
+
+// GetTask returns the Jira work item key as a task. It fails with
+// ErrWorkItemNotFound when Jira answers 404, and with ToTask's error, without
+// a task, when a field fails to convert.
+func (c *client) GetTask(ctx context.Context, key string) (task.Task, error) {
+	a, err := c.current()
+	if err != nil {
+		return task.Task{}, err
+	}
+
+	query := url.Values{"fields": {strings.Join(searchFields(), ",")}}
+	rawURL := a.base + issuePath + url.PathEscape(key) + "?" + query.Encode()
+
+	out, err := c.http.Get(ctx, rawURL, a.header)
+	if statusErr, ok := errors.AsType[*httputil.StatusError](err); ok && statusErr.StatusCode == http.StatusNotFound {
+		return task.Task{}, fmt.Errorf("%w: key=%s", ErrWorkItemNotFound, key)
+	}
+
+	if err != nil {
+		return task.Task{}, err
+	}
+
+	var item ViewWorkItem
+	if err := json.Unmarshal(out, &item); err != nil {
+		return task.Task{}, errors.Join(fmt.Errorf("%w: key=%s", ErrFailedToParseWorkItem, key), err)
+	}
+
+	t, err := ToTask(item)
+	if err != nil {
+		return task.Task{}, err
+	}
+
+	return t, nil
 }
 
 // searchFields returns a fresh slice of the fields every search page returns.

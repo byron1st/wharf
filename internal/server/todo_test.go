@@ -18,11 +18,13 @@ import (
 
 func TestListTodos(t *testing.T) {
 	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	since := time.Date(2026, 10, 26, 0, 0, 0, 0, time.FixedZone("KST", 9*60*60))
 
 	svc := mocks.NewMockService(t)
-	svc.EXPECT().ListTodos(mock.Anything, todo.Filter{
-		TaskID: "jira-WHF-1", Today: "2026-10-01", EndDate: "2026-10-02", IsDone: new(false),
-	}).Return([]todo.Todo{
+	svc.EXPECT().ListTodos(mock.Anything, mock.MatchedBy(func(f todo.Filter) bool {
+		return f.TaskID == "jira-WHF-1" && f.ServiceDeskRequest == "SD-1" && f.IsDone != nil && !*f.IsDone &&
+			f.CompletedSince != nil && f.CompletedSince.Equal(since)
+	})).Return([]todo.Todo{
 		{
 			ID: 1, TaskID: "jira-WHF-1", Description: "a", Note: "n", IsDone: true, CompletedAt: &at,
 			StartDate: "2026-10-01", EndDate: "2026-10-02", Reminders: []time.Time{at}, Position: new(0),
@@ -34,8 +36,12 @@ func TestListTodos(t *testing.T) {
 		{ID: 2, TaskID: "jira-WHF-1", Description: "b", Position: new(1)},
 	}, nil).Once()
 
-	rec, _ := serve(t, svc, http.MethodGet,
-		"/todos?task_id=jira-WHF-1&today=2026-10-01&end_date=2026-10-02&is_done=0&other=x")
+	rec, _ := serve(
+		t,
+		svc,
+		http.MethodGet,
+		"/api/todos?task_id=jira-WHF-1&is_done=0&completed_since=2026-10-26T00:00:00%2B09:00&service_desk_request=SD-1&today=x",
+	)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{"todos":[
@@ -54,26 +60,24 @@ func TestListTodosWithoutFilter(t *testing.T) {
 	svc.EXPECT().ListTodos(mock.Anything, todo.Filter{IsDone: new(true)}).Return(nil, nil).Once()
 	svc.EXPECT().ListTodos(mock.Anything, todo.Filter{}).Return(nil, nil).Once()
 
-	rec, _ := serve(t, svc, http.MethodGet, "/todos?is_done=true")
+	rec, _ := serve(t, svc, http.MethodGet, "/api/todos?is_done=true")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{"todos":[]}`, rec.Body.String())
 
-	rec, _ = serve(t, svc, http.MethodGet, "/todos")
+	rec, _ = serve(t, svc, http.MethodGet, "/api/todos")
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestListTodosRejectsInvalidFilter(t *testing.T) {
 	// No ListTodos expectation: the mock fails the test if it is called.
-	rec, _ := serve(t, mocks.NewMockService(t), http.MethodGet, "/todos?is_done=maybe")
+	rec, _ := serve(t, mocks.NewMockService(t), http.MethodGet, "/api/todos?is_done=maybe")
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "server: is_done filter is not a bool")
 
-	svc := mocks.NewMockService(t)
-	svc.EXPECT().ListTodos(mock.Anything, todo.Filter{Today: "x"}).Return(nil, service.ErrInvalidTodoFilterDate).Once()
-
-	rec, _ = serve(t, svc, http.MethodGet, "/todos?today=x")
+	rec, _ = serve(t, mocks.NewMockService(t), http.MethodGet, "/api/todos?completed_since=2026-10-26")
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "server: completed_since filter is not an RFC3339 time")
 }
 
 func TestCreateTodo(t *testing.T) {
@@ -86,7 +90,7 @@ func TestCreateTodo(t *testing.T) {
 			got.Reminders[0].Equal(at) && got.Position != nil && *got.Position == 2
 	})).Return(5, nil).Once()
 
-	rec, _ := serveBody(t, svc, http.MethodPost, "/todos", strings.NewReader(`{
+	rec, _ := serveBody(t, svc, http.MethodPost, "/api/todos", strings.NewReader(`{
 		"task_id":"local-WHF-001","description":"d","note":"n","is_done":true,"start_date":"2026-10-01","end_date":null,
 		"reminders":["2026-10-01T18:00:00+09:00"],"position":2
 	}`))
@@ -100,7 +104,7 @@ func TestCreateTodoDefaults(t *testing.T) {
 	svc := mocks.NewMockService(t)
 	svc.EXPECT().CreateTodo(mock.Anything, todo.Todo{TaskID: "T", Description: "d"}).Return(1, nil).Once()
 
-	rec, _ := serveBody(t, svc, http.MethodPost, "/todos", strings.NewReader(`{"task_id":"T","description":"d"}`))
+	rec, _ := serveBody(t, svc, http.MethodPost, "/api/todos", strings.NewReader(`{"task_id":"T","description":"d"}`))
 
 	require.Equal(t, http.StatusCreated, rec.Code)
 }
@@ -128,8 +132,8 @@ func TestTodoRoutesRejectInvalidBody(t *testing.T) {
 		},
 	} {
 		for _, req := range []struct{ method, path string }{
-			{http.MethodPost, "/todos"},
-			{http.MethodPut, "/todos/1"},
+			{http.MethodPost, "/api/todos"},
+			{http.MethodPut, "/api/todos/1"},
 		} {
 			t.Run(name+" "+req.method, func(t *testing.T) {
 				// No service expectation: the mock fails the test if it is called.
@@ -148,7 +152,7 @@ func TestUpdateTodo(t *testing.T) {
 		ID: 3, TaskID: "T", Description: "d", EndDate: "2026-10-02", Reminders: []time.Time{},
 	}).Return(nil).Once()
 
-	rec, _ := serveBody(t, svc, http.MethodPut, "/todos/3",
+	rec, _ := serveBody(t, svc, http.MethodPut, "/api/todos/3",
 		strings.NewReader(`{"task_id":"T","description":"d","end_date":"2026-10-02","reminders":[]}`))
 
 	require.Equal(t, http.StatusNoContent, rec.Code)
@@ -159,7 +163,7 @@ func TestDeleteTodo(t *testing.T) {
 	svc := mocks.NewMockService(t)
 	svc.EXPECT().DeleteTodo(mock.Anything, int64(3)).Return(nil).Once()
 
-	rec, _ := serve(t, svc, http.MethodDelete, "/todos/3")
+	rec, _ := serve(t, svc, http.MethodDelete, "/api/todos/3")
 
 	require.Equal(t, http.StatusNoContent, rec.Code)
 }
@@ -167,12 +171,12 @@ func TestDeleteTodo(t *testing.T) {
 func TestTodoRoutesRejectNonIntegerID(t *testing.T) {
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
 		// No service expectation: the mock fails the test if it is called.
-		rec, _ := serveBody(t, mocks.NewMockService(t), method, "/todos/abc", strings.NewReader(`{}`))
+		rec, _ := serveBody(t, mocks.NewMockService(t), method, "/api/todos/abc", strings.NewReader(`{}`))
 
 		require.Equal(t, http.StatusNotFound, rec.Code, method)
 		require.Contains(t, rec.Body.String(), "server: todo id is not an integer")
 
-		rec, _ = serve(t, mocks.NewMockService(t), method, "/todos/abc/service-desk-requests/SD-1")
+		rec, _ = serve(t, mocks.NewMockService(t), method, "/api/todos/abc/service-desk-requests/SD-1")
 
 		require.Equal(t, http.StatusNotFound, rec.Code, method)
 		require.Contains(t, rec.Body.String(), "server: todo id is not an integer")
@@ -197,16 +201,16 @@ func TestTodoRoutesMapServiceErrors(t *testing.T) {
 		svc.EXPECT().CreateTodo(mock.Anything, mock.Anything).Return(0, err).Once()
 		svc.EXPECT().UpdateTodo(mock.Anything, mock.Anything).Return(err).Once()
 
-		rec, _ := serveBody(t, svc, http.MethodPost, "/todos", strings.NewReader(body))
+		rec, _ := serveBody(t, svc, http.MethodPost, "/api/todos", strings.NewReader(body))
 		require.Equal(t, status, rec.Code, "POST %v", err)
 
-		rec, _ = serveBody(t, svc, http.MethodPut, "/todos/1", strings.NewReader(body))
+		rec, _ = serveBody(t, svc, http.MethodPut, "/api/todos/1", strings.NewReader(body))
 		require.Equal(t, status, rec.Code, "PUT %v", err)
 	}
 
 	svc := mocks.NewMockService(t)
 	svc.EXPECT().DeleteTodo(mock.Anything, int64(9)).Return(service.ErrTodoToDeleteNotFound).Once()
 
-	rec, _ := serve(t, svc, http.MethodDelete, "/todos/9")
+	rec, _ := serve(t, svc, http.MethodDelete, "/api/todos/9")
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }

@@ -10,6 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
 	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/pkg/todo"
@@ -54,6 +55,10 @@ var (
 	ErrServiceDeskRequestToLinkNotFound       = errors.New("db: service desk request to link not found")
 	ErrFailedToUnlinkServiceDeskRequest       = errors.New("db: failed to unlink service desk request")
 	ErrServiceDeskRequestLinkToDeleteNotFound = errors.New("db: service desk request link to delete not found")
+	ErrFailedToListServiceDeskRequests        = errors.New("db: failed to list service desk requests")
+	ErrFailedToCreateAtlassianSync            = errors.New("db: failed to create atlassian sync")
+	ErrAtlassianSyncNotFound                  = errors.New("db: atlassian sync not found")
+	ErrFailedToGetAtlassianSync               = errors.New("db: failed to get atlassian sync")
 )
 
 // localTaskCounter is the counters row seeded by the initial migration.
@@ -71,11 +76,15 @@ type Manager interface {
 	DeleteTask(ctx context.Context, id string) error
 	CreateTodo(ctx context.Context, t todo.Todo) (int64, error)
 	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
+	CountTodosByTask(ctx context.Context) (map[string]todo.Count, error)
 	UpdateTodo(ctx context.Context, t todo.Todo) error
 	DeleteTodo(ctx context.Context, id int64) error
 	UpsertServiceDeskRequests(ctx context.Context, requests []servicedesk.Request) error
 	LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
 	UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
+	ListServiceDeskRequests(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error)
+	CreateAtlassianSync(ctx context.Context, r atlassiansync.Record) error
+	GetLastAtlassianSync(ctx context.Context) (atlassiansync.Record, error)
 
 	// DB Management
 
@@ -419,6 +428,73 @@ func (m *manager) UnlinkServiceDeskRequest(ctx context.Context, todoID int64, ke
 	}
 
 	return nil
+}
+
+// ListServiceDeskRequests returns the stored requests in issue key order:
+// those not in the DONE status category, or every one when includeClosed.
+func (m *manager) ListServiceDeskRequests(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error) {
+	if err := m.checkConnected(); err != nil {
+		return nil, err
+	}
+
+	rows, err := m.queries.ListServiceDeskRequests(ctx, includeClosed)
+	if err != nil {
+		return nil, errors.Join(ErrFailedToListServiceDeskRequests, err)
+	}
+
+	requests := make([]servicedesk.Request, 0, len(rows))
+	for _, row := range rows {
+		requests = append(requests, fromServiceDeskRequest(row))
+	}
+
+	return requests, nil
+}
+
+// CreateAtlassianSync records r as the latest Atlassian sync.
+func (m *manager) CreateAtlassianSync(ctx context.Context, r atlassiansync.Record) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	err := m.queries.CreateAtlassianSync(ctx, CreateAtlassianSyncParams{
+		SyncedAt:        r.SyncedAt,
+		Issues:          int64(r.Issues),
+		IssueFailures:   int64(r.IssueFailures),
+		OpenRequests:    int64(r.OpenRequests),
+		ClosedRequests:  int64(r.ClosedRequests),
+		RequestFailures: int64(r.RequestFailures),
+	})
+	if err != nil {
+		return errors.Join(ErrFailedToCreateAtlassianSync, err)
+	}
+
+	return nil
+}
+
+// GetLastAtlassianSync returns the latest recorded Atlassian sync. It fails
+// with ErrAtlassianSyncNotFound when none is recorded.
+func (m *manager) GetLastAtlassianSync(ctx context.Context) (atlassiansync.Record, error) {
+	if err := m.checkConnected(); err != nil {
+		return atlassiansync.Record{}, err
+	}
+
+	row, err := m.queries.GetLastAtlassianSync(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return atlassiansync.Record{}, ErrAtlassianSyncNotFound
+	}
+
+	if err != nil {
+		return atlassiansync.Record{}, errors.Join(ErrFailedToGetAtlassianSync, err)
+	}
+
+	return atlassiansync.Record{
+		SyncedAt:        row.SyncedAt,
+		Issues:          int(row.Issues),
+		IssueFailures:   int(row.IssueFailures),
+		OpenRequests:    int(row.OpenRequests),
+		ClosedRequests:  int(row.ClosedRequests),
+		RequestFailures: int(row.RequestFailures),
+	}, nil
 }
 
 // inTx runs fn in a transaction and commits it when fn succeeds.

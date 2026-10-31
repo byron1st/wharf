@@ -7,6 +7,8 @@ package mocks
 import (
 	"context"
 
+	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/pkg/todo"
 	"github.com/byron1st/wharf/internal/service"
@@ -295,6 +297,66 @@ func (_c *MockService_DeleteTodo_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// GetLastAtlassianSync provides a mock function for the type MockService
+func (_mock *MockService) GetLastAtlassianSync(ctx context.Context) (atlassiansync.Record, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLastAtlassianSync")
+	}
+
+	var r0 atlassiansync.Record
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (atlassiansync.Record, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) atlassiansync.Record); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Get(0).(atlassiansync.Record)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_GetLastAtlassianSync_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLastAtlassianSync'
+type MockService_GetLastAtlassianSync_Call struct {
+	*mock.Call
+}
+
+// GetLastAtlassianSync is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockService_Expecter) GetLastAtlassianSync(ctx any) *MockService_GetLastAtlassianSync_Call {
+	return &MockService_GetLastAtlassianSync_Call{Call: _e.mock.On("GetLastAtlassianSync", ctx)}
+}
+
+func (_c *MockService_GetLastAtlassianSync_Call) Run(run func(ctx context.Context)) *MockService_GetLastAtlassianSync_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_GetLastAtlassianSync_Call) Return(record atlassiansync.Record, err error) *MockService_GetLastAtlassianSync_Call {
+	_c.Call.Return(record, err)
+	return _c
+}
+
+func (_c *MockService_GetLastAtlassianSync_Call) RunAndReturn(run func(ctx context.Context) (atlassiansync.Record, error)) *MockService_GetLastAtlassianSync_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetTask provides a mock function for the type MockService
 func (_mock *MockService) GetTask(ctx context.Context, id string) (service.TaskDetail, error) {
 	ret := _mock.Called(ctx, id)
@@ -424,24 +486,92 @@ func (_c *MockService_LinkServiceDeskRequest_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// ListServiceDeskRequests provides a mock function for the type MockService
+func (_mock *MockService) ListServiceDeskRequests(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error) {
+	ret := _mock.Called(ctx, includeClosed)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListServiceDeskRequests")
+	}
+
+	var r0 []servicedesk.Request
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) ([]servicedesk.Request, error)); ok {
+		return returnFunc(ctx, includeClosed)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, bool) []servicedesk.Request); ok {
+		r0 = returnFunc(ctx, includeClosed)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]servicedesk.Request)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, bool) error); ok {
+		r1 = returnFunc(ctx, includeClosed)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockService_ListServiceDeskRequests_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListServiceDeskRequests'
+type MockService_ListServiceDeskRequests_Call struct {
+	*mock.Call
+}
+
+// ListServiceDeskRequests is a helper method to define mock.On call
+//   - ctx context.Context
+//   - includeClosed bool
+func (_e *MockService_Expecter) ListServiceDeskRequests(ctx any, includeClosed any) *MockService_ListServiceDeskRequests_Call {
+	return &MockService_ListServiceDeskRequests_Call{Call: _e.mock.On("ListServiceDeskRequests", ctx, includeClosed)}
+}
+
+func (_c *MockService_ListServiceDeskRequests_Call) Run(run func(ctx context.Context, includeClosed bool)) *MockService_ListServiceDeskRequests_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 bool
+		if args[1] != nil {
+			arg1 = args[1].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_ListServiceDeskRequests_Call) Return(requests []servicedesk.Request, err error) *MockService_ListServiceDeskRequests_Call {
+	_c.Call.Return(requests, err)
+	return _c
+}
+
+func (_c *MockService_ListServiceDeskRequests_Call) RunAndReturn(run func(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error)) *MockService_ListServiceDeskRequests_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListTasks provides a mock function for the type MockService
-func (_mock *MockService) ListTasks(ctx context.Context) ([]task.Task, error) {
+func (_mock *MockService) ListTasks(ctx context.Context) ([]service.TaskSummary, error) {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListTasks")
 	}
 
-	var r0 []task.Task
+	var r0 []service.TaskSummary
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]task.Task, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]service.TaskSummary, error)); ok {
 		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []task.Task); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []service.TaskSummary); ok {
 		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]task.Task)
+			r0 = ret.Get(0).([]service.TaskSummary)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -476,12 +606,12 @@ func (_c *MockService_ListTasks_Call) Run(run func(ctx context.Context)) *MockSe
 	return _c
 }
 
-func (_c *MockService_ListTasks_Call) Return(tasks []task.Task, err error) *MockService_ListTasks_Call {
-	_c.Call.Return(tasks, err)
+func (_c *MockService_ListTasks_Call) Return(taskSummarys []service.TaskSummary, err error) *MockService_ListTasks_Call {
+	_c.Call.Return(taskSummarys, err)
 	return _c
 }
 
-func (_c *MockService_ListTasks_Call) RunAndReturn(run func(ctx context.Context) ([]task.Task, error)) *MockService_ListTasks_Call {
+func (_c *MockService_ListTasks_Call) RunAndReturn(run func(ctx context.Context) ([]service.TaskSummary, error)) *MockService_ListTasks_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -554,23 +684,23 @@ func (_c *MockService_ListTodos_Call) RunAndReturn(run func(ctx context.Context,
 	return _c
 }
 
-// SyncJiraTasks provides a mock function for the type MockService
-func (_mock *MockService) SyncJiraTasks(ctx context.Context) (service.SyncResult, error) {
+// SyncAtlassian provides a mock function for the type MockService
+func (_mock *MockService) SyncAtlassian(ctx context.Context) (service.AtlassianSync, error) {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
-		panic("no return value specified for SyncJiraTasks")
+		panic("no return value specified for SyncAtlassian")
 	}
 
-	var r0 service.SyncResult
+	var r0 service.AtlassianSync
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) (service.SyncResult, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (service.AtlassianSync, error)); ok {
 		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) service.SyncResult); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) service.AtlassianSync); ok {
 		r0 = returnFunc(ctx)
 	} else {
-		r0 = ret.Get(0).(service.SyncResult)
+		r0 = ret.Get(0).(service.AtlassianSync)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = returnFunc(ctx)
@@ -580,18 +710,18 @@ func (_mock *MockService) SyncJiraTasks(ctx context.Context) (service.SyncResult
 	return r0, r1
 }
 
-// MockService_SyncJiraTasks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SyncJiraTasks'
-type MockService_SyncJiraTasks_Call struct {
+// MockService_SyncAtlassian_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SyncAtlassian'
+type MockService_SyncAtlassian_Call struct {
 	*mock.Call
 }
 
-// SyncJiraTasks is a helper method to define mock.On call
+// SyncAtlassian is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockService_Expecter) SyncJiraTasks(ctx any) *MockService_SyncJiraTasks_Call {
-	return &MockService_SyncJiraTasks_Call{Call: _e.mock.On("SyncJiraTasks", ctx)}
+func (_e *MockService_Expecter) SyncAtlassian(ctx any) *MockService_SyncAtlassian_Call {
+	return &MockService_SyncAtlassian_Call{Call: _e.mock.On("SyncAtlassian", ctx)}
 }
 
-func (_c *MockService_SyncJiraTasks_Call) Run(run func(ctx context.Context)) *MockService_SyncJiraTasks_Call {
+func (_c *MockService_SyncAtlassian_Call) Run(run func(ctx context.Context)) *MockService_SyncAtlassian_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -604,72 +734,78 @@ func (_c *MockService_SyncJiraTasks_Call) Run(run func(ctx context.Context)) *Mo
 	return _c
 }
 
-func (_c *MockService_SyncJiraTasks_Call) Return(syncResult service.SyncResult, err error) *MockService_SyncJiraTasks_Call {
-	_c.Call.Return(syncResult, err)
+func (_c *MockService_SyncAtlassian_Call) Return(atlassianSync service.AtlassianSync, err error) *MockService_SyncAtlassian_Call {
+	_c.Call.Return(atlassianSync, err)
 	return _c
 }
 
-func (_c *MockService_SyncJiraTasks_Call) RunAndReturn(run func(ctx context.Context) (service.SyncResult, error)) *MockService_SyncJiraTasks_Call {
+func (_c *MockService_SyncAtlassian_Call) RunAndReturn(run func(ctx context.Context) (service.AtlassianSync, error)) *MockService_SyncAtlassian_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// SyncServiceDeskRequests provides a mock function for the type MockService
-func (_mock *MockService) SyncServiceDeskRequests(ctx context.Context) (service.SyncResult, error) {
-	ret := _mock.Called(ctx)
+// SyncJiraTask provides a mock function for the type MockService
+func (_mock *MockService) SyncJiraTask(ctx context.Context, id string) (service.TaskSync, error) {
+	ret := _mock.Called(ctx, id)
 
 	if len(ret) == 0 {
-		panic("no return value specified for SyncServiceDeskRequests")
+		panic("no return value specified for SyncJiraTask")
 	}
 
-	var r0 service.SyncResult
+	var r0 service.TaskSync
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) (service.SyncResult, error)); ok {
-		return returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (service.TaskSync, error)); ok {
+		return returnFunc(ctx, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) service.SyncResult); ok {
-		r0 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) service.TaskSync); ok {
+		r0 = returnFunc(ctx, id)
 	} else {
-		r0 = ret.Get(0).(service.SyncResult)
+		r0 = ret.Get(0).(service.TaskSync)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = returnFunc(ctx)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockService_SyncServiceDeskRequests_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SyncServiceDeskRequests'
-type MockService_SyncServiceDeskRequests_Call struct {
+// MockService_SyncJiraTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SyncJiraTask'
+type MockService_SyncJiraTask_Call struct {
 	*mock.Call
 }
 
-// SyncServiceDeskRequests is a helper method to define mock.On call
+// SyncJiraTask is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockService_Expecter) SyncServiceDeskRequests(ctx any) *MockService_SyncServiceDeskRequests_Call {
-	return &MockService_SyncServiceDeskRequests_Call{Call: _e.mock.On("SyncServiceDeskRequests", ctx)}
+//   - id string
+func (_e *MockService_Expecter) SyncJiraTask(ctx any, id any) *MockService_SyncJiraTask_Call {
+	return &MockService_SyncJiraTask_Call{Call: _e.mock.On("SyncJiraTask", ctx, id)}
 }
 
-func (_c *MockService_SyncServiceDeskRequests_Call) Run(run func(ctx context.Context)) *MockService_SyncServiceDeskRequests_Call {
+func (_c *MockService_SyncJiraTask_Call) Run(run func(ctx context.Context, id string)) *MockService_SyncJiraTask_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
 		run(
 			arg0,
+			arg1,
 		)
 	})
 	return _c
 }
 
-func (_c *MockService_SyncServiceDeskRequests_Call) Return(syncResult service.SyncResult, err error) *MockService_SyncServiceDeskRequests_Call {
-	_c.Call.Return(syncResult, err)
+func (_c *MockService_SyncJiraTask_Call) Return(taskSync service.TaskSync, err error) *MockService_SyncJiraTask_Call {
+	_c.Call.Return(taskSync, err)
 	return _c
 }
 
-func (_c *MockService_SyncServiceDeskRequests_Call) RunAndReturn(run func(ctx context.Context) (service.SyncResult, error)) *MockService_SyncServiceDeskRequests_Call {
+func (_c *MockService_SyncJiraTask_Call) RunAndReturn(run func(ctx context.Context, id string) (service.TaskSync, error)) *MockService_SyncJiraTask_Call {
 	_c.Call.Return(run)
 	return _c
 }

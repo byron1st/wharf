@@ -10,6 +10,7 @@ import (
 	"github.com/byron1st/wharf/internal/adapter/db"
 	"github.com/byron1st/wharf/internal/pkg/mocks"
 	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
 	"github.com/byron1st/wharf/internal/service"
 )
 
@@ -18,68 +19,37 @@ var tasks = []task.Task{
 	{ID: "WHF-2", Originated: task.OriginJira, Title: "second", Status: task.StatusInProgress},
 }
 
-func TestSyncJiraTasks(t *testing.T) {
-	jira := mocks.NewMockClient(t)
-	jira.EXPECT().GetMyTasks(mock.Anything).Return(tasks, nil).Once()
-
-	manager := mocks.NewMockManager(t)
-	manager.EXPECT().UpsertTasks(mock.Anything, tasks).Return(nil).Once()
-
-	result, err := service.NewService(jira, manager).SyncJiraTasks(t.Context())
-	require.NoError(t, err)
-	require.Equal(t, service.SyncResult{Upserted: 2}, result)
-}
-
-func TestSyncJiraTasksStoresPartialResult(t *testing.T) {
-	partial := errors.New("view failed")
-
-	jira := mocks.NewMockClient(t)
-	jira.EXPECT().GetMyTasks(mock.Anything).Return(tasks, partial).Once()
-
-	manager := mocks.NewMockManager(t)
-	manager.EXPECT().UpsertTasks(mock.Anything, tasks).Return(nil).Once()
-
-	result, err := service.NewService(jira, manager).SyncJiraTasks(t.Context())
-	require.NoError(t, err)
-	require.Equal(t, 2, result.Upserted)
-	require.ErrorIs(t, result.Partial, partial)
-}
-
-func TestSyncJiraTasksSkipsUpsertWhenJiraFails(t *testing.T) {
-	failure := errors.New("search failed")
-
-	jira := mocks.NewMockClient(t)
-	jira.EXPECT().GetMyTasks(mock.Anything).Return(nil, failure).Once()
-
-	// No UpsertTasks expectation: the mock fails the test if it is called.
-	manager := mocks.NewMockManager(t)
-
-	result, err := service.NewService(jira, manager).SyncJiraTasks(t.Context())
-	require.ErrorIs(t, err, failure)
-	require.Equal(t, service.SyncResult{}, result)
-}
-
-func TestSyncJiraTasksReturnsUpsertFailure(t *testing.T) {
-	failure := errors.New("upsert failed")
-
-	jira := mocks.NewMockClient(t)
-	jira.EXPECT().GetMyTasks(mock.Anything).Return(tasks, errors.New("view failed")).Once()
-
-	manager := mocks.NewMockManager(t)
-	manager.EXPECT().UpsertTasks(mock.Anything, tasks).Return(failure).Once()
-
-	result, err := service.NewService(jira, manager).SyncJiraTasks(t.Context())
-	require.ErrorIs(t, err, failure)
-	require.Equal(t, service.SyncResult{}, result)
-}
-
 func TestListTasks(t *testing.T) {
 	manager := mocks.NewMockManager(t)
 	manager.EXPECT().ListTasks(mock.Anything).Return(tasks, nil).Once()
+	manager.EXPECT().
+		CountTodosByTask(mock.Anything).
+		Return(map[string]todo.Count{"WHF-2": {Todos: 5, Done: 2}}, nil).
+		Once()
 
 	got, err := service.NewService(mocks.NewMockClient(t), manager).ListTasks(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, tasks, got)
+	require.Equal(t, []service.TaskSummary{
+		{Task: tasks[0]},
+		{Task: tasks[1], Todos: todo.Count{Todos: 5, Done: 2}},
+	}, got)
+}
+
+func TestListTasksFailures(t *testing.T) {
+	failure := errors.New("read failed")
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().ListTasks(mock.Anything).Return(nil, failure).Once()
+
+	_, err := service.NewService(mocks.NewMockClient(t), manager).ListTasks(t.Context())
+	require.ErrorIs(t, err, failure)
+
+	manager = mocks.NewMockManager(t)
+	manager.EXPECT().ListTasks(mock.Anything).Return(tasks, nil).Once()
+	manager.EXPECT().CountTodosByTask(mock.Anything).Return(nil, failure).Once()
+
+	_, err = service.NewService(mocks.NewMockClient(t), manager).ListTasks(t.Context())
+	require.ErrorIs(t, err, failure)
 }
 
 func TestGetTask(t *testing.T) {

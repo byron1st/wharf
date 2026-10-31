@@ -32,6 +32,7 @@ var (
 	ErrFailedToDeleteTodoReminders = errors.New("db: failed to delete todo reminders")
 	ErrFailedToDeleteTodoLinks     = errors.New("db: failed to delete service desk request links of todo")
 	ErrFailedToListTodoRequests    = errors.New("db: failed to list service desk requests of todos")
+	ErrFailedToCountTodosByTask    = errors.New("db: failed to count todos by task")
 )
 
 // CreateTodo stores t as a new todo of the stored task t.TaskID and returns
@@ -91,9 +92,9 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 	}
 
 	params := ListTodosParams{
-		TaskID:  toNullString(f.TaskID),
-		Today:   toNullString(f.Today),
-		EndDate: toNullString(f.EndDate),
+		TaskID:             toNullString(f.TaskID),
+		CompletedSince:     toNullTime(f.CompletedSince),
+		ServiceDeskRequest: toNullString(f.ServiceDeskRequest),
 	}
 	if f.IsDone != nil {
 		params.IsDone = sql.NullBool{Bool: *f.IsDone, Valid: true}
@@ -152,6 +153,26 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 	}
 
 	return todos, nil
+}
+
+// CountTodosByTask returns, for every task that has todos, how many it has and
+// how many of them are done. Tasks without todos are absent.
+func (m *manager) CountTodosByTask(ctx context.Context) (map[string]todo.Count, error) {
+	if err := m.checkConnected(); err != nil {
+		return nil, err
+	}
+
+	rows, err := m.queries.CountTodosByTask(ctx)
+	if err != nil {
+		return nil, errors.Join(ErrFailedToCountTodosByTask, err)
+	}
+
+	counts := make(map[string]todo.Count, len(rows))
+	for _, row := range rows {
+		counts[row.TaskID] = todo.Count{Todos: int(row.Todos), Done: int(row.DoneTodos)}
+	}
+
+	return counts, nil
 }
 
 // UpdateTodo replaces every field of the stored todo t.ID and its reminders.

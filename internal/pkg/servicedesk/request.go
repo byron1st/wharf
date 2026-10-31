@@ -4,6 +4,9 @@ package servicedesk
 
 import "time"
 
+// StatusCategoryDone is the Jira status category of closed requests.
+const StatusCategoryDone = "DONE"
+
 // Request is a Service Desk customer request created by the current user.
 type Request struct {
 	Key    string

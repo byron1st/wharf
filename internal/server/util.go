@@ -9,11 +9,13 @@ import (
 	"github.com/byron1st/wharf/internal/service"
 )
 
-// errorStatuses maps the errors a request can cause to their status. Any other
-// error is a 500.
+// errorStatuses maps the errors a request can cause to their status, and to
+// a code when the client must tell them apart from other errors with the same
+// status. Any other error is a 500.
 var errorStatuses = []struct {
 	err    error
 	status int
+	code   string
 }{
 	{err: ErrFailedToDecodeTaskRequest, status: http.StatusBadRequest},
 	{err: ErrTaskRequestHasTrailingData, status: http.StatusBadRequest},
@@ -41,7 +43,21 @@ var errorStatuses = []struct {
 	{err: service.ErrInvalidTodoDate, status: http.StatusBadRequest},
 	{err: service.ErrTodoStartsAfterEnd, status: http.StatusBadRequest},
 	{err: service.ErrNegativeTodoPosition, status: http.StatusBadRequest},
-	{err: service.ErrInvalidTodoFilterDate, status: http.StatusBadRequest},
+	{err: ErrInvalidCompletedSinceFilter, status: http.StatusBadRequest},
+	{err: ErrInvalidIncludeClosedFilter, status: http.StatusBadRequest},
+	{err: ErrFailedToDecodeSettingsRequest, status: http.StatusBadRequest},
+	{err: ErrSettingsRequestHasTrailingData, status: http.StatusBadRequest},
+	{err: ErrSettingsRequestTooLarge, status: http.StatusRequestEntityTooLarge},
+	{err: service.ErrAtlassianNotConfigured, status: http.StatusConflict, code: "atlassian_not_configured"},
+	{err: service.ErrAtlassianUnauthorized, status: http.StatusBadGateway, code: "atlassian_unauthorized"},
+	{err: service.ErrAtlassianUnreachable, status: http.StatusGatewayTimeout, code: "atlassian_unreachable"},
+	{err: service.ErrTaskToSyncNotFound, status: http.StatusNotFound},
+	{err: service.ErrTaskNotJira, status: http.StatusConflict},
+	{err: service.ErrJiraIssueNotFound, status: http.StatusNotFound, code: "jira_issue_not_found"},
+	{err: service.ErrInvalidAtlassianSettings, status: http.StatusBadRequest},
+	{err: service.ErrInvalidAtlassianSettingsToCheck, status: http.StatusBadRequest},
+	{err: service.ErrInvalidConfigFile, status: http.StatusBadRequest, code: "invalid_config_file"},
+	{err: service.ErrUnsupportedOS, status: http.StatusNotImplemented, code: "unsupported_os"},
 	{err: service.ErrTaskOfNewTodoNotFound, status: http.StatusBadRequest},
 	{err: service.ErrTaskOfUpdatedTodoNotFound, status: http.StatusBadRequest},
 	{err: service.ErrTodoToUpdateNotFound, status: http.StatusNotFound},
@@ -56,7 +72,7 @@ func writeError(w http.ResponseWriter, r *http.Request, logger *slog.Logger, msg
 	for _, e := range errorStatuses {
 		if errors.Is(err, e.err) {
 			logger.InfoContext(r.Context(), msg, "request_id", requestID, "status", e.status, "error", err)
-			writeJSON(w, e.status, errorResponse{Error: err.Error()})
+			writeJSON(w, e.status, errorResponse{Error: err.Error(), Code: e.code})
 
 			return
 		}

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -225,4 +226,78 @@ func TestRunReturnsServeFailure(t *testing.T) {
 
 	err = server.New(http.NotFoundHandler(), slog.New(slog.DiscardHandler)).Run(t.Context(), ln)
 	require.ErrorIs(t, err, server.ErrFailedToServe)
+}
+
+func TestLocalOriginGuard(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	base, _, _, _ := start(t, ok)
+	port := strings.TrimPrefix(base, "http://127.0.0.1")
+
+	for _, tt := range []struct {
+		name, host, origin string
+		status             int
+	}{
+		{name: "127.0.0.1", host: "127.0.0.1" + port, status: http.StatusNoContent},
+		{name: "localhost", host: "localhost" + port, status: http.StatusNoContent},
+		{name: "ipv6 loopback", host: "[::1]" + port, status: http.StatusNoContent},
+		{name: "no port", host: "localhost", status: http.StatusNoContent},
+		{name: "same origin", host: "localhost" + port, origin: "http://localhost" + port, status: http.StatusNoContent},
+		{name: "rebound host", host: "evil.example" + port, status: http.StatusForbidden},
+		{name: "lan address", host: "192.168.0.10" + port, status: http.StatusForbidden},
+		{name: "other origin", host: "localhost" + port, origin: "https://evil.example", status: http.StatusForbidden},
+		{name: "other port", host: "localhost" + port, origin: "http://localhost:1", status: http.StatusForbidden},
+		{name: "null origin", host: "localhost" + port, origin: "null", status: http.StatusForbidden},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/api/sync/atlassian", nil)
+			require.NoError(t, err)
+
+			req.Host = tt.host
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+
+			defer func() { _ = resp.Body.Close() }()
+
+			require.Equal(t, tt.status, resp.StatusCode)
+		})
+	}
+}
+
+func TestLocalOriginGuardRejectsRemoteClients(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+
+	for _, tt := range []struct {
+		remote string
+		status int
+	}{
+		{remote: "127.0.0.1:50000", status: http.StatusNoContent},
+		{remote: "[::1]:50000", status: http.StatusNoContent},
+		{remote: "192.168.0.20:50000", status: http.StatusForbidden},
+		{remote: "[fe80::1]:50000", status: http.StatusForbidden},
+		{remote: "not an address", status: http.StatusForbidden},
+	} {
+		t.Run(tt.remote, func(t *testing.T) {
+			// A LAN client can send a loopback Host; its address gives it away.
+			req := httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodGet,
+				"http://localhost:8080/api/settings/atlassian",
+				nil,
+			)
+			req.RemoteAddr = tt.remote
+
+			rec := httptest.NewRecorder()
+			server.WithLocalOrigin(ok).ServeHTTP(rec, req)
+
+			require.Equal(t, tt.status, rec.Code)
+
+			if tt.status == http.StatusForbidden {
+				require.Contains(t, rec.Body.String(), `"code":"forbidden_remote"`)
+			}
+		})
+	}
 }

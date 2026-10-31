@@ -13,7 +13,7 @@ DEV-17 에서 관계를 `tasks` 의 JSON 컬럼에서 별도 테이블로 옮기
 ```mermaid
 flowchart LR
     jira[Jira REST search/jql] -->|ViewWorkItem| totask[atlassian.ToTask]
-    totask -->|task.Task, ID=jira-KEY| svc[service.SyncJiraTasks]
+    totask -->|task.Task, ID=jira-KEY| svc[service.SyncAtlassian / SyncJiraTask]
     svc -->|UpsertTasks| db[db.manager]
     db -->|storeTask| tasks[(tasks)]
     db -->|storeTask| h[(task_hierarchies)]

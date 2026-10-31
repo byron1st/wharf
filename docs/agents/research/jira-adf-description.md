@@ -1,7 +1,7 @@
 ---
 Application: wharf
 ResearchType: Flow
-Description: Jira work item 의 description(ADF, Atlassian Document Format)이 Jira REST `POST /rest/api/3/search/jql` 응답의 `issues[]` 원소에서 `atlassian.ViewWorkItem` 으로 디코딩되어 `adfNode.markdown` 렌더러를 거쳐 Markdown 문자열 `task.Task.Description` 이 되고, `SyncJiraTasks` → `db.Manager.UpsertTasks` 로 `tasks.description` 에 덮어써진 뒤 `GET /tasks`·`GET /tasks/{id}` 응답(목록은 100 rune 절단)으로 나가기까지의 경로, `adfNode` 구조체가 디코딩하는 필드, ADF 노드·mark 별 Markdown 출력 규칙, 관련 테스트(fixture 포함) 위치를 정리한다.
+Description: Jira work item 의 description(ADF, Atlassian Document Format)이 Jira REST `POST /rest/api/3/search/jql` 응답의 `issues[]` 원소에서 `atlassian.ViewWorkItem` 으로 디코딩되어 `adfNode.markdown` 렌더러를 거쳐 Markdown 문자열 `task.Task.Description` 이 되고, `SyncAtlassian`/`SyncJiraTask` → `db.Manager.UpsertTasks` 로 `tasks.description` 에 덮어써진 뒤 `GET /api/tasks`·`GET /api/tasks/{id}` 응답(목록은 100 rune 절단)으로 나가기까지의 경로, `adfNode` 구조체가 디코딩하는 필드, ADF 노드·mark 별 Markdown 출력 규칙, 관련 테스트(fixture 포함) 위치를 정리한다.
 ---
 
 # Jira description(ADF) → task.Description 경로
@@ -11,8 +11,8 @@ Description: Jira work item 의 description(ADF, Atlassian Document Format)이 J
 1. `client.GetMyTasks` (`internal/adapter/atlassian/client.go:68`) 가 `POST /rest/api/3/search/jql` 를 `fields` 와 함께 페이지마다 호출하고, 응답 `issues[]` 의 각 원소(REST v3 IssueBean)를 `ViewWorkItem` 으로 개별 `json.Unmarshal` 한다. v3 여야 description 이 ADF 다(v2 는 wiki markup).
 2. `ViewWorkItem.Fields.Description` 은 `*adfNode` (`internal/adapter/atlassian/jira.go:21`, 타입 정의는 `internal/adapter/atlassian/adf.go:17`) 이다. description 이 없으면 JSON `null` → nil.
 3. `ToTask` (`jira.go:51`) 가 `Description: f.Description.markdown()` (`jira.go:96`) 로 Markdown 문자열을 만든다. 변환은 에러를 내지 않는다(ToTask 의 에러는 status·날짜만).
-4. `service.SyncJiraTasks` 가 tasks 를 `db.Manager.UpsertTasks` 로 저장한다. `UpsertTask` 쿼리 (`scripts/queries.sql:1`) 는 `ON CONFLICT (id) DO UPDATE SET description = excluded.description` 이므로 다음 동기화 때 기존 행의 description 이 새 변환 결과로 덮어써진다(마이그레이션 불필요).
-5. 응답: `GET /tasks` 의 `toSummary` (`internal/server/route.go:214`) 는 description 을 100 rune 에서 자르고 `…` 를 붙인다. `GET /tasks/{id}` 는 전체를 준다. local task 의 description 은 사용자가 보낸 문자열 그대로 저장된다(변환 대상 아님).
+4. `service.SyncAtlassian`(일괄) 과 `service.SyncJiraTask`(한 건, `GET /rest/api/3/issue/{key}` 를 같은 `ViewWorkItem`·`ToTask` 로 변환) 이 tasks 를 `db.Manager.UpsertTasks` 로 저장한다. `UpsertTask` 쿼리 (`scripts/queries.sql:1`) 는 `ON CONFLICT (id) DO UPDATE SET description = excluded.description` 이므로 다음 동기화 때 기존 행의 description 이 새 변환 결과로 덮어써진다(마이그레이션 불필요).
+5. 응답: `GET /api/tasks` 의 `toSummary` (`internal/server/route.go`) 는 description 을 100 rune 에서 자르고 `…` 를 붙인다. `GET /api/tasks/{id}` 는 전체를 준다. 한 건 동기화 응답(`POST /api/tasks/{id}/sync`)의 task 도 summary 라 잘려 있고, 바뀐 필드 목록(`changes`)에 `description` 이 있으면 클라이언트가 상세를 다시 읽는다. local task 의 description 은 사용자가 보낸 문자열 그대로 저장된다(변환 대상 아님).
 
 ## ADF → Markdown 렌더러 (`internal/adapter/atlassian/adf.go`)
 
@@ -23,7 +23,7 @@ Description: Jira work item 의 description(ADF, Atlassian Document Format)이 J
 - inline: `text`·mention·emoji·status·expand 제목은 `\`·`<`·`[`·`]` 를 백슬래시로 이스케이프한다(`escapeText`, `adf.go:374`; raw HTML·autolink 와, 본문에 직접 적힌 `[x](javascript:...)` 같은 링크 문법이 `safeURL` 을 우회하는 것을 막음, code span 안은 제외). 그 밖의 Markdown 문자는 이스케이프하지 않는다. 연속된 `text` 노드는 mark 집합(순서 무관, link 는 href 까지)이 같으면 `mergeText` (`adf.go:255`) 가 하나로 합쳐 `**a****b**` 대신 `**ab**` 로 렌더링한다. marks 는 `applyMarks` (`adf.go:294`) 가 link > strike(`~~`) > strong(`**`) > em(`*`) > code 순으로 감싸고, 앞뒤 공백은 delimiter 밖에 둔다. 강조 delimiter 는 `canEmphasize` (`adf.go:354`) 가 앞뒤 문자(이전 출력의 마지막 문자, 다음 노드 출력의 첫 문자)로 CommonMark left/right-flanking 조건을 확인해, 성립하지 않으면(`**API(v2)**는` 처럼 구두점 뒤에 한글이 붙는 경우) 그 delimiter 를 생략하고 텍스트만 남긴다. link 안에서는 바깥이 `[`·`]` 이므로 항상 성립한다. code 는 내부 backtick 보다 긴 delimiter 이고, code span 은 문단 경계를 넘지 못해 이스케이프되지 않은 내용이 새어 나갈 수 있으므로 `codeSpan` 이 줄바꿈(`\r\n`·`\r`·`\n`)을 공백으로 바꾼다(CommonMark 렌더 결과와 같음). em·strong 은 같은 delimiter run 이라 감싸기 전 core 로 한 번 판정하고, strike 는 감싼 결과로 다시 판정한다. link href 는 `safeURL` (`adf.go:378`) 이 `http`·`https`·`mailto` scheme 만 허용하고(`<`·`>`·개행 포함 시 거부), 그 외에는 텍스트만 남긴다. 공백·괄호가 있는 href 는 `<href>` 형태로 넣는다. `underline`·`textColor`·`subsup` 등과 href 없는 link 는 텍스트만. `hardBreak` → 줄 끝 `\` + 개행(paragraph 끝의 hardBreak 는 버림). `mention` → attrs.text, `emoji` → attrs.text 또는 shortName, `status` → `\[TEXT\]`(뒤의 `(...)` 와 링크를 이루지 않게), `date` → UTC `YYYY-MM-DD`, `inlineCard` → `autolink`: 안전한 URL 이면 `<url>`, 아니면(scheme 불허·공백 포함) code span 으로 보여 따라가지 못하게 한다.
 - 모르는 노드: 블록 위치면 자식 블록을, inline 위치면 `text` 와 자식 inline 을 렌더링해 텍스트를 보존한다(`extension`·`layoutSection` 등).
 - 알려진 한계: list item 안에 paragraph 가 둘 이상이거나 code block 이 있으면 그 목록은 loose 가 된다. flanking 조건이 안 맞는 강조는 서식이 사라진다.
-- 보안: description 은 Jira 를 편집할 수 있는 누구나 쓸 수 있는 신뢰할 수 없는 Markdown 이다. 렌더러는 자신이 만드는 링크의 URL scheme 과 텍스트의 raw HTML·링크 문법(`<`·`[`·`]`)만 막으므로, `GET /tasks` 소비자는 Markdown 을 HTML 로 렌더링할 때 sanitize 해야 한다.
+- 보안: description 은 Jira 를 편집할 수 있는 누구나 쓸 수 있는 신뢰할 수 없는 Markdown 이다. 렌더러는 자신이 만드는 링크의 URL scheme 과 텍스트의 raw HTML·링크 문법(`<`·`[`·`]`)만 막으므로, `GET /api/tasks`·`GET /api/tasks/{id}` 소비자(웹앱)는 Markdown 을 HTML 로 렌더링할 때 sanitize 해야 한다.
 
 ## 테스트 위치
 

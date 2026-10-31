@@ -156,12 +156,9 @@ func TestListTodos(t *testing.T) {
 
 	require.Equal(t, []int64{first, started, future, noStart}, ids(todo.Filter{}))
 	require.Equal(t, []int64{first, started, future}, ids(todo.Filter{TaskID: "J1"}))
-	require.Equal(t, []int64{first, started, noStart}, ids(todo.Filter{Today: "2026-10-02"}))
-	require.Equal(t, []int64{started, noStart}, ids(todo.Filter{EndDate: "2026-10-05"}))
 	require.Equal(t, []int64{started}, ids(todo.Filter{IsDone: new(true)}))
 	require.Equal(t, []int64{first, future, noStart}, ids(todo.Filter{IsDone: new(false)}))
-	require.Equal(t, []int64{noStart}, ids(todo.Filter{Today: "2026-10-02", EndDate: "2026-10-05", IsDone: new(false)}))
-	require.Equal(t, []int64{started}, ids(todo.Filter{TaskID: "J1", Today: "2026-10-01"}))
+	require.Equal(t, []int64{first, future}, ids(todo.Filter{TaskID: "J1", IsDone: new(false)}))
 	require.Empty(t, ids(todo.Filter{TaskID: "missing"}))
 
 	todos, err := manager.ListTodos(context.Background(), todo.Filter{TaskID: "J1", IsDone: new(true)})
@@ -249,6 +246,53 @@ func TestUpdateTodo(t *testing.T) {
 
 	_, reminders := stored(t, path)
 	require.Equal(t, []string{fmt.Sprint(b)}, reminders, "a's reminders were replaced by none")
+}
+
+func TestListTodosCompletedSince(t *testing.T) {
+	manager, _ := newTodoManager(t)
+	ctx := context.Background()
+
+	early := create(t, manager, todo.Todo{TaskID: "J1", Description: "early", IsDone: true})
+	since := time.Now()
+	late := create(
+		t,
+		manager,
+		todo.Todo{TaskID: "J2", Description: "late", IsDone: true, Reminders: []time.Time{since}},
+	)
+	create(t, manager, todo.Todo{TaskID: "J1", Description: "open"})
+
+	got, err := manager.ListTodos(ctx, todo.Filter{CompletedSince: &since})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, late, got[0].ID)
+	require.Len(t, got[0].Reminders, 1, "reminders follow the same filter")
+
+	before := since.Add(-time.Hour)
+
+	got, err = manager.ListTodos(ctx, todo.Filter{CompletedSince: &before})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, early, got[0].ID)
+}
+
+func TestCountTodosByTask(t *testing.T) {
+	manager, _ := newTodoManager(t)
+	ctx := context.Background()
+
+	create(t, manager, todo.Todo{TaskID: "J1", Description: "a", IsDone: true})
+	create(t, manager, todo.Todo{TaskID: "J1", Description: "b"})
+	create(t, manager, todo.Todo{TaskID: "J1", Description: "c", IsDone: true})
+	create(t, manager, todo.Todo{TaskID: "J2", Description: "d"})
+
+	got, err := manager.CountTodosByTask(ctx)
+	require.NoError(t, err)
+	require.Equal(t, map[string]todo.Count{"J1": {Todos: 3, Done: 2}, "J2": {Todos: 1}}, got)
+
+	empty, _ := newTodoManager(t)
+
+	got, err = empty.CountTodosByTask(ctx)
+	require.NoError(t, err)
+	require.Empty(t, got)
 }
 
 func TestTodoNoteAndCompletedAt(t *testing.T) {

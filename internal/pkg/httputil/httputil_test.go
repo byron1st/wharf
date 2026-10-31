@@ -2,6 +2,7 @@ package httputil_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -108,6 +109,10 @@ func TestUnexpectedStatusCode(t *testing.T) {
 				body, err := call()
 				require.ErrorIs(t, err, httputil.ErrUnexpectedStatusCode)
 				require.ErrorContains(t, err, "status="+strconv.Itoa(tt.status))
+
+				statusErr, ok := errors.AsType[*httputil.StatusError](err)
+				require.True(t, ok)
+				require.Equal(t, tt.status, statusErr.StatusCode)
 				require.ErrorContains(t, err, "body="+tt.want)
 				require.NotContains(t, err.Error(), strings.Repeat("x", 513))
 				require.NotContains(t, err.Error(), secret)

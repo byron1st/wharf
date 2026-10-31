@@ -19,6 +19,7 @@ import (
 
 	"github.com/byron1st/wharf/internal/pkg/mocks"
 	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
 	"github.com/byron1st/wharf/internal/server"
 	"github.com/byron1st/wharf/internal/service"
 )
@@ -46,63 +47,46 @@ func serveBody(
 	req.Header.Set("X-Request-ID", "req-1")
 
 	rec := httptest.NewRecorder()
-	server.NewHandler(svc, slog.New(slog.NewJSONHandler(&logs, nil))).ServeHTTP(rec, req)
+	server.NewHandler(svc, mocks.NewMockSettings(t), slog.New(slog.NewJSONHandler(&logs, nil))).ServeHTTP(rec, req)
 
 	return rec, logs.String()
 }
 
 func TestHealthz(t *testing.T) {
-	rec, _ := serve(t, mocks.NewMockService(t), http.MethodGet, "/healthz")
+	rec, _ := serve(t, mocks.NewMockService(t), http.MethodGet, "/api/healthz")
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{"status":"ok"}`, rec.Body.String())
 }
 
-func TestSyncJiraTasks(t *testing.T) {
-	svc := mocks.NewMockService(t)
-	svc.EXPECT().SyncJiraTasks(mock.Anything).Return(service.SyncResult{Upserted: 3}, nil).Once()
+func TestRemovedRoutes(t *testing.T) {
+	for _, tt := range []struct{ method, path string }{
+		{method: http.MethodPost, path: "/api/tasks/jira"},
+		{method: http.MethodPost, path: "/api/service-desk/requests"},
+		{method: http.MethodGet, path: "/tasks"},
+		{method: http.MethodGet, path: "/todos"},
+		{method: http.MethodGet, path: "/healthz"},
+	} {
+		// No service expectation: the mock fails the test if it is called.
+		rec, _ := serve(t, mocks.NewMockService(t), tt.method, tt.path)
 
-	rec, logs := serve(t, svc, http.MethodPost, "/tasks/jira")
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-	require.JSONEq(t, `{"upserted":3,"partial":false}`, rec.Body.String())
-	require.NotContains(t, logs, `"level":"WARN"`)
-}
-
-func TestSyncJiraTasksPartial(t *testing.T) {
-	svc := mocks.NewMockService(t)
-	svc.EXPECT().
-		SyncJiraTasks(mock.Anything).
-		Return(service.SyncResult{Upserted: 2, Partial: errors.New("view failed: key=WHF-3")}, nil).
-		Once()
-
-	rec, logs := serve(t, svc, http.MethodPost, "/tasks/jira")
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.JSONEq(t, `{"upserted":2,"partial":true}`, rec.Body.String())
-	require.Contains(t, logs, `"level":"WARN"`)
-	require.Contains(t, logs, `"request_id":"req-1"`)
-	require.Contains(t, logs, "key=WHF-3")
-}
-
-func TestSyncJiraTasksFailure(t *testing.T) {
-	svc := mocks.NewMockService(t)
-	svc.EXPECT().SyncJiraTasks(mock.Anything).Return(service.SyncResult{}, errors.New("secret detail")).Once()
-
-	rec, logs := serve(t, svc, http.MethodPost, "/tasks/jira")
-
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
-	require.JSONEq(t, `{"error":"secret detail"}`, rec.Body.String())
-	require.Contains(t, logs, `"request_id":"req-1"`)
-	require.Contains(t, logs, "secret detail")
+		require.Contains(
+			t,
+			[]int{http.StatusNotFound, http.StatusMethodNotAllowed},
+			rec.Code,
+			"%s %s",
+			tt.method,
+			tt.path,
+		)
+	}
 }
 
 func TestRoutesRejectOtherMethods(t *testing.T) {
 	for _, tt := range []struct{ method, path string }{
-		{method: http.MethodPost, path: "/healthz"},
-		{method: http.MethodDelete, path: "/tasks"},
-		{method: http.MethodPatch, path: "/tasks/jira"},
+		{method: http.MethodPost, path: "/api/healthz"},
+		{method: http.MethodDelete, path: "/api/tasks"},
+		{method: http.MethodPatch, path: "/api/tasks/T1"},
+		{method: http.MethodDelete, path: "/api/sync/atlassian"},
 	} {
 		rec, _ := serve(t, mocks.NewMockService(t), tt.method, tt.path)
 
@@ -115,34 +99,39 @@ func TestListTasks(t *testing.T) {
 	long := strings.Repeat("가", 101)
 
 	svc := mocks.NewMockService(t)
-	svc.EXPECT().ListTasks(mock.Anything).Return([]task.Task{
+	svc.EXPECT().ListTasks(mock.Anything).Return([]service.TaskSummary{
 		{
-			ID:          "jira-WHF-1",
-			Originated:  task.OriginJira,
-			Title:       "first",
-			Description: long,
-			Status:      task.StatusTodo,
-			DueDate:     &due,
-			ParentID:    "jira-WHF-0",
-			ChildrenIDs: []string{"jira-WHF-2"},
+			Task: task.Task{
+				ID:          "jira-WHF-1",
+				Originated:  task.OriginJira,
+				Title:       "first",
+				Description: long,
+				Status:      task.StatusTodo,
+				DueDate:     &due,
+				ParentID:    "jira-WHF-0",
+				ChildrenIDs: []string{"jira-WHF-2"},
+			},
+			Todos: todo.Count{Todos: 5, Done: 2},
 		},
 		{
-			ID:          "local-WHF-001",
-			Originated:  task.OriginLocal,
-			Title:       "second",
-			Description: strings.Repeat("가", 100),
-			Status:      task.StatusDone,
+			Task: task.Task{
+				ID:          "local-WHF-001",
+				Originated:  task.OriginLocal,
+				Title:       "second",
+				Description: strings.Repeat("가", 100),
+				Status:      task.StatusDone,
+			},
 		},
 	}, nil).Once()
 
-	rec, _ := serve(t, svc, http.MethodGet, "/tasks")
+	rec, _ := serve(t, svc, http.MethodGet, "/api/tasks")
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{"tasks":[
 		{"id":"jira-WHF-1","originated":"jira","title":"first","description":"`+strings.Repeat("가", 100)+`…",
-		 "status":"todo","start_date":null,"due_date":"2026-10-31T00:00:00Z"},
+		 "status":"todo","start_date":null,"due_date":"2026-10-31T00:00:00Z","todo_count":5,"done_todo_count":2},
 		{"id":"local-WHF-001","originated":"local","title":"second","description":"`+strings.Repeat("가", 100)+`",
-		 "status":"done","start_date":null,"due_date":null}
+		 "status":"done","start_date":null,"due_date":null,"todo_count":0,"done_todo_count":0}
 	]}`, rec.Body.String())
 }
 
@@ -150,7 +139,7 @@ func TestListTasksEmpty(t *testing.T) {
 	svc := mocks.NewMockService(t)
 	svc.EXPECT().ListTasks(mock.Anything).Return(nil, nil).Once()
 
-	rec, _ := serve(t, svc, http.MethodGet, "/tasks")
+	rec, _ := serve(t, svc, http.MethodGet, "/api/tasks")
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{"tasks":[]}`, rec.Body.String())
@@ -176,7 +165,7 @@ func TestGetTask(t *testing.T) {
 		Linked:   []task.Task{{ID: "jira-L1", Originated: task.OriginJira, Title: "linked"}},
 	}, nil).Once()
 
-	rec, _ := serve(t, svc, http.MethodGet, "/tasks/local-WHF-001")
+	rec, _ := serve(t, svc, http.MethodGet, "/api/tasks/local-WHF-001")
 
 	cut := strings.Repeat("a", 100) + "…"
 
@@ -201,7 +190,7 @@ func TestGetTaskWithoutRelations(t *testing.T) {
 		Return(service.TaskDetail{Task: task.Task{ID: "jira-WHF-1", Originated: task.OriginJira, Title: "alone"}}, nil).
 		Once()
 
-	rec, _ := serve(t, svc, http.MethodGet, "/tasks/jira-WHF-1")
+	rec, _ := serve(t, svc, http.MethodGet, "/api/tasks/jira-WHF-1")
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{
@@ -222,13 +211,13 @@ func TestCreateTask(t *testing.T) {
 			slices.Equal(got.LinkedIDs, []string{"jira-L"})
 	})).Return("local-WHF-001", nil).Once()
 
-	rec, _ := serveBody(t, svc, http.MethodPost, "/tasks", strings.NewReader(`{
+	rec, _ := serveBody(t, svc, http.MethodPost, "/api/tasks", strings.NewReader(`{
 		"title":"new","description":"desc","status":"done","start_date":"2026-10-01T09:00:00Z","due_date":null,
 		"parent_id":"jira-P","children_ids":["jira-C"],"linked_ids":["jira-L"]
 	}`))
 
 	require.Equal(t, http.StatusCreated, rec.Code)
-	require.Equal(t, "/tasks/local-WHF-001", rec.Header().Get("Location"))
+	require.Equal(t, "/api/tasks/local-WHF-001", rec.Header().Get("Location"))
 	require.JSONEq(t, `{"id":"local-WHF-001"}`, rec.Body.String())
 }
 
@@ -245,7 +234,7 @@ func TestCreateTaskRejectsInvalidBody(t *testing.T) {
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
 			// No CreateTask expectation: the mock fails the test if it is called.
-			rec, logs := serveBody(t, mocks.NewMockService(t), http.MethodPost, "/tasks", strings.NewReader(body))
+			rec, logs := serveBody(t, mocks.NewMockService(t), http.MethodPost, "/api/tasks", strings.NewReader(body))
 
 			require.Equal(t, http.StatusBadRequest, rec.Code)
 			require.Contains(t, rec.Body.String(), "server: failed to decode task request")
@@ -258,7 +247,7 @@ func TestCreateTaskRejectsTooLargeBody(t *testing.T) {
 	body := `{"title":"` + strings.Repeat("x", 1<<20) + `"}`
 
 	// No CreateTask expectation: the mock fails the test if it is called.
-	rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPost, "/tasks", strings.NewReader(body))
+	rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPost, "/api/tasks", strings.NewReader(body))
 
 	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
 	require.Contains(t, rec.Body.String(), "server: task request is too large")
@@ -274,7 +263,7 @@ func TestCreateTaskRejectsTrailingData(t *testing.T) {
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
 			// No CreateTask expectation: the mock fails the test if it is called.
-			rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPost, "/tasks", strings.NewReader(body))
+			rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPost, "/api/tasks", strings.NewReader(body))
 
 			require.Equal(t, http.StatusBadRequest, rec.Code)
 			require.Contains(t, rec.Body.String(), "server: task request has trailing data")
@@ -284,7 +273,13 @@ func TestCreateTaskRejectsTrailingData(t *testing.T) {
 
 func TestUpdateTaskRejectsTrailingData(t *testing.T) {
 	// No UpdateTask expectation: the mock fails the test if it is called.
-	rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPut, "/tasks/T1", strings.NewReader(`{"title":"x"} {}`))
+	rec, _ := serveBody(
+		t,
+		mocks.NewMockService(t),
+		http.MethodPut,
+		"/api/tasks/T1",
+		strings.NewReader(`{"title":"x"} {}`),
+	)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), "server: task request has trailing data")
@@ -294,7 +289,7 @@ func TestCreateTaskAcceptsTrailingWhitespace(t *testing.T) {
 	svc := mocks.NewMockService(t)
 	svc.EXPECT().CreateTask(mock.Anything, mock.Anything).Return("local-WHF-001", nil).Once()
 
-	rec, _ := serveBody(t, svc, http.MethodPost, "/tasks", strings.NewReader("{\"title\":\"x\"} \n\t\n"))
+	rec, _ := serveBody(t, svc, http.MethodPost, "/api/tasks", strings.NewReader("{\"title\":\"x\"} \n\t\n"))
 
 	require.Equal(t, http.StatusCreated, rec.Code)
 }
@@ -331,11 +326,11 @@ func TestTaskRoutesMapServiceErrors(t *testing.T) {
 			svc.EXPECT().DeleteTask(mock.Anything, "T1").Return(tt.err).Once()
 
 			for _, req := range []struct{ method, path, body string }{
-				{method: http.MethodGet, path: "/tasks"},
-				{method: http.MethodGet, path: "/tasks/T1"},
-				{method: http.MethodPost, path: "/tasks", body: `{"title":"x"}`},
-				{method: http.MethodPut, path: "/tasks/T1", body: `{"title":"x"}`},
-				{method: http.MethodDelete, path: "/tasks/T1"},
+				{method: http.MethodGet, path: "/api/tasks"},
+				{method: http.MethodGet, path: "/api/tasks/T1"},
+				{method: http.MethodPost, path: "/api/tasks", body: `{"title":"x"}`},
+				{method: http.MethodPut, path: "/api/tasks/T1", body: `{"title":"x"}`},
+				{method: http.MethodDelete, path: "/api/tasks/T1"},
 			} {
 				rec, logs := serveBody(t, svc, req.method, req.path, strings.NewReader(req.body))
 
@@ -358,7 +353,7 @@ func TestUpdateTask(t *testing.T) {
 		t,
 		svc,
 		http.MethodPut,
-		"/tasks/local-WHF-001",
+		"/api/tasks/local-WHF-001",
 		strings.NewReader(`{"title":"new","children_ids":["jira-C"]}`),
 	)
 
@@ -371,7 +366,7 @@ func TestUpdateTaskRejectsInvalidBody(t *testing.T) {
 		t,
 		mocks.NewMockService(t),
 		http.MethodPut,
-		"/tasks/local-WHF-001",
+		"/api/tasks/local-WHF-001",
 		strings.NewReader(`{"title":"x","id":"local-WHF-002"}`),
 	)
 
@@ -382,7 +377,7 @@ func TestDeleteTask(t *testing.T) {
 	svc := mocks.NewMockService(t)
 	svc.EXPECT().DeleteTask(mock.Anything, "jira-WHF-1").Return(nil).Once()
 
-	rec, _ := serve(t, svc, http.MethodDelete, "/tasks/jira-WHF-1")
+	rec, _ := serve(t, svc, http.MethodDelete, "/api/tasks/jira-WHF-1")
 
 	require.Equal(t, http.StatusNoContent, rec.Code)
 	require.Empty(t, rec.Body.String())

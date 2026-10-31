@@ -40,6 +40,14 @@ ON CONFLICT (task_id, linked_id) DO NOTHING;
 -- name: ListTasks :many
 SELECT * FROM tasks ORDER BY id;
 
+-- name: CountTodosByTask :many
+SELECT task_todos.task_id,
+       COUNT(*) AS todos,
+       CAST(COALESCE(SUM(todos.is_done), 0) AS INTEGER) AS done_todos
+FROM task_todos
+JOIN todos ON todos.id = task_todos.todo_id
+GROUP BY task_todos.task_id;
+
 -- name: ListTasksByIDs :many
 SELECT * FROM tasks WHERE id IN (sqlc.slice(ids)) ORDER BY id;
 
@@ -133,9 +141,12 @@ SELECT todos.*, task_todos.task_id, task_todos.position
 FROM todos
 JOIN task_todos ON task_todos.todo_id = todos.id
 WHERE (task_todos.task_id = sqlc.narg(task_id) OR sqlc.narg(task_id) IS NULL)
-  AND (todos.start_date <= sqlc.narg(today) OR todos.start_date IS NULL OR sqlc.narg(today) IS NULL)
-  AND (todos.end_date = sqlc.narg(end_date) OR sqlc.narg(end_date) IS NULL)
   AND (todos.is_done = sqlc.narg(is_done) OR sqlc.narg(is_done) IS NULL)
+  AND (todos.completed_at >= sqlc.narg(completed_since) OR sqlc.narg(completed_since) IS NULL)
+  AND (todos.id IN (
+          SELECT linked.todo_id FROM todo_service_desk_requests AS linked
+          WHERE linked.issue_key = sqlc.narg(service_desk_request)
+       ) OR sqlc.narg(service_desk_request) IS NULL)
 ORDER BY task_todos.task_id, task_todos.position;
 
 -- name: ListTodoReminders :many
@@ -146,9 +157,12 @@ FROM todo_reminders
 JOIN todos ON todos.id = todo_reminders.todo_id
 JOIN task_todos ON task_todos.todo_id = todo_reminders.todo_id
 WHERE (task_todos.task_id = sqlc.narg(task_id) OR sqlc.narg(task_id) IS NULL)
-  AND (todos.start_date <= sqlc.narg(today) OR todos.start_date IS NULL OR sqlc.narg(today) IS NULL)
-  AND (todos.end_date = sqlc.narg(end_date) OR sqlc.narg(end_date) IS NULL)
   AND (todos.is_done = sqlc.narg(is_done) OR sqlc.narg(is_done) IS NULL)
+  AND (todos.completed_at >= sqlc.narg(completed_since) OR sqlc.narg(completed_since) IS NULL)
+  AND (todos.id IN (
+          SELECT linked.todo_id FROM todo_service_desk_requests AS linked
+          WHERE linked.issue_key = sqlc.narg(service_desk_request)
+       ) OR sqlc.narg(service_desk_request) IS NULL)
 ORDER BY todo_reminders.todo_id, todo_reminders.remind_at;
 
 -- name: CreateTodoReminder :exec
@@ -212,7 +226,26 @@ JOIN service_desk_requests ON service_desk_requests.issue_key = todo_service_des
 JOIN todos ON todos.id = todo_service_desk_requests.todo_id
 JOIN task_todos ON task_todos.todo_id = todo_service_desk_requests.todo_id
 WHERE (task_todos.task_id = sqlc.narg(task_id) OR sqlc.narg(task_id) IS NULL)
-  AND (todos.start_date <= sqlc.narg(today) OR todos.start_date IS NULL OR sqlc.narg(today) IS NULL)
-  AND (todos.end_date = sqlc.narg(end_date) OR sqlc.narg(end_date) IS NULL)
   AND (todos.is_done = sqlc.narg(is_done) OR sqlc.narg(is_done) IS NULL)
+  AND (todos.completed_at >= sqlc.narg(completed_since) OR sqlc.narg(completed_since) IS NULL)
+  AND (todos.id IN (
+          SELECT linked.todo_id FROM todo_service_desk_requests AS linked
+          WHERE linked.issue_key = sqlc.narg(service_desk_request)
+       ) OR sqlc.narg(service_desk_request) IS NULL)
 ORDER BY todo_service_desk_requests.todo_id, service_desk_requests.issue_key;
+
+-- name: ListServiceDeskRequests :many
+-- 'DONE' is the closed Jira status category.
+SELECT * FROM service_desk_requests
+WHERE status_category != 'DONE' OR CAST(sqlc.arg(include_closed) AS BOOLEAN)
+ORDER BY issue_key;
+
+-- name: CreateAtlassianSync :exec
+INSERT INTO atlassian_syncs (
+    synced_at, issues, issue_failures, open_requests, closed_requests, request_failures
+) VALUES (
+    ?, ?, ?, ?, ?, ?
+);
+
+-- name: GetLastAtlassianSync :one
+SELECT * FROM atlassian_syncs ORDER BY id DESC LIMIT 1;
