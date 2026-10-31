@@ -15,6 +15,7 @@ import {
   parseYmd,
   reminderLabel,
   shortDay,
+  sortReminders,
   ymd,
 } from '@/lib/dates'
 import { cn } from '@/lib/utils'
@@ -157,13 +158,13 @@ interface RemindersProps {
 export function Reminders({ reminders, end, onChange, layout }: RemindersProps) {
   const { now } = useNow()
   const [open, setOpen] = useState<string | null>(null)
-  const sorted = [...reminders].sort()
+  const sorted = sortReminders(reminders)
   const stack = layout === 'stack'
 
   const replace = (old: string | null, next: string | null) => {
     setOpen(null)
     const list = sorted.filter((r) => r !== old)
-    onChange(next ? [...list, next].sort() : list)
+    onChange(next ? sortReminders([...list, next]) : list)
   }
 
   const pop = (id: string, trigger: ReactNode, form: ReactNode) => (

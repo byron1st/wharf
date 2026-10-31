@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { useRequests, useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import type { Todo } from '@/lib/api'
-import { hhmm, isSent, longDate, monthDay, shortDay, ymd } from '@/lib/dates'
+import { hhmm, isSent, longDate, monthDay, shortDay, sortReminders, ymd } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
 const chip = 'inline-flex h-[22px] items-center gap-1 rounded-md px-1.5 text-[12px] tabular-nums'
@@ -45,7 +45,7 @@ function Meta({ todo }: { todo: Todo }) {
           </span>
         )
       )}
-      {[...todo.reminders].sort().map((r) => {
+      {sortReminders(todo.reminders).map((r) => {
         const sent = isSent(r, now)
         const d = new Date(r)
         const day = shortDay(ymd(d), today)

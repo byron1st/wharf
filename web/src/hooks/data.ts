@@ -40,6 +40,26 @@ export const useAtlassianSettings = () => useQuery({ queryKey: keys.atlassian, q
 
 export const useAppSettings = () => useQuery({ queryKey: keys.app, queryFn: api.appSettings })
 
+/**
+ * queued runs saves of one item one after another, so a full-object PUT can
+ * never land before an earlier one and undo it.
+ */
+const queues = new Map<string, Promise<unknown>>()
+function queued<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const run = (queues.get(key) ?? Promise.resolve()).catch(() => {}).then(fn)
+  queues.set(key, run)
+  void run.finally(() => queues.get(key) === run && queues.delete(key)).catch(() => {})
+  return run
+}
+
+/** cachedTodo is the todo id as cached now, with every optimistic patch applied. */
+function cachedTodo(qc: QueryClient, id: number): Todo | undefined {
+  for (const [, list] of qc.getQueriesData<Todo[]>({ queryKey: keys.allTodos })) {
+    const t = list?.find((x) => x.id === id)
+    if (t) return t
+  }
+}
+
 type Snapshot = [readonly unknown[], unknown][]
 
 function snapshot(qc: QueryClient): Snapshot {
@@ -99,7 +119,11 @@ export function useTodoActions() {
 
   const update = useMutation({
     mutationKey: ['todo-save'],
-    mutationFn: ({ todo, patch }: TodoUpdate) => api.updateTodo(todo.id, todoInput(todo, patch)),
+    // The body is built when the save is sent, from the cache that already
+    // holds this patch and every earlier one, so concurrent edits of other
+    // fields are kept.
+    mutationFn: ({ todo, patch }: TodoUpdate) =>
+      queued(`todo-${todo.id}`, () => api.updateTodo(todo.id, todoInput(cachedTodo(qc, todo.id) ?? todo, patch))),
     onMutate: async ({ todo, patch }) => {
       await qc.cancelQueries({ queryKey: keys.allTodos })
       const snap = snapshot(qc)
@@ -212,7 +236,9 @@ export function useTaskActions() {
   const update = useMutation({
     mutationKey: ['task-save'],
     mutationFn: ({ task, patch }: { task: TaskDetail; patch: Partial<TaskInput> }) =>
-      api.updateTask(task.id, taskInput(task, patch)),
+      queued(`task-${task.id}`, () =>
+        api.updateTask(task.id, taskInput(qc.getQueryData<TaskDetail>(keys.task(task.id)) ?? task, patch)),
+      ),
     onMutate: async ({ task, patch }) => {
       await qc.cancelQueries({ queryKey: keys.task(task.id) })
       const snap = snapshot(qc)

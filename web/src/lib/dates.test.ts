@@ -7,6 +7,7 @@ import {
   quickPicks,
   reminderSummary,
   shortDay,
+  sortReminders,
   whenPill,
 } from './dates'
 
@@ -74,6 +75,13 @@ describe('reminderSummary', () => {
       upcoming: false,
       sent: 2,
     })
+  })
+
+  it('orders reminders by instant, not by text, across UTC offsets', () => {
+    // 10:00 KST is 01:00Z, earlier than 05:00Z although "...T10" sorts after "...T05" as text.
+    const kst = '2026-10-27T10:00:00+09:00'
+    const utc = '2026-10-27T05:00:00Z'
+    expect(sortReminders([utc, kst])).toEqual([kst, utc])
   })
 
   it('is empty without reminders', () => {

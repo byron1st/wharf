@@ -128,9 +128,13 @@ export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, 
 /** isSent reports whether a reminder already went off; wharf keeps no sent flag. */
 export const isSent = (at: string, now: Date) => new Date(at).getTime() <= now.getTime()
 
+/** sortReminders orders reminder instants by time, whatever their UTC offsets. */
+export const sortReminders = (reminders: string[]) =>
+  [...reminders].sort((a, b) => Date.parse(a) - Date.parse(b))
+
 /** reminderSummary is the Reminder column: the next upcoming one, else the last sent one. */
 export function reminderSummary(reminders: string[], now: Date) {
-  const sorted = [...reminders].sort()
+  const sorted = sortReminders(reminders)
   const upcoming = sorted.filter((r) => !isSent(r, now))
   const sent = sorted.filter((r) => isSent(r, now))
   const today = ymd(now)

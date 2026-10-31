@@ -24,7 +24,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 - `make build`: Build the web app (`make web`), then binaries from `./cmd/<bin>` with it embedded.
 - `make web`: Install the web app dependencies (`npm ci`) and build it into `web/dist`.
 - `make web-check`: Type-check, lint (`oxlint`) and test (`vitest`) the web app.
-- `make web-dev`: Run the Vite dev server; it proxies `/api` to the server from `make run` (`WHARF_API` overrides the target).
+- `make web-dev`: Run the Vite dev server; it proxies `/api` to the server from `make run` (`WHARF_API` overrides the target), rewriting Origin only for its own pages so the server's cross-site check still applies.
 - `make run`: Run the server (`./cmd/wharf`).
 
 ## Architecture Overview

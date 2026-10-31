@@ -27,15 +27,36 @@ func TestWebAppServesFiles(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "console.log(1)", rec.Body.String())
 	require.Contains(t, rec.Header().Get("Content-Type"), "javascript")
+	require.Equal(t, "public, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
+}
+
+func TestWebAppForbidsFramingAndSniffing(t *testing.T) {
+	for _, path := range []string{"/", "/assets/app-1.js", "/missing.js", "/api/nothing"} {
+		rec, _ := serve(t, mocks.NewMockService(t), http.MethodGet, path)
+
+		require.Equal(t, "frame-ancestors 'none'", rec.Header().Get("Content-Security-Policy"), path)
+		require.Equal(t, "DENY", rec.Header().Get("X-Frame-Options"), path)
+		require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"), path)
+	}
+}
+
+func TestWebAppMissingFileIsNotFound(t *testing.T) {
+	for _, path := range []string{"/missing.js", "/assets/index-old.js", "/favicon.ico"} {
+		rec, _ := serve(t, mocks.NewMockService(t), http.MethodGet, path)
+
+		require.Equal(t, http.StatusNotFound, rec.Code, path)
+		require.NotContains(t, rec.Body.String(), "<title>Wharf</title>", path)
+	}
 }
 
 func TestWebAppFallsBackToIndex(t *testing.T) {
-	for _, path := range []string{"/", "/settings/general", "/task/WHF-003", "/assets", "/missing.js", "/tasks"} {
+	for _, path := range []string{"/", "/settings/general", "/task/local-WHF-003", "/assets", "/tasks"} {
 		rec, _ := serve(t, mocks.NewMockService(t), http.MethodGet, path)
 
 		require.Equal(t, http.StatusOK, rec.Code, path)
 		require.Equal(t, "<!doctype html><title>Wharf</title>", rec.Body.String(), path)
 		require.Contains(t, rec.Header().Get("Content-Type"), "text/html", path)
+		require.Equal(t, "no-cache", rec.Header().Get("Cache-Control"), path)
 	}
 }
 
