@@ -72,9 +72,22 @@ test-mutation-pkg:
 	@command -v gremlins >/dev/null 2>&1 || go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
 	@gremlins unleash "$(PKG)" -S l --workers=3 --timeout-coefficient=20
 
+.PHONY: web web-check web-dev
+# Install the web app dependencies and build it into web/dist, which the server embeds
+web:
+	@cd web && npm ci && npm run build
+
+# Type-check, lint and test the web app
+web-check:
+	@cd web && npm run check
+
+# Run the web app dev server; it proxies /api to the server from make run
+web-dev:
+	@cd web && npm run dev
+
 .PHONY: build run
-# Build application binaries from ./cmd/<binary>
-build:
+# Build application binaries from ./cmd/<binary>, embedding the web app
+build: web
 	@for bin in $(BINS); do \
 		$(BUILD_FLAGS) go build -o $$bin ./cmd/$$bin || exit 1; \
 	done

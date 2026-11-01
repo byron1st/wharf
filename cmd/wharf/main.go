@@ -19,6 +19,7 @@ import (
 	"github.com/byron1st/wharf/internal/server"
 	"github.com/byron1st/wharf/internal/service"
 	"github.com/byron1st/wharf/scripts"
+	"github.com/byron1st/wharf/web"
 )
 
 func main() {
@@ -96,7 +97,7 @@ func run() (code int, restartWith string) {
 			stop()
 		},
 	})
-	srv := server.New(server.NewHandler(svc, settings, logger), logger)
+	srv := server.New(server.NewHandler(svc, settings, web.Dist(), logger), logger)
 
 	ln, err := net.Listen("tcp", cfg.Addr)
 	if err != nil {

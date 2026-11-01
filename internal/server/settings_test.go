@@ -32,7 +32,8 @@ func serveSettings(t *testing.T, settings service.Settings, method, path, body s
 	rec := httptest.NewRecorder()
 
 	var logs bytes.Buffer
-	server.NewHandler(mocks.NewMockService(t), settings, slog.New(slog.NewJSONHandler(&logs, nil))).ServeHTTP(rec, req)
+	server.NewHandler(mocks.NewMockService(t), settings, webApp, slog.New(slog.NewJSONHandler(&logs, nil))).
+		ServeHTTP(rec, req)
 
 	return rec
 }

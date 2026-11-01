@@ -31,3 +31,7 @@ coverage.out
 # Go workspace (local-only)
 go.work
 go.work.sum
+
+# Web app build output; the committed dist/.gitkeep lets go:embed build without it
+/web/dist/*
+!/web/dist/.gitkeep

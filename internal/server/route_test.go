@@ -47,7 +47,8 @@ func serveBody(
 	req.Header.Set("X-Request-ID", "req-1")
 
 	rec := httptest.NewRecorder()
-	server.NewHandler(svc, mocks.NewMockSettings(t), slog.New(slog.NewJSONHandler(&logs, nil))).ServeHTTP(rec, req)
+	server.NewHandler(svc, mocks.NewMockSettings(t), webApp, slog.New(slog.NewJSONHandler(&logs, nil))).
+		ServeHTTP(rec, req)
 
 	return rec, logs.String()
 }
@@ -63,9 +64,8 @@ func TestRemovedRoutes(t *testing.T) {
 	for _, tt := range []struct{ method, path string }{
 		{method: http.MethodPost, path: "/api/tasks/jira"},
 		{method: http.MethodPost, path: "/api/service-desk/requests"},
-		{method: http.MethodGet, path: "/tasks"},
-		{method: http.MethodGet, path: "/todos"},
-		{method: http.MethodGet, path: "/healthz"},
+		{method: http.MethodPost, path: "/tasks"},
+		{method: http.MethodGet, path: "/api/healthz/extra"},
 	} {
 		// No service expectation: the mock fails the test if it is called.
 		rec, _ := serve(t, mocks.NewMockService(t), tt.method, tt.path)
