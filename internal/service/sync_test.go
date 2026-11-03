@@ -125,17 +125,19 @@ func TestSyncAtlassianRefetchesDroppedJiraTasks(t *testing.T) {
 		jiraTask("WHF-3", task.StatusDone),
 		jiraTask("WHF-4", task.StatusCanceled),
 		jiraTask("WHF-5", task.StatusTodo), // gone from Jira
+		jiraTask("WHF-6", task.StatusTodo), // moved to another project
 		{ID: "local-WHF-001", Originated: task.OriginLocal, Title: "local", Status: task.StatusTodo},
 	}
 	gone := fmt.Errorf("%w: key=WHF-5", atlassian.ErrWorkItemNotFound)
 
-	// Only WHF-2 and WHF-5 are fetched again: the mock fails the test on any
-	// other GetTask call.
+	// Only WHF-2, WHF-5 and WHF-6 are fetched again: the mock fails the test
+	// on any other GetTask call.
 	jira := mocks.NewMockClient(t)
 	jira.EXPECT().GetMyTasks(mock.Anything).Return([]task.Task{searched}, nil).Once()
 	jira.EXPECT().GetOwnedRequests(mock.Anything).Return([]servicedesk.Request{}, nil).Once()
 	jira.EXPECT().GetTask(mock.Anything, "WHF-2").Return(finished, nil).Once()
 	jira.EXPECT().GetTask(mock.Anything, "WHF-5").Return(task.Task{}, gone).Once()
+	jira.EXPECT().GetTask(mock.Anything, "WHF-6").Return(jiraTask("ABC-1", task.StatusTodo), nil).Once()
 
 	manager := mocks.NewMockManager(t)
 	manager.EXPECT().ListServiceDeskRequests(mock.Anything, false).Return(nil, nil).Once()
@@ -146,9 +148,51 @@ func TestSyncAtlassianRefetchesDroppedJiraTasks(t *testing.T) {
 
 	got, err := service.NewService(jira, manager).SyncAtlassian(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, 1, got.Record.Issues)
-	require.Equal(t, 1, got.Record.IssueFailures)
-	require.Equal(t, []string{"atlassian: work item not found: key=WHF-5: id=jira-WHF-5"}, got.Errors)
+	require.Equal(t, 2, got.Record.Issues)
+	require.Equal(t, 2, got.Record.IssueFailures)
+	require.Equal(t, []string{
+		"atlassian: work item not found: key=WHF-5: id=jira-WHF-5",
+		"service: jira issue key changed: id=jira-WHF-6, new_id=jira-ABC-1",
+	}, got.Errors)
+}
+
+func TestSyncAtlassianStopsRefetchingOnRequestFailures(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err  error
+		want error
+	}{
+		"status":      {err: statusErr(t, http.StatusTooManyRequests), want: httputil.ErrUnexpectedStatusCode},
+		"unreachable": {err: fmt.Errorf("%w: method=GET", httputil.ErrFailedToSendRequest), want: service.ErrAtlassianUnreachable},
+	} {
+		t.Run(name, func(t *testing.T) {
+			searched := task.Task{ID: "jira-WHF-1", Originated: task.OriginJira, Status: task.StatusTodo}
+			stored := []task.Task{
+				searched,
+				{ID: "jira-WHF-2", Originated: task.OriginJira, Status: task.StatusTodo},
+				{ID: "jira-WHF-3", Originated: task.OriginJira, Status: task.StatusTodo},
+			}
+
+			// WHF-3 is never fetched: the first failure stops the refetch.
+			jira := mocks.NewMockClient(t)
+			jira.EXPECT().GetMyTasks(mock.Anything).Return([]task.Task{searched}, nil).Once()
+			jira.EXPECT().GetOwnedRequests(mock.Anything).Return([]servicedesk.Request{}, nil).Once()
+			jira.EXPECT().GetTask(mock.Anything, "WHF-2").Return(task.Task{}, tc.err).Once()
+
+			manager := mocks.NewMockManager(t)
+			manager.EXPECT().ListServiceDeskRequests(mock.Anything, false).Return(nil, nil).Once()
+			manager.EXPECT().ListTasks(mock.Anything).Return(stored, nil).Once()
+			manager.EXPECT().UpsertTasks(mock.Anything, []task.Task{searched}).Return(nil).Once()
+			manager.EXPECT().UpsertServiceDeskRequests(mock.Anything, []servicedesk.Request{}).Return(nil).Once()
+			manager.EXPECT().CreateAtlassianSync(mock.Anything, mock.Anything).Return(nil).Once()
+
+			got, err := service.NewService(jira, manager).SyncAtlassian(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, 1, got.Record.IssueFailures)
+			require.Len(t, got.Errors, 1)
+			require.Contains(t, got.Errors[0], tc.want.Error())
+			require.Contains(t, got.Errors[0], "id=jira-WHF-2")
+		})
+	}
 }
 
 func TestSyncAtlassianChangesNothingWhenAFetchFails(t *testing.T) {

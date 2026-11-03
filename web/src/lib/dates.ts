@@ -1,6 +1,8 @@
 // Date helpers. Calendar dates are "YYYY-MM-DD" strings in local time; todo
 // dates are stored that way, and task dates are stored as UTC midnight.
 
+import type { TaskStatus } from './api'
+
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -123,6 +125,11 @@ export function dueTag(due: string | null, today: string, done: boolean) {
 /** isTodayTodo picks the todos Today lists: open ones that can start by today. */
 export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, today: string): boolean {
   return !t.is_done && (!t.start_date || t.start_date <= today)
+}
+
+/** isTodayTask is whether Today lists a task: any open one, and a done or canceled one only while it has todos for today. */
+export function isTodayTask(task: { status: TaskStatus }, hasTodayTodos: boolean): boolean {
+  return hasTodayTodos || (task.status !== 'done' && task.status !== 'canceled')
 }
 
 /** isSent reports whether a reminder already went off; wharf keeps no sent flag. */

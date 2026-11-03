@@ -384,7 +384,7 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
               [Diamond, 'bg-[#eff6ff] text-[#1d4ed8]', <>Imports Jira issues <b>assigned to you that aren’t done</b>, and updates the ones already here.</>],
               [Ticket, 'bg-[#eef2ff] text-[#4338ca]', 'Refreshes Service Desk requests. Done and Canceled requests drop out of Today.'],
               [Lock, 'bg-[#f4f4f5] text-[#52525b]', 'Only reads from Atlassian. Todos, notes and links you add in Wharf are never written back.'],
-              [FileText, 'bg-[#f4f4f5] text-[#52525b]', 'Issues that leave your list, like resolved or reassigned ones, are fetched again one by one. Resolved ones drop out of Today.'],
+              [FileText, 'bg-[#f4f4f5] text-[#52525b]', 'Issues that leave your list, like resolved or reassigned ones, are fetched again one by one. Done and Canceled ones drop out of Today once their todos for today are done.'],
             ].map(([Icon, cls, text], i) => {
               const I = Icon as typeof Diamond
               return (

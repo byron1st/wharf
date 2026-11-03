@@ -2,14 +2,17 @@
 
 ## 배경
 
-전체 Atlassian 동기화(`SyncAtlassian`)는 `assignee = currentUser() AND statusCategory != done` JQL 로 이슈를 받는다. 이미 저장된 Task 가 Jira 에서 Done 이 되면 결과에서 빠지고, `UpsertTasks` 는 받은 것만 쓰므로 DB 에는 마지막 상태(예: `in-progress`)가 그대로 남는다. Today 가 모든 Task 를 보여주도록 바뀐 뒤로 이 Task 들이 열린 상태로 계속 보인다.
+전체 Atlassian 동기화(`SyncAtlassian`)는 `assignee = currentUser() AND statusCategory != done` JQL 로 이슈를 받는다. 이미 저장된 Task 가 Jira 에서 Done 이 되면 결과에서 빠지고, `UpsertTasks` 는 받은 것만 쓰므로 DB 에는 마지막 상태(예: `in-progress`)가 그대로 남는다.
+
+`develop` 의 Today 는 오늘 할 Todo 가 있는 Task 만 보여준다. 같은 세션에서 owner 가 "메인 뷰에 Task 는 항상 나오도록 해줘" 라고 요청해, Todo 없이도 Task 를 Today 에 보이게 하는 변경(커밋 전)이 이 작업의 출발점이다. 그러면 위의 낡은 Task 가 열린 상태로 계속 보이게 되어 A·C 를 함께 한다.
 
 ## Done when
 
 - **A-1** 전체 동기화 때, DB 에 `originated = jira` 이고 상태가 `done`·`canceled` 가 아닌데 이번 검색 결과에 없는 Task 를 `GetTask` 로 하나씩 다시 받아 검색 결과와 함께 저장한다. 증거: `internal/service/sync_test.go` 에 "검색 결과에 없는 열린 Jira Task 는 GetTask 결과(done)로 UpsertTasks 에 포함된다" 테스트가 통과한다.
 - **A-2** 재조회 대상이 아닌 Task(local 출처, 이미 `done`/`canceled`, 검색 결과에 있는 것)는 `GetTask` 를 부르지 않는다. 증거: 같은 테스트에서 mock 에 해당 호출 기대가 없고 `AssertExpectations` 가 통과한다.
-- **A-3** 재조회 하나가 실패하면(404 포함) 그 Task 는 저장된 그대로 두고, 실패를 `IssueFailures` 수와 `errors` 메시지에 더한다. 나머지는 정상 저장되고 동기화는 성공으로 기록된다. 증거: 실패 케이스 서비스 테스트 통과.
+- **A-3** 재조회 하나가 실패하면(404, 변환 실패, 다른 키로 돌아온 이동된 이슈) 그 Task 는 저장된 그대로 두고, 실패를 `IssueFailures` 수와 `errors` 메시지에 더한다. 나머지는 정상 저장되고 동기화는 성공으로 기록된다. 404 가 아닌 HTTP 응답이나 네트워크 실패는 남은 Task 에도 반복될 가능성이 커서 재조회를 멈추고 한 번만 보고한다. 증거: `TestSyncAtlassianRefetchesDroppedJiraTasks`, `TestSyncAtlassianStopsRefetchingOnRequestFailures` 통과.
 - **A-4** 모든 받기(검색, Service Desk, 재조회)가 끝난 뒤에만 저장한다는 기존 규칙을 지킨다. 검색이나 Service Desk 받기가 실패하면 재조회도 저장도 하지 않는다. 증거: 기존 `TestSyncAtlassianChangesNothingWhenAFetchFails` 가 수정 없이 통과한다.
+- **C-0** Today 는 오늘 할 Todo 가 없는 열린 Task 도 보여준다(owner 결정). 증거: 로컬 실행에서 Todo 가 없는 Jira Task 4개가 Today 에 보인다.
 - **C-1** Today 는 `done`·`canceled` Task 를 숨긴다. 단, 오늘 할 Todo(미완료, 시작일 없음 또는 오늘 이전)가 남아 있는 Task 는 계속 보인다. 증거: 새 vitest 테스트(필터 함수 단위 테스트) 통과, 그리고 로컬 실행에서 사람이 확인하는 시나리오(Jira 에서 Done 처리 → 동기화 → Today 에서 사라짐).
 - 저장소 게이트: `make check`, `make test`, `make web-check` 통과. 기존 테스트를 약화하거나 지우지 않는다.
 
@@ -17,9 +20,10 @@
 
 ## Out of scope
 
-- 담당자가 바뀐 이슈 처리. 재조회해도 상태가 열려 있으면 그대로 남고, 매 동기화마다 다시 재조회된다.
+- 담당자가 바뀐 이슈 처리. 재조회해도 상태가 열려 있으면 그대로 남고, 매 동기화마다 다시 재조회되며, C-0 때문에 Today 에도 계속 보인다(owner 가 받아들인 결과로 기록한다). Today 에서 직접 지우거나 숨기는 기능은 하지 않는다.
+- 이동된 이슈(키 변경)의 로컬 Task 를 새 키로 옮기는 일. 실패로 보고만 한다.
 - 재조회 병렬화, 호출 수 제한.
-- `atlassian_syncs` 기록·API 응답 형식 변경(재조회 건수 필드 추가 등).
+- `atlassian_syncs` 기록·API 응답 형식 변경(재조회 건수 필드 추가 등). `Issues` 는 저장한 수(검색 + 재조회)로 뜻만 넓힌다.
 - Jira 에서 삭제된 이슈의 로컬 Task 자동 삭제.
 
 ## Do not touch
@@ -34,5 +38,5 @@
 
 ## 접근
 
-- `service.SyncAtlassian`: 두 받기가 끝난 뒤 `db.ListTasks` 로 재조회 대상을 고르고 `jira.GetTask` 로 받아 검색 결과 뒤에 붙인 다음 한 번에 `UpsertTasks` 한다. 실패는 기존 `taskErrs` 에 합친다. `Issues` 는 지금처럼 검색 결과 수로 둔다.
+- `service.SyncAtlassian`: 두 받기가 끝난 뒤 `db.ListTasks` 로 재조회 대상을 고르고 `jira.GetTask` 로 받아 검색 결과 뒤에 붙인 다음 한 번에 `UpsertTasks` 한다. 실패는 기존 `taskErrs` 에 합친다. `Issues` 는 저장한 이슈 수(검색 + 재조회)다.
 - 웹: Today 필터를 `web/src/lib/` 의 순수 함수로 두고 `TodayPage` 가 쓴다.

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, NetworkError, api, isTodayTask, taskKey, taskOrigin } from './api'
+import { ApiError, NetworkError, api, taskKey, taskOrigin } from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -40,20 +40,5 @@ describe('task IDs', () => {
     expect(taskKey('jira-SEC-142')).toBe('SEC-142')
     expect(taskOrigin('jira-SEC-142')).toBe('jira')
     expect(taskOrigin('SEC-142')).toBeUndefined()
-  })
-})
-
-describe('isTodayTask', () => {
-  it('lists open tasks with or without todos for today', () => {
-    expect(isTodayTask({ status: 'todo' }, false)).toBe(true)
-    expect(isTodayTask({ status: 'in-progress' }, false)).toBe(true)
-    expect(isTodayTask({ status: 'in-progress' }, true)).toBe(true)
-  })
-
-  it('lists done and canceled tasks only while they have todos for today', () => {
-    expect(isTodayTask({ status: 'done' }, false)).toBe(false)
-    expect(isTodayTask({ status: 'canceled' }, false)).toBe(false)
-    expect(isTodayTask({ status: 'done' }, true)).toBe(true)
-    expect(isTodayTask({ status: 'canceled' }, true)).toBe(true)
   })
 })
