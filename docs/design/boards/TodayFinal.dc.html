@@ -61,20 +61,33 @@ a{color:#0f766e}a:hover{color:#115e59}
           </div>
 
           <sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
-            <div style="display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 44px; padding: 0 16px; border-bottom: 1px solid #f4f4f5; background: {{g.headBg}}; box-shadow: {{g.headRing}}">
+            <div draggable="true" onDragStart="{{g.dragStart}}" onDragOver="{{g.dragOver}}" onDrop="{{g.drop}}" onDragEnd="{{dragEnd}}" style="position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 44px; padding: 0 16px; border-bottom: 1px solid #f4f4f5; background: {{g.headBg}}; box-shadow: {{g.headRing}}; opacity: {{g.opacity}}">
+              <span title="Drag to reorder" aria-hidden="true" style="position: absolute; left: 3px; top: 50%; margin-top: -6px; width: 12px; height: 12px; display: flex; color: #c4c4cc; cursor: grab"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg></span>
               <button type="button" onClick="{{g.toggle}}" aria-expanded="{{g.open}}" aria-label="Collapse or expand {{g.key}}" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; border: none; border-radius: 6px; background: transparent; cursor: pointer">
                 <sc-if value="{{g.open}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
                 <sc-if value="{{g.closed}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
               </button>
-              <button type="button" onClick="{{g.selectTask}}" aria-pressed="{{g.taskSelected}}" title="Show task details" style="min-width: 0; height: 42px; display: flex; align-items: center; gap: 8px; padding: 0; border: none; background: transparent; font: inherit; text-align: left; cursor: pointer; color: #09090b">
+              <div style="min-width: 0; display: flex; align-items: center; gap: 6px">
+                <div style="position: relative; flex-shrink: 0">
+                  <button type="button" onClick="{{g.statusToggle}}" disabled="{{g.jira}}" aria-haspopup="menu" aria-expanded="{{g.statusOpen}}" aria-label="Status: {{g.statusLabel}}" title="{{g.statusTip}}" style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid {{g.statusBorder}}; border-radius: 6px; background: {{g.statusBg}}; cursor: {{g.statusCursor}}"><sc-if value="{{g.stTodo}}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="6" stroke="#71717a" stroke-width="1.6"></circle></svg></sc-if><sc-if value="{{g.stProg}}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="6" stroke="#d97706" stroke-width="1.6"></circle><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6Z" fill="#d97706"></path></svg></sc-if><sc-if value="{{g.stDone}}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="7" fill="#7c3aed"></circle><path d="m5 8.2 2 2 4-4.2" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if><sc-if value="{{g.stCanceled}}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="7" fill="#a1a1aa"></circle><path d="m5.6 5.6 4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"></path></svg></sc-if></button>
+                  <sc-if value="{{g.statusOpen}}" hint-placeholder-val="{{ false }}">
+                    <div role="menu" aria-label="Task status" style="position: absolute; top: 30px; left: 0; z-index: 45; width: 176px; box-sizing: border-box; padding: 4px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 1px">
+                      <sc-for list="{{g.statusItems}}" as="si" hint-placeholder-count="4">
+                        <button type="button" role="menuitemradio" aria-checked="{{si.current}}" onClick="{{si.pick}}" style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: none; border-radius: 6px; background: {{si.bg}}; font: inherit; font-size: 13px; color: #09090b; text-align: left; cursor: pointer"><sc-if value="{{si.stTodo}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="6" stroke="#71717a" stroke-width="1.6"></circle></svg></sc-if><sc-if value="{{si.stProg}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="6" stroke="#d97706" stroke-width="1.6"></circle><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6Z" fill="#d97706"></path></svg></sc-if><sc-if value="{{si.stDone}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="7" fill="#7c3aed"></circle><path d="m5 8.2 2 2 4-4.2" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if><sc-if value="{{si.stCanceled}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="7" fill="#a1a1aa"></circle><path d="m5.6 5.6 4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"></path></svg></sc-if><span style="flex: 1">{{si.label}}</span><sc-if value="{{si.current}}" hint-placeholder-val="{{ false }}"><span style="display: flex; color: #0f766e"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span></sc-if></button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+                <button type="button" onClick="{{g.selectTask}}" aria-pressed="{{g.taskSelected}}" title="Show task details" style="flex: 1; min-width: 0; height: 42px; display: flex; align-items: center; gap: 8px; padding: 0; border: none; background: transparent; font: inherit; text-align: left; cursor: pointer; color: #09090b">
                 <span style="width: 8px; height: 8px; flex-shrink: 0; border-radius: 2px; background: {{g.originColor}}"></span>
                 <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: #52525b; flex-shrink: 0">{{g.key}}</span>
-                <span style="min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: {{g.titleDeco}}; text-underline-offset: 3px">{{g.title}}</span>
+                <span style="min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {{g.titleColor}}; text-decoration: {{g.titleDeco}}; text-underline-offset: 3px">{{g.title}}</span>
                 <span style="flex-shrink: 0; font-size: 12px; font-weight: 500; color: {{g.dueColor}}; background: {{g.dueBg}}; border-radius: 6px; padding: 1px 7px">{{g.due}}</span>
               </button>
+              </div>
               <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #71717a; font-variant-numeric: tabular-nums">
                 <span style="width: 40px; height: 5px; border-radius: 9999px; background: #e4e4e7; overflow: hidden; display: flex"><span style="width: {{g.pct}}%; background: #7c3aed"></span></span>
-                <span>{{g.progress}}</span>
+                <button type="button" onClick="{{g.toggleDone}}" aria-pressed="{{g.doneOpen}}" title="{{g.doneTip}}" style="height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid {{g.doneBorder}}; border-radius: 6px; background: {{g.doneBg}}; font: inherit; font-size: 12px; color: {{g.doneColor}}; font-variant-numeric: tabular-nums; cursor: {{g.doneCursor}}">{{g.progress}}</button>
                 <button type="button" onClick="{{g.add}}" aria-label="Add todo to {{g.key}}" title="Add todo to {{g.key}}" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid {{g.addBorder}}; border-radius: 6px; background: {{g.addBg}}; color: {{g.addColor}}; cursor: pointer">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
                 </button>
@@ -96,12 +109,12 @@ a{color:#0f766e}a:hover{color:#115e59}
                 </div>
               </sc-if>
               <sc-for list="{{g.items}}" as="t" hint-placeholder-count="2">
-                <div style="display: grid; grid-template-columns: 28px minmax(0, 1fr) 104px 104px; align-items: center; gap: 12px; min-height: 44px; padding: 0 16px; border-bottom: 1px solid #f4f4f5; background: {{t.rowBg}}; box-shadow: {{t.rowRing}}">
+                <div style="display: grid; grid-template-columns: 28px minmax(0, 1fr) 104px 104px; align-items: center; gap: 12px; min-height: 44px; padding: 0 16px; border-bottom: 1px solid #f4f4f5; background: {{t.rowBg}}; box-shadow: {{t.rowRing}}; opacity: {{t.rowOpacity}}">
                   <span style="display: flex; justify-content: center">
-                    <button type="button" role="checkbox" aria-checked="false" aria-label="{{t.text}}" onClick="{{t.toggle}}" style="width: 18px; height: 18px; padding: 0; border-radius: 5px; border: 1.5px solid #a1a1aa; background: #ffffff; cursor: pointer"></button>
+                    <button type="button" role="checkbox" aria-checked="{{t.checked}}" aria-label="{{t.text}}" onClick="{{t.toggle}}" style="width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 5px; border: 1.5px solid {{t.boxBorder}}; background: {{t.boxBg}}; color: #ffffff; cursor: pointer"><sc-if value="{{t.checked}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></sc-if></button>
                   </span>
-                  <button type="button" onClick="{{t.select}}" aria-pressed="{{t.selected}}" style="min-width: 0; height: 42px; display: flex; align-items: center; gap: 8px; padding: 0; border: none; background: transparent; font: inherit; font-size: 14px; font-weight: {{t.weight}}; color: #09090b; text-align: left; cursor: pointer">
-                    <span style="min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.text}}</span>
+                  <button type="button" onClick="{{t.select}}" aria-pressed="{{t.selected}}" style="min-width: 0; height: 42px; display: flex; align-items: center; gap: 8px; padding: 0; border: none; background: transparent; font: inherit; font-size: 14px; font-weight: {{t.weight}}; color: {{t.textColor}}; text-align: left; cursor: pointer">
+                    <span style="min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: {{t.deco}}">{{t.text}}</span>
                     <sc-if value="{{t.hasNote}}" hint-placeholder-val="{{ false }}">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Has a note" style="flex-shrink: 0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg>
                     </sc-if>
@@ -117,33 +130,14 @@ a{color:#0f766e}a:hover{color:#115e59}
             </sc-if>
           </sc-for>
 
+          <sc-if value="{{dragging}}" hint-placeholder-val="{{ false }}">
+            <div onDragOver="{{dragOverEnd}}" onDrop="{{dropEnd}}" style="height: 36px; margin: 6px 16px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px dashed {{endBorder}}; border-radius: 8px; background: {{endBg}}; font-size: 12px; color: #71717a">Drop here to move to the end</div>
+          </sc-if>
 
           <sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
             <p style="margin: 0; padding: 40px 16px; text-align: center; font-size: 14px; color: #71717a">All clear for this filter.</p>
           </sc-if>
 
-          <button type="button" onClick="{{toggleCompleted}}" aria-expanded="{{showCompleted}}" style="width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 44px; padding: 0 16px; border: none; background: #ffffff; font: inherit; text-align: left; cursor: pointer; color: #52525b">
-            <span style="display: flex; justify-content: center">
-              <sc-if value="{{showCompleted}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
-              <sc-if value="{{hideCompleted}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
-            </span>
-            <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#7c3aed"></circle><path d="m5 8.2 2 2 4-4.2" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-              Completed today
-            </span>
-            <span style="font-size: 12px; color: #71717a; font-variant-numeric: tabular-nums">{{completedCount}}</span>
-          </button>
-          <sc-if value="{{showCompleted}}" hint-placeholder-val="{{ false }}">
-            <sc-for list="{{completed}}" as="t" hint-placeholder-count="1">
-              <div style="display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 40px; padding: 0 16px; border-top: 1px solid #f4f4f5; background: {{t.rowBg}}">
-                <span style="display: flex; justify-content: center">
-                  <button type="button" role="checkbox" aria-checked="true" aria-label="{{t.text}}" onClick="{{t.toggle}}" style="width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 5px; border: 1.5px solid #0f766e; background: #0f766e; cursor: pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></button>
-                </span>
-                <button type="button" onClick="{{t.select}}" style="min-width: 0; height: 38px; padding: 0; border: none; background: transparent; font: inherit; font-size: 14px; color: #71717a; text-decoration: line-through; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.text}}</button>
-                <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: #a1a1aa">{{t.key}}</span>
-              </div>
-            </sc-for>
-          </sc-if>
         </div>
       </section>
 
@@ -339,6 +333,7 @@ a{color:#0f766e}a:hover{color:#115e59}
                 <button type="button" disabled="{{ti.jira}}" style="height: 34px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid {{ti.fieldBorder}}; border-radius: 6px; background: {{ti.fieldBg}}; font: inherit; font-size: 13px; color: #09090b; white-space: nowrap; overflow: hidden; cursor: {{ti.cursor}}">
                   <sc-if value="{{ti.prog}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="6" stroke="#d97706" stroke-width="1.6"></circle><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6Z" fill="#d97706"></path></svg></sc-if>
                   <sc-if value="{{ti.todo}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="6" stroke="#71717a" stroke-width="1.6"></circle></svg></sc-if>
+                  <sc-if value="{{ti.done}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="7" fill="#7c3aed"></circle><path d="m5 8.2 2 2 4-4.2" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if><sc-if value="{{ti.canceled}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink: 0"><circle cx="8" cy="8" r="7" fill="#a1a1aa"></circle><path d="m5.6 5.6 4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"></path></svg></sc-if>
                   {{ti.status}}
                 </button>
               </div>
@@ -542,6 +537,9 @@ class Component extends DCLogic {
     links: { 'CIS-12345': [21, 22], 'CIS-12388': [41], 'CIS-12402': [51], 'CIS-12291': [] },
     // Quick actions in the header: Atlassian Cloud sync and new local task
     sync: 'idle', lastSync: '14:02', creatingTask: false, newTitle: '', newTasks: [],
+    // Task status overrides (local only), task order (Wharf-only, drag and drop), done todos visibility
+    tstatus: {}, statusMenu: null, taskOrder: null, dragKey: null, overKey: null,
+    doneOpen: {}, recentDone: {},
     // Date / reminder edits (popover pickers). pop: 'start' | 'end' | 'tstart' | 'tdue' | 'rem-new' | 'rem-<i>'
     dates: {}, tdates: {}, rems: {}, pop: null, pkMonth: 0, remDay: null, remTime: '09:00' };
 
@@ -737,7 +735,12 @@ class Component extends DCLogic {
       o.remTip = sent.length ? sent.length + ' sent' + (up.length ? ', ' + up.length + ' upcoming' : '') : '';
       return o;
     }
-    function metaOf(key) { return Object.assign({}, META[key], (self.state.tdates || {})[key] || {}); }
+    function metaOf(key) { var m = Object.assign({}, META[key], (self.state.tdates || {})[key] || {}); var st = (self.state.tstatus || {})[key]; if (st) m.st = st; return m; }
+    var ST = { todo: 'Todo', prog: 'In progress', done: 'Done', canceled: 'Canceled' };
+    function stFlags(st) { return { stTodo: st === 'todo', stProg: st === 'prog', stDone: st === 'done', stCanceled: st === 'canceled' }; }
+    // When a todo was completed (design data; Today = Oct 26)
+    var DONE_AT = { 24: 20, 25: 22, 11: 22, 12: 26, 32: 21 };
+    function doneLabel(id) { var d = DONE_AT[id]; return d === TODAY || d == null ? 'Done today' : 'Done ' + dateText(d); }
     function dueInfo(d) {
       if (d == null) return { label: 'No due date', tone: null };
       if (d < TODAY) return { label: 'Overdue', tone: 'over' };
@@ -751,7 +754,12 @@ class Component extends DCLogic {
       self.setState(Object.assign({ pop: on ? null : name, pkMonth: month || 0 }, extra || {}));
     }; }
     function closePop() { self.setState({ pop: null }); }
-    function toggleFn(id) { return function () { var n = Object.assign({}, self.state.done); n[id] = !self.state.done[id]; self.setState({ done: n }); }; }
+    // Checking a todo keeps it in place (struck through) for this session instead of making it jump away.
+    function toggleFn(id) { return function () {
+      var n = Object.assign({}, self.state.done), r = Object.assign({}, self.state.recentDone);
+      n[id] = !self.state.done[id]; if (n[id]) r[id] = true; else delete r[id];
+      self.setState({ done: n, recentDone: r });
+    }; }
     function selectFn(id) { return function () { self.setState({ sel: id, selKey: null, selReq: null, picker: null, pop: null }); }; }
     function selectTaskFn(key) { return function () { self.setState({ selKey: key, sel: null, selReq: null, picker: null, pop: null }); }; }
     function selectReqFn(key) { return function () { self.setState({ selReq: key, sel: null, selKey: null, picker: null, pop: null }); }; }
@@ -825,6 +833,18 @@ class Component extends DCLogic {
         pick: function () { self.setState({ tab: tb.id }); } };
     });
 
+    var order = (s.taskOrder || []).slice();
+    TASKS.forEach(function (k) { if (order.indexOf(k.key) < 0) order.push(k.key); });
+    TASKS.sort(function (a, b) { return order.indexOf(a.key) - order.indexOf(b.key); });
+    function moveTask(from, to) {
+      if (!from || from === to) { self.setState({ dragKey: null, overKey: null }); return; }
+      var o = order.filter(function (x) { return x !== from; });
+      var at = to == null ? o.length : o.indexOf(to);
+      o.splice(at, 0, from);
+      self.setState({ taskOrder: o, dragKey: null, overKey: null });
+    }
+    var recent = s.recentDone || {}, doneOpenMap = s.doneOpen || {}, doneTotal = 0;
+    function doneVisible(key) { return !!doneOpenMap[key]; }
     var chips = [], groups = [], completed = [], selTask = null, selTodo = null;
     TASKS.forEach(function (k) {
       var dc = 0, openToday = 0, hasOver = false;
@@ -842,12 +862,27 @@ class Component extends DCLogic {
         pick: function () { self.setState({ task: on ? null : k.key }); }
       });
       if (pickedTask && pickedTask !== k.key) return;
-      var items = k.todos.filter(function (t) {
-        if (!t.today || done[t.id]) return false;
+      var dv = doneVisible(k.key);
+      k.todos.forEach(function (t) { if (done[t.id]) doneTotal++; });
+      var openList = k.todos.filter(function (t) {
+        if (done[t.id]) return !!recent[t.id];
+        if (!t.today) return false;
         return tab === 'all' || eff(t).kind === tab;
-      }).map(function (t0) {
-        var t = eff(t0), isSel = s.sel === t.id;
+      });
+      var doneList = dv ? k.todos.filter(function (t) { return done[t.id] && !recent[t.id]; }) : [];
+      var items = openList.concat(doneList).map(function (t0) {
+        var t = eff(t0), isSel = s.sel === t.id, c = !!done[t.id];
+        if (c) return {
+          text: t.text, checked: true, boxBorder: '#0f766e', boxBg: '#0f766e', textColor: '#71717a', deco: 'line-through',
+          when: doneLabel(t.id), whenColor: DONE_AT[t.id] === TODAY || recent[t.id] ? '#6d28d9' : '#71717a', whenBg: DONE_AT[t.id] === TODAY || recent[t.id] ? '#f5f3ff' : '#f4f4f5',
+          rem: '', remColor: '#a1a1aa', remTip: '', selected: isSel, weight: isSel ? '600' : '400', hasNote: !!t.note,
+          hasReqs: reqsForTodo(t.id).length > 0, reqCount: reqsForTodo(t.id).length,
+          reqTitle: reqsForTodo(t.id).map(function (r) { return r.key + ' ' + r.title; }).join('\n'),
+          rowBg: isSel ? '#f0fdfa' : '#ffffff', rowRing: isSel ? 'inset 0 0 0 1px #99f6e4' : 'none',
+          toggle: toggleFn(t.id), select: selectFn(t.id), rowOpacity: s.dragKey === k.key ? '0.45' : '1'
+        };
         return {
+          checked: false, boxBorder: '#a1a1aa', boxBg: '#ffffff', textColor: '#09090b', deco: 'none', rowOpacity: s.dragKey === k.key ? '0.45' : '1',
           text: t.text, when: whenOf(t), whenColor: TONE[t.kind].c, whenBg: TONE[t.kind].bg, rem: t.rem || '', remColor: t.remColor, remTip: t.remTip,
           selected: isSel, weight: isSel ? '600' : '400', hasNote: !!t.note,
           hasReqs: reqsForTodo(t.id).length > 0, reqCount: reqsForTodo(t.id).length,
@@ -859,9 +894,29 @@ class Component extends DCLogic {
       if (!items.length && !k.fresh) return;
       var isOpen = !closed[k.key];
       var isTaskSel = s.selKey === k.key;
-      var gdue = dueInfo(metaOf(k.key).due);
-      groups.push({
-        taskSelected: isTaskSel, headBg: isTaskSel ? '#f0fdfa' : '#fafafa', headRing: isTaskSel ? 'inset 0 0 0 1px #99f6e4' : 'none',
+      var gm = metaOf(k.key), gdue = dueInfo(gm.due), isJira = k.origin === 'jira', gst = gm.st || 'todo';
+      var dropHere = s.dragKey && s.dragKey !== k.key && s.overKey === k.key, dragged = s.dragKey === k.key;
+      var ring = isTaskSel ? 'inset 0 0 0 1px #99f6e4' : 'none';
+      if (dropHere) ring = 'inset 0 2px 0 #0f766e' + (isTaskSel ? ', inset 0 0 0 1px #99f6e4' : '');
+      var menuOpen = !isJira && s.statusMenu === k.key, ndone = k.todos.filter(function (t) { return done[t.id]; }).length;
+      groups.push(Object.assign(stFlags(gst), {
+        jira: isJira, statusLabel: ST[gst], statusOpen: menuOpen,
+        statusTip: isJira ? ST[gst] + ' · from Jira' : ST[gst] + ' · change status',
+        statusBorder: menuOpen ? '#0f766e' : 'transparent', statusBg: menuOpen ? '#f0fdfa' : 'transparent', statusCursor: isJira ? 'default' : 'pointer',
+        statusToggle: isJira ? function () {} : function () { self.setState({ statusMenu: self.state.statusMenu === k.key ? null : k.key }); },
+        statusItems: ['todo', 'prog', 'done', 'canceled'].map(function (v) {
+          return Object.assign(stFlags(v), { label: ST[v], current: v === gst, bg: v === gst ? '#f4f4f5' : 'transparent',
+            pick: function () { var n = Object.assign({}, self.state.tstatus); n[k.key] = v; self.setState({ tstatus: n, statusMenu: null }); } });
+        }),
+        titleColor: gst === 'done' || gst === 'canceled' ? '#71717a' : '#09090b',
+        opacity: dragged ? '0.45' : '1',
+        dragStart: function (e) { try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', k.key); } catch (x) {} self.setState({ dragKey: k.key, statusMenu: null }); },
+        dragOver: function (e) { if (e && e.preventDefault) e.preventDefault(); if (self.state.overKey !== k.key) self.setState({ overKey: k.key }); },
+        drop: function (e) { if (e && e.preventDefault) e.preventDefault(); moveTask(self.state.dragKey, k.key); },
+        doneOpen: dv, doneTip: dv ? 'Hide done todos' : (ndone ? 'Show ' + ndone + ' done todo' + (ndone > 1 ? 's' : '') : 'No done todos yet'),
+        doneBorder: dv ? '#ddd6fe' : (ndone ? '#e4e4e7' : 'transparent'), doneBg: dv ? '#f5f3ff' : (ndone ? '#ffffff' : 'transparent'), doneColor: dv ? '#5b21b6' : '#71717a', doneCursor: ndone ? 'pointer' : 'default',
+        toggleDone: function () { var n = Object.assign({}, self.state.doneOpen); n[k.key] = !dv; self.setState({ doneOpen: n }); },
+        taskSelected: isTaskSel, headBg: isTaskSel ? '#f0fdfa' : '#fafafa', headRing: ring,
         titleDeco: isTaskSel ? 'underline' : 'none',
         selectTask: selectTaskFn(k.key),
         key: k.key, title: k.title, originColor: ORIGIN[k.origin], due: gdue.label,
@@ -874,7 +929,7 @@ class Component extends DCLogic {
         addBg: s.adding === k.key ? '#0f766e' : '#ffffff', addBorder: s.adding === k.key ? '#0f766e' : '#e4e4e7', addColor: s.adding === k.key ? '#ffffff' : '#52525b',
         add: function () { var n = Object.assign({}, self.state.closed); n[k.key] = false; self.setState({ adding: k.key, closed: n }); },
         cancelAdd: function () { self.setState({ adding: null }); }
-      });
+      }));
     });
 
     var ins = { rems: [] };
@@ -955,7 +1010,7 @@ class Component extends DCLogic {
         jira: isJira, local: !isJira,
         origin: isJira ? 'Jira' : 'Local', originBg: isJira ? '#eff6ff' : '#f0fdfa', originBorder: isJira ? '#dbeafe' : '#ccfbf1', originText: isJira ? '#1d4ed8' : '#0f766e',
         href: isJira ? 'TaskJira.dc.html' : 'TaskLocal.dc.html',
-        prog: m.st === 'prog', todo: m.st === 'todo', status: m.st === 'prog' ? 'In progress' : 'Todo',
+        prog: m.st === 'prog', todo: m.st === 'todo', done: m.st === 'done', canceled: m.st === 'canceled', status: ST[m.st] || 'Todo',
         fieldBg: isJira ? '#fafafa' : '#ffffff', fieldBorder: isJira ? '#f4f4f5' : '#e4e4e7', cursor: isJira ? 'default' : 'pointer',
         start: m.start ? dateText(m.start) : 'Not set', startColor: m.start ? '#09090b' : '#a1a1aa',
         startBg: isJira ? '#fafafa' : '#ffffff', startBorder: pop === 'tstart' && !isJira ? '#0f766e' : (isJira ? '#f4f4f5' : '#e4e4e7'),
@@ -1045,6 +1100,10 @@ class Component extends DCLogic {
       allOn: all, allBg: all ? '#0f766e' : '#ffffff', allBorder: all ? '#0f766e' : '#e4e4e7', allColor: all ? '#ffffff' : '#09090b',
       pickAll: function () { self.setState({ task: null }); },
       completed: completed, completedCount: completed.length,
+      dragging: !!s.dragKey, endBorder: s.overKey === '__end' ? '#0f766e' : '#d4d4d8', endBg: s.overKey === '__end' ? '#f0fdfa' : '#fafafa',
+      dragOverEnd: function (e) { if (e && e.preventDefault) e.preventDefault(); if (self.state.overKey !== '__end') self.setState({ overKey: '__end' }); },
+      dropEnd: function (e) { if (e && e.preventDefault) e.preventDefault(); moveTask(self.state.dragKey, null); },
+      dragEnd: function () { if (self.state.dragKey) self.setState({ dragKey: null, overKey: null }); },
       showCompleted: !!s.showCompleted, hideCompleted: !s.showCompleted,
       sync: (function () {
         var st = s.sync || 'idle', busy = st === 'busy', failed = st === 'failed';

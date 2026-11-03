@@ -66,10 +66,14 @@ URL 상태 제안 (디자인에는 없음, 구현 판단): `?todo=22`, `?task=WH
 ### Todos card (`screens/01`, `02`)
 - **컬럼:** `Todo` / `Reminder` / `When`.
 - **Task 그룹 행** (배경 `#fafafa`):
-  - 접기 chevron, origin 점(Jira 파랑 / Local teal), 키(mono), 제목
+  - 왼쪽 여백의 grip(⋮⋮), 접기 chevron, **상태 아이콘**, origin 점(Jira 파랑 / Local teal), 키(mono), 제목
+  - **상태 아이콘** (16px, 토큰 시트와 같은 모양): Todo(빈 원, gray) · In progress(반 채운 원, amber) · Done(violet 체크) · Canceled(gray ×). Done·Canceled Task는 제목이 gray로 흐려져.
+    - Local: 아이콘을 누르면 상태 메뉴(Todo / In progress / Done / Canceled, 현재 값에 체크)가 열려서 바로 바꿀 수 있어.
+    - Jira: 읽기 전용. 툴팁 `In progress · from Jira`, 눌리지 않아.
   - 제목을 누르면 Inspector에 Task가 열려. 선택되면 행이 teal 링으로 표시되고 제목에 밑줄.
   - 마감 태그: `Due today`(orange) / `Overdue`(red) / `Due Oct 28`(gray). Task의 due로 계산.
-  - 진행률: violet 바 + `2/5`
+  - 진행률: violet 바 + `2/5`. 숫자는 이 Task의 끝난 Todo를 펼치고 접는 토글 버튼이야. 끝난 Todo가 있으면 옅은 테두리가 보이고, 펼치면 violet 테두리·배경이 돼.
+  - **드래그 앤 드롭 순서 변경:** 그룹 헤더 행 전체를 잡고 끌어. 끄는 동안 그 그룹(헤더+Todo)이 흐려지고, 놓을 위치의 헤더 위에 teal 2px 선이 표시돼 (그 Task 앞으로 이동). 목록 맨 끝에는 끄는 동안에만 `Drop here to move to the end` 영역이 나타나. 순서는 Wharf에만 저장해 (Jira Task 포함). 키보드 대안으로 grip에 포커스 후 `⌥↑`/`⌥↓`를 권장해 (디자인에는 없음).
   - `+` 버튼: 그룹 바로 아래에 인라인 입력 행 `New todo for WHF-003`이 열려 (`Enter` 추가 · `Esc` 취소). 열려 있는 동안 `+`는 teal로 채워져.
 - **Todo 행:**
   - 체크박스, 텍스트(누르면 Inspector에 Todo)
@@ -78,7 +82,10 @@ URL 상태 제안 (디자인에는 없음, 구현 판단): `?todo=22`, `?task=WH
   - When pill: `N days late`(red) / `Due today`(orange) / `By Oct 28` / `Starts today` / `No date`(gray). Todo의 end(없으면 start)로 계산.
   - 선택된 행: 배경 `#f0fdfa` + inset 1px `#99f6e4` 링 (왼쪽 보더 강조는 쓰지 않음).
 - **Today에 나오는 Todo:** 디자인 데이터에서는 미완료 Todo 중 오늘 할 수 있는 것(기한 지난 것 포함)만 보여. 정확한 선정 규칙은 도메인 스펙을 따라.
-- **`Completed today` 섹션:** 접기 가능. 오늘 완료한 Todo가 취소선으로 표시되고, 오른쪽에 Task 키가 보여.
+- **끝난 Todo 보기** (`Completed today` 섹션은 없앴어):
+  - Todo를 체크하면 사라지지 않고 그 자리에 취소선 + 체크된 상태로 남아 (When에 violet `Done today`). 실수로 체크해도 바로 되돌릴 수 있고, 목록이 갑자기 움직이지 않아. 다음에 Today를 새로 열면 정리돼.
+  - **그룹별 토글:** 그룹 헤더의 `2/5`를 누르면 그 Task의 끝난 Todo가 그룹 아래쪽에 회색 취소선 행으로 붙어 (When에 `Done Oct 22` 회색, 오늘 끝낸 건 violet `Done today`). 다시 누르면 접혀. 기본은 접힌 상태야.
+  - 끝난 Todo도 체크를 풀면 다시 열린 Todo로 돌아가.
 
 ### Requests card (`screens/04`)
 - **헤더 버튼:** `Requests 4 · ● 2 changed today` + chevron. 누르면 카드가 그 자리에서 펼쳐져 (팝오버 아님).
@@ -289,7 +296,8 @@ URL 상태 제안 (디자인에는 없음, 구현 판단): `?todo=22`, `?task=WH
   - `note` (plain text, Wharf 전용)
   - `start_date`, `end_date` (날짜만)
   - `reminders[]`: `remind_at`(로컬 datetime) + 발송 여부(`sent_at` 등) → `Sent` 표시와 수정 불가 판단에 필요
-  - `position` (Task 안 정렬)
+  - `position` (Task 안 정렬), `completed_at` (`Done Oct 22` 표시와 정렬용)
+- **Task:** `position` (Today 그룹 순서, Wharf 전용, Jira Task 포함) · Local Task의 `status` 변경 API (Todo / In progress / Done / Canceled)
 - **Service Desk request**
   - 필드: `{ issue_key, title, status, created_at, status_at }`. status는 Open / Pending / In Progress / Security Review / Done / Cancel.
   - Today에는 Done·Cancel이 아닌 것만 보여.
@@ -343,3 +351,7 @@ URL 상태 제안 (디자인에는 없음, 구현 판단): `?todo=22`, `?task=WH
 | `17-today-sync-running` | 헤더 Sync 진행 중 + 로딩 토스트 |
 | `18-today-new-local-task` | 헤더 New task 팝오버 |
 | `19-today-local-task-created` | 새 Task 생성 직후 (Todo 입력 행 + Task Inspector) |
+| `20-today-task-done-expanded` | SEC-142의 `2/5`를 눌러 끝난 Todo를 펼친 상태 |
+| `21-today-task-status-menu` | Local Task 상태 메뉴 |
+| `22-today-drag-reorder` | Task 그룹 드래그 중 (드롭 위치 표시 + 끝 영역) |
+| `23-today-todo-just-checked` | 방금 체크한 Todo가 제자리에 남은 모습 |
