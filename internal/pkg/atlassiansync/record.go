@@ -7,8 +7,10 @@ import "time"
 // Record is a sync that stored what Atlassian returned, completely or partly.
 type Record struct {
 	SyncedAt time.Time
-	// Issues is how many Jira issues were stored; IssueFailures is how many
-	// failed to read or convert. A failed issue may still be among Issues.
+	// Issues is how many Jira issues were stored, from the search and from
+	// refetching stored open issues missing from it; IssueFailures is how many
+	// failed to read, convert or refetch. A failed issue may still be among
+	// Issues, and a failed refetch is not, so the two are not "N of M".
 	Issues        int
 	IssueFailures int
 	// OpenRequests is how many stored requests are not closed, and
