@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { keys, useRequests, useTaskActions, useTasks, useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import type { TaskListItem, TaskStatus, Todo } from '@/lib/api'
-import { compareTodayTasks, isTodayTask, isTodayTodo, startOfToday } from '@/lib/dates'
+import { compareTodayTasks, isTodayTask, isTodayTodo, reorderedIDs, startOfToday } from '@/lib/dates'
 import { Header } from './Header'
 import { RequestInspector } from './RequestInspector'
 import { RequestsCard } from './RequestsCard'
@@ -86,13 +86,9 @@ export function TodayPage() {
     setKeptTasks((s) => toggled(s, task.id, true))
   }
 
-  // Positions cover every task, not only the listed ones, so tasks that
-  // come back to Today return to where they were.
   const move = (id: string, before: string | null) => {
-    const order = [...tasks].sort(compareTodayTasks).map((t) => t.id)
-    const next = order.filter((x) => x !== id)
-    next.splice(before === null ? next.length : next.indexOf(before), 0, id)
-    if (next.some((x, i) => x !== order[i])) reorder(next)
+    const ids = reorderedIDs(tasks, id, before)
+    if (ids) reorder(ids)
   }
 
   const select = (s: Selection) => {

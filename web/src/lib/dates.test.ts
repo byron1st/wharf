@@ -3,6 +3,7 @@ import {
   atLocal,
   compareTodayTasks,
   doneLabel,
+  reorderedIDs,
   dueTag,
   isTime,
   isTodayTask,
@@ -168,5 +169,33 @@ describe('compareTodayTasks', () => {
       t('jira-B', null),
     ]
     expect(tasks.sort(compareTodayTasks).map((x) => x.id)).toEqual(['jira-E', 'local-B', 'jira-D', 'jira-C', 'jira-A', 'jira-B'])
+  })
+})
+
+describe('reorderedIDs', () => {
+  // B is hidden from Today (say, done), but it still holds its place.
+  const tasks = [
+    { id: 'A', position: 0, due_date: null },
+    { id: 'B', position: 1, due_date: null },
+    { id: 'C', position: 2, due_date: null },
+    { id: 'D', position: null, due_date: null },
+  ]
+
+  it('moves a task up before another', () => {
+    expect(reorderedIDs(tasks, 'C', 'A')).toEqual(['C', 'A', 'B', 'D'])
+  })
+
+  it('moves a task down past a hidden one', () => {
+    expect(reorderedIDs(tasks, 'A', 'D')).toEqual(['B', 'C', 'A', 'D'])
+  })
+
+  it('moves a task to the end, also when its target is gone', () => {
+    expect(reorderedIDs(tasks, 'A', null)).toEqual(['B', 'C', 'D', 'A'])
+    expect(reorderedIDs(tasks, 'A', 'GONE')).toEqual(['B', 'C', 'D', 'A'])
+  })
+
+  it('is null when nothing would move', () => {
+    expect(reorderedIDs(tasks, 'B', 'C')).toBeNull()
+    expect(reorderedIDs(tasks, 'D', null)).toBeNull()
   })
 })

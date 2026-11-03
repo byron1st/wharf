@@ -175,8 +175,7 @@ func (m *manager) CreateLocalTask(ctx context.Context, t task.Task) (string, err
 	return t.ID, nil
 }
 
-// ListTasks returns every stored task in ID order, without relations but
-// with their positions.
+// ListTasks returns every stored task in ID order, without relations.
 func (m *manager) ListTasks(ctx context.Context) ([]task.Task, error) {
 	if err := m.checkConnected(); err != nil {
 		return nil, err
@@ -187,15 +186,7 @@ func (m *manager) ListTasks(ctx context.Context) ([]task.Task, error) {
 		return nil, errors.Join(ErrFailedToListTasks, err)
 	}
 
-	tasks := fromTasks(rows)
-	for i, row := range rows {
-		if row.Position.Valid {
-			position := int(row.Position.Int64)
-			tasks[i].Position = &position
-		}
-	}
-
-	return tasks, nil
+	return fromTasks(rows), nil
 }
 
 // ListTasksByIDs returns the stored tasks among ids in ID order, without
@@ -651,7 +642,18 @@ func fromTask(row Task) task.Task {
 		Status:      task.Status(row.Status),
 		StartDate:   fromNullTime(row.StartDate),
 		DueDate:     fromNullTime(row.DueDate),
+		Position:    fromNullInt(row.Position),
 	}
+}
+
+func fromNullInt(n sql.NullInt64) *int {
+	if !n.Valid {
+		return nil
+	}
+
+	v := int(n.Int64)
+
+	return &v
 }
 
 func fromNullTime(t sql.NullTime) *time.Time {

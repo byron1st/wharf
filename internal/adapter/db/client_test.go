@@ -791,6 +791,10 @@ func TestSetTaskPositions(t *testing.T) {
 	require.NoError(t, manager.SetTaskPositions(context.Background(), []string{"T3", "MISSING", "T1"}))
 	require.Equal(t, map[string]*int{"T1": new(2), "T2": nil, "T3": new(0)}, positions())
 
+	got, err := manager.GetTask(context.Background(), "T1")
+	require.NoError(t, err)
+	require.Equal(t, new(2), got.Position)
+
 	// A sync keeps the positions, and tasks left out keep theirs.
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("T3")}))
 	require.NoError(t, manager.SetTaskPositions(context.Background(), []string{"T2"}))

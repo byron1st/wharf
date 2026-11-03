@@ -226,6 +226,8 @@ function TaskStatusButton({ task, onSetStatus }: { task: TaskListItem; onSetStat
           type="button"
           aria-label={`Status: ${label}`}
           title={`${label} · change status`}
+          // Radix opens the menu on pointerdown, so keep it from arming the header's drag too.
+          onPointerDown={(e) => e.stopPropagation()}
           className={cn(
             'flex size-[26px] shrink-0 items-center justify-center rounded-md border',
             open ? 'border-primary bg-primary-subtle' : 'border-transparent hover:bg-black/5',

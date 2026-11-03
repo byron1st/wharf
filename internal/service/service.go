@@ -222,8 +222,9 @@ func (s *service) UpdateTaskStatus(ctx context.Context, id string, status task.S
 }
 
 // ReorderTasks orders the tasks on Today as ids lists them, whatever their
-// origin. IDs that are not stored are skipped, and tasks not in ids keep
-// their positions. It fails with ErrEmptyTaskIDToReorder for a blank ID and
+// origin. ids should list every stored task: IDs that are not stored are
+// skipped, and tasks not in ids keep their positions, which may then tie
+// with listed ones. It fails with ErrEmptyTaskIDToReorder for a blank ID and
 // with ErrDuplicateTaskIDToReorder for an ID listed twice.
 func (s *service) ReorderTasks(ctx context.Context, ids []string) error {
 	seen := make(map[string]bool, len(ids))

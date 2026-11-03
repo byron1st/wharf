@@ -143,6 +143,24 @@ export function compareTodayTasks(
   return da === db ? a.id.localeCompare(b.id) : da < db ? -1 : 1
 }
 
+/**
+ * reorderedIDs is every task's ID in Today's order after moving id right
+ * before the task before, or last when before is null or no longer listed.
+ * It covers hidden tasks too, so a task that comes back to Today returns to
+ * its place. It is null when nothing would move.
+ */
+export function reorderedIDs(
+  tasks: { id: string; position: number | null; due_date: string | null }[],
+  id: string,
+  before: string | null,
+): string[] | null {
+  const order = [...tasks].sort(compareTodayTasks).map((t) => t.id)
+  const next = order.filter((x) => x !== id)
+  const at = before === null ? -1 : next.indexOf(before)
+  next.splice(at < 0 ? next.length : at, 0, id)
+  return next.some((x, i) => x !== order[i]) ? next : null
+}
+
 /** isTodayTodo picks the todos Today lists: open ones that can start by today. */
 export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, today: string): boolean {
   return !t.is_done && (!t.start_date || t.start_date <= today)
