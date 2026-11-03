@@ -46,6 +46,7 @@ type Task struct {
 	Status      string
 	StartDate   sql.NullTime
 	DueDate     sql.NullTime
+	Position    sql.NullInt64
 }
 
 type TaskHierarchy struct {

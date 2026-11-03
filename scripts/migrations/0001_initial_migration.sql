@@ -1,3 +1,5 @@
+-- position orders tasks on Today, Jira ones included, and is NULL until the
+-- tasks are first reordered. Syncs never write it.
 CREATE TABLE tasks (
     id          TEXT PRIMARY KEY NOT NULL,
     originated  TEXT NOT NULL,
@@ -5,7 +7,8 @@ CREATE TABLE tasks (
     description TEXT NOT NULL DEFAULT '',
     status      TEXT NOT NULL,
     start_date  DATETIME,
-    due_date    DATETIME
+    due_date    DATETIME,
+    position    INTEGER
 );
 
 -- A task has at most one parent. Relations may point at tasks that are not

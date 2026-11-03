@@ -297,6 +297,70 @@ func TestUpdateTaskPropagatesWriteFailure(t *testing.T) {
 	require.NotErrorIs(t, err, service.ErrLocalTaskToUpdateNotFound)
 }
 
+func TestUpdateTaskStatus(t *testing.T) {
+	failure := errors.New("write failed")
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().
+		UpdateLocalTaskStatus(mock.Anything, "local-WHF-001", task.Status(task.StatusDone)).
+		Return(nil).
+		Once()
+	manager.EXPECT().
+		UpdateLocalTaskStatus(mock.Anything, "jira-WHF-1", task.Status(task.StatusDone)).
+		Return(db.ErrLocalTaskToSetStatusNotFound).
+		Once()
+	manager.EXPECT().
+		UpdateLocalTaskStatus(mock.Anything, "BROKEN", task.Status(task.StatusDone)).
+		Return(failure).
+		Once()
+
+	svc := service.NewService(mocks.NewMockClient(t), manager)
+
+	require.NoError(t, svc.UpdateTaskStatus(t.Context(), "local-WHF-001", task.StatusDone))
+
+	err := svc.UpdateTaskStatus(t.Context(), "jira-WHF-1", task.StatusDone)
+	require.ErrorIs(t, err, service.ErrLocalTaskToSetStatusNotFound)
+	require.ErrorContains(t, err, "id=jira-WHF-1")
+
+	err = svc.UpdateTaskStatus(t.Context(), "BROKEN", task.StatusDone)
+	require.ErrorIs(t, err, failure)
+	require.NotErrorIs(t, err, service.ErrLocalTaskToSetStatusNotFound)
+}
+
+func TestUpdateTaskStatusRejectsUnknownStatus(t *testing.T) {
+	// No expectations: nothing may be stored.
+	svc := service.NewService(mocks.NewMockClient(t), mocks.NewMockManager(t))
+
+	for _, status := range []task.Status{"", "x"} {
+		err := svc.UpdateTaskStatus(t.Context(), "local-WHF-001", status)
+		require.ErrorIs(t, err, service.ErrUnknownTaskStatusToSet)
+	}
+}
+
+func TestReorderTasks(t *testing.T) {
+	failure := errors.New("write failed")
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().SetTaskPositions(mock.Anything, []string{"T2", "T1"}).Return(nil).Once()
+	manager.EXPECT().SetTaskPositions(mock.Anything, []string(nil)).Return(failure).Once()
+
+	svc := service.NewService(mocks.NewMockClient(t), manager)
+
+	require.NoError(t, svc.ReorderTasks(t.Context(), []string{"T2", "T1"}))
+	require.ErrorIs(t, svc.ReorderTasks(t.Context(), nil), failure)
+}
+
+func TestReorderTasksRejectsInvalidIDs(t *testing.T) {
+	// No expectations: nothing may be stored.
+	svc := service.NewService(mocks.NewMockClient(t), mocks.NewMockManager(t))
+
+	require.ErrorIs(t, svc.ReorderTasks(t.Context(), []string{"T1", " "}), service.ErrEmptyTaskIDToReorder)
+
+	err := svc.ReorderTasks(t.Context(), []string{"T1", "T2", "T1"})
+	require.ErrorIs(t, err, service.ErrDuplicateTaskIDToReorder)
+	require.ErrorContains(t, err, "id=T1")
+}
+
 func TestDeleteTask(t *testing.T) {
 	failure := errors.New("delete failed")
 

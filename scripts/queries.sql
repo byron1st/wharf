@@ -75,6 +75,12 @@ UPDATE tasks SET
     due_date    = ?
 WHERE id = ? AND originated = 'local';
 
+-- name: UpdateLocalTaskStatus :execrows
+UPDATE tasks SET status = ? WHERE id = ? AND originated = 'local';
+
+-- name: UpdateTaskPosition :exec
+UPDATE tasks SET position = ? WHERE id = ?;
+
 -- name: DeleteTask :execrows
 DELETE FROM tasks WHERE id = ?;
 

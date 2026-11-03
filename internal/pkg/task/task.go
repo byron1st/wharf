@@ -13,4 +13,7 @@ type Task struct {
 	ParentID    string
 	ChildrenIDs []string
 	LinkedIDs   []string
+	// Position orders tasks on Today. It is nil until the tasks are first
+	// reordered, and only ListTasks reads it.
+	Position *int
 }

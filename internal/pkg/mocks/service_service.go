@@ -684,6 +684,63 @@ func (_c *MockService_ListTodos_Call) RunAndReturn(run func(ctx context.Context,
 	return _c
 }
 
+// ReorderTasks provides a mock function for the type MockService
+func (_mock *MockService) ReorderTasks(ctx context.Context, ids []string) error {
+	ret := _mock.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReorderTasks")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) error); ok {
+		r0 = returnFunc(ctx, ids)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockService_ReorderTasks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReorderTasks'
+type MockService_ReorderTasks_Call struct {
+	*mock.Call
+}
+
+// ReorderTasks is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []string
+func (_e *MockService_Expecter) ReorderTasks(ctx any, ids any) *MockService_ReorderTasks_Call {
+	return &MockService_ReorderTasks_Call{Call: _e.mock.On("ReorderTasks", ctx, ids)}
+}
+
+func (_c *MockService_ReorderTasks_Call) Run(run func(ctx context.Context, ids []string)) *MockService_ReorderTasks_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []string
+		if args[1] != nil {
+			arg1 = args[1].([]string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_ReorderTasks_Call) Return(err error) *MockService_ReorderTasks_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockService_ReorderTasks_Call) RunAndReturn(run func(ctx context.Context, ids []string) error) *MockService_ReorderTasks_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SyncAtlassian provides a mock function for the type MockService
 func (_mock *MockService) SyncAtlassian(ctx context.Context) (service.AtlassianSync, error) {
 	ret := _mock.Called(ctx)
@@ -926,6 +983,69 @@ func (_c *MockService_UpdateTask_Call) Return(err error) *MockService_UpdateTask
 }
 
 func (_c *MockService_UpdateTask_Call) RunAndReturn(run func(ctx context.Context, t task.Task) error) *MockService_UpdateTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateTaskStatus provides a mock function for the type MockService
+func (_mock *MockService) UpdateTaskStatus(ctx context.Context, id string, status task.Status) error {
+	ret := _mock.Called(ctx, id, status)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateTaskStatus")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, task.Status) error); ok {
+		r0 = returnFunc(ctx, id, status)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockService_UpdateTaskStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTaskStatus'
+type MockService_UpdateTaskStatus_Call struct {
+	*mock.Call
+}
+
+// UpdateTaskStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - status task.Status
+func (_e *MockService_Expecter) UpdateTaskStatus(ctx any, id any, status any) *MockService_UpdateTaskStatus_Call {
+	return &MockService_UpdateTaskStatus_Call{Call: _e.mock.On("UpdateTaskStatus", ctx, id, status)}
+}
+
+func (_c *MockService_UpdateTaskStatus_Call) Run(run func(ctx context.Context, id string, status task.Status)) *MockService_UpdateTaskStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 task.Status
+		if args[2] != nil {
+			arg2 = args[2].(task.Status)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockService_UpdateTaskStatus_Call) Return(err error) *MockService_UpdateTaskStatus_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockService_UpdateTaskStatus_Call) RunAndReturn(run func(ctx context.Context, id string, status task.Status) error) *MockService_UpdateTaskStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }
