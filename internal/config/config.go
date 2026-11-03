@@ -178,7 +178,7 @@ func SaveAtlassian(path, siteURL, email, apiToken string) error {
 
 	data, err := os.ReadFile(target)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReadConfigFileToSave, target), err)
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReadConfigFileToSave, path), err)
 	}
 
 	lines := strings.SplitAfter(string(data), "\n")
@@ -195,7 +195,7 @@ func SaveAtlassian(path, siteURL, email, apiToken string) error {
 		lines = setLine(lines, atlassianKeys[i], string(line))
 	}
 
-	return writeFileAtomic(target, []byte(strings.Join(lines, "")))
+	return writeFileAtomic(path, target, []byte(strings.Join(lines, "")))
 }
 
 // setLine replaces the first top-level assignment of key in lines with line,
@@ -217,11 +217,11 @@ func setLine(lines []string, key, line string) []string {
 	return append(lines, line)
 }
 
-// writeFileAtomic writes data to a temp file next to path with mode 0600,
-// checks it loads, and renames it over path, creating path's directory when
-// missing.
-func writeFileAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
+// writeFileAtomic writes data to a temp file next to target with mode 0600,
+// checks it loads, and renames it over target, creating target's directory
+// when missing. Errors name path, the config file as the caller gave it.
+func writeFileAtomic(path, target string, data []byte) error {
+	dir := filepath.Dir(target)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToCreateConfigDir, dir), err)
 	}
@@ -247,7 +247,7 @@ func writeFileAtomic(path string, data []byte) error {
 		return fmt.Errorf("%w: path=%s", err, path)
 	}
 
-	if err := os.Rename(f.Name(), path); err != nil {
+	if err := os.Rename(f.Name(), target); err != nil {
 		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReplaceConfigFile, path), err)
 	}
 

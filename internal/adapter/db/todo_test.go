@@ -253,7 +253,9 @@ func TestListTodosCompletedSince(t *testing.T) {
 	ctx := context.Background()
 
 	early := create(t, manager, todo.Todo{TaskID: "J1", Description: "early", IsDone: true})
-	since := time.Now()
+	// A zone east of UTC: compared as text against the UTC completion time,
+	// its wall clock would sort after it unless the filter is normalized.
+	since := time.Now().In(time.FixedZone("KST", 9*60*60))
 	late := create(
 		t,
 		manager,
