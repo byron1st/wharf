@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { keys, useRequests, useTaskActions, useTasks, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
-import type { TaskListItem, Todo } from '@/lib/api'
+import { isTodayTask, type TaskListItem, type Todo } from '@/lib/api'
 import { fromTaskDate, isTodayTodo, startOfToday } from '@/lib/dates'
 import { Header } from './Header'
 import { RequestInspector } from './RequestInspector'
@@ -38,8 +38,6 @@ export function TodayPage() {
   const [params, setParams] = useSearchParams()
   const selection = selectionOf(params)
   const [adding, setAdding] = useState<string | null>(null)
-  // Tasks created in this session stay on Today before they have todos.
-  const [fresh, setFresh] = useState<string[]>([])
   const { create } = useTaskActions()
 
   const { data: tasks = [] } = useTasks()
@@ -65,17 +63,18 @@ export function TodayPage() {
 
   const taskMap = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks])
 
+  // Open tasks are listed even without todos for today, so todos can be added to them.
   const groups: TodoGroup[] = useMemo(() => {
     const byTask = new Map<string, Todo[]>()
     for (const t of todayTodos) byTask.set(t.task_id, [...(byTask.get(t.task_id) ?? []), t])
     return tasks
-      .filter((t) => byTask.has(t.id) || fresh.includes(t.id) || adding === t.id)
+      .filter((t) => isTodayTask(t, byTask.has(t.id)) || adding === t.id)
       .sort(byDue)
       .map((task) => ({
         task,
         todos: (byTask.get(task.id) ?? []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
       }))
-  }, [tasks, todayTodos, fresh, adding])
+  }, [tasks, todayTodos, adding])
 
   const select = (s: Selection) => {
     const next = new URLSearchParams()
@@ -87,7 +86,6 @@ export function TodayPage() {
 
   const createTask = async (title: string) => {
     const id = await create(title)
-    setFresh((f) => [...f, id])
     setAdding(id)
     select({ kind: 'task', id })
   }

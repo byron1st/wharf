@@ -245,3 +245,8 @@ export function taskOrigin(id: string): Origin | undefined {
   const m = /^(jira|local|notion|gitlab)-/.exec(id)
   return m ? (m[1] as Origin) : undefined
 }
+
+/** isTodayTask is whether Today lists a task: any open one, and a done or canceled one only while it has todos for today. */
+export function isTodayTask(task: { status: TaskStatus }, hasTodayTodos: boolean): boolean {
+  return hasTodayTodos || (task.status !== 'done' && task.status !== 'canceled')
+}
