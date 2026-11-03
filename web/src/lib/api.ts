@@ -17,6 +17,8 @@ export interface TaskSummary {
 export interface TaskListItem extends TaskSummary {
   todo_count: number
   done_todo_count: number
+  /** position orders Today; null until the tasks are first reordered. */
+  position: number | null
 }
 
 export interface TaskDetail extends TaskSummary {
@@ -174,6 +176,9 @@ export const api = {
   createTask: (t: TaskInput) => request<{ id: string }>('POST', '/api/tasks', t).then((r) => r.id),
   updateTask: (id: string, t: TaskInput) => request<void>('PUT', `/api/tasks/${enc(id)}`, t),
   deleteTask: (id: string) => request<void>('DELETE', `/api/tasks/${enc(id)}`),
+  setTaskStatus: (id: string, status: TaskStatus) =>
+    request<void>('PUT', `/api/tasks/${enc(id)}/status`, { status }),
+  reorderTasks: (ids: string[]) => request<void>('PUT', '/api/tasks/order', { ids }),
   syncTask: (id: string) => request<TaskSync>('POST', `/api/tasks/${enc(id)}/sync`),
 
   listTodos: (f: TodoFilter) =>

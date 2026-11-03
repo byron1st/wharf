@@ -116,6 +116,7 @@ export function TodoInspector({
   onClose,
   onSelectTask,
   onSelectRequest,
+  onToggleDone,
 }: {
   todo: Todo
   task: TaskListItem | undefined
@@ -123,6 +124,7 @@ export function TodoInspector({
   onClose: () => void
   onSelectTask: (id: string) => void
   onSelectRequest: (key: string) => void
+  onToggleDone: (todo: Todo, done: boolean) => void
 }) {
   const { today } = useNow()
   const { update, remove } = useTodoActions()
@@ -237,7 +239,7 @@ export function TodoInspector({
         <div className="flex items-center gap-2 border-t border-[#f4f4f5] pt-3.5">
           <button
             type="button"
-            onClick={() => update(todo, { is_done: !todo.is_done })}
+            onClick={() => onToggleDone(todo, !todo.is_done)}
             className={cn(
               'flex h-[34px] flex-1 items-center justify-center gap-1.5 rounded-md border text-[13px] font-medium',
               todo.is_done

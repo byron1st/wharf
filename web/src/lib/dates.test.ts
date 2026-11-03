@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   atLocal,
+  compareTodayTasks,
+  doneLabel,
   dueTag,
   isTime,
   isTodayTask,
@@ -135,5 +137,36 @@ describe('isTime', () => {
     expect(isTime('23:59')).toBe(true)
     expect(isTime('9:30')).toBe(false)
     expect(isTime('24:00')).toBe(false)
+  })
+})
+
+describe('doneLabel', () => {
+  it('says today for a todo completed today in local time, else the day', () => {
+    expect(doneLabel(atLocal(today, '00:05').toISOString(), today)).toEqual({ label: 'Done today', today: true })
+    expect(doneLabel(atLocal('2026-10-22', '23:55').toISOString(), today)).toEqual({ label: 'Done Oct 22', today: false })
+  })
+
+  it('treats a todo just checked, without a completion time yet, as done today', () => {
+    expect(doneLabel(null, today).label).toBe('Done today')
+  })
+})
+
+describe('compareTodayTasks', () => {
+  const t = (id: string, position: number | null, due: string | null = null) => ({
+    id,
+    position,
+    due_date: due && `${due}T00:00:00Z`,
+  })
+
+  it('puts positioned tasks first in position order, then the rest by due date and ID', () => {
+    const tasks = [
+      t('jira-C', null, '2026-10-28'),
+      t('jira-A', null),
+      t('local-B', 1),
+      t('jira-D', null, '2026-10-27'),
+      t('jira-E', 0, '2026-11-30'),
+      t('jira-B', null),
+    ]
+    expect(tasks.sort(compareTodayTasks).map((x) => x.id)).toEqual(['jira-E', 'local-B', 'jira-D', 'jira-C', 'jira-A', 'jira-B'])
   })
 })

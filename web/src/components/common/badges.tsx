@@ -1,4 +1,4 @@
-import { CircleCheck, CircleX, Diamond, Laptop, Ticket } from 'lucide-react'
+import { Diamond, Laptop, Ticket } from 'lucide-react'
 import type { Origin, ServiceDeskRequest, TaskStatus } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -61,8 +61,20 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
 
 /** StatusIcon is the task status glyph: open circle, half-filled amber, violet check, gray cross. */
 export function StatusIcon({ status, size = 14 }: { status: TaskStatus; size?: number }) {
-  if (status === 'done') return <CircleCheck size={size} className="shrink-0 text-[#7c3aed]" aria-hidden />
-  if (status === 'canceled') return <CircleX size={size} className="shrink-0 text-[#a1a1aa]" aria-hidden />
+  if (status === 'done')
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden className="shrink-0">
+        <circle cx="8" cy="8" r="7" fill="#7c3aed" />
+        <path d="m5 8.2 2 2 4-4.2" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  if (status === 'canceled')
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden className="shrink-0">
+        <circle cx="8" cy="8" r="7" fill="#a1a1aa" />
+        <path d="m5.6 5.6 4.8 4.8M10.4 5.6l-4.8 4.8" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    )
   if (status === 'in-progress')
     return (
       <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden className="shrink-0">

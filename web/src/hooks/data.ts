@@ -7,6 +7,7 @@ import {
   type TaskDetail,
   type TaskInput,
   type TaskListItem,
+  type TaskStatus,
   type Todo,
   type TodoFilter,
   type TodoInput,
@@ -286,8 +287,50 @@ export function useTaskActions() {
     },
   })
 
+  const setStatus = useMutation({
+    mutationKey: ['task-save'],
+    mutationFn: ({ task, status }: { task: { id: string }; status: TaskStatus }) =>
+      queued(`task-${task.id}`, () => api.setTaskStatus(task.id, status)),
+    onMutate: async ({ task, status }) => {
+      await qc.cancelQueries({ queryKey: keys.tasks })
+      await qc.cancelQueries({ queryKey: keys.task(task.id) })
+      const snap = snapshot(qc)
+      qc.setQueryData<TaskDetail>(keys.task(task.id), (old) => (old ? { ...old, status } : old))
+      qc.setQueryData<TaskListItem[]>(keys.tasks, (old) => old?.map((t) => (t.id === task.id ? { ...t, status } : t)))
+      return snap
+    },
+    onError: (err, vars, snap) => {
+      if (snap) restore(qc, snap)
+      reportSaveError(err, 'task', () => setStatus.mutate(vars))
+    },
+    onSettled: (_d, _e, { task }) => {
+      void qc.invalidateQueries({ queryKey: keys.task(task.id) })
+      void qc.invalidateQueries({ queryKey: keys.tasks })
+    },
+  })
+
+  const reorder = useMutation({
+    mutationFn: (ids: string[]) => queued('task-order', () => api.reorderTasks(ids)),
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: keys.tasks })
+      const snap = snapshot(qc)
+      const at = new Map(ids.map((id, i) => [id, i]))
+      qc.setQueryData<TaskListItem[]>(keys.tasks, (old) => old?.map((t) => ({ ...t, position: at.get(t.id) ?? t.position })))
+      return snap
+    },
+    onError: (err, ids, snap) => {
+      if (snap) restore(qc, snap)
+      reportSaveError(err, 'task', () => reorder.mutate(ids))
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.tasks }),
+  })
+
   return {
     update: (task: TaskDetail, patch: Partial<TaskInput>) => update.mutate({ task, patch }),
+    /** setStatus changes only the status of a local task. */
+    setStatus: (task: { id: string }, status: TaskStatus) => setStatus.mutate({ task, status }),
+    /** reorder stores ids, every task in Today's order, as the task positions. */
+    reorder: (ids: string[]) => reorder.mutate(ids),
     updateAsync: (task: TaskDetail, patch: Partial<TaskInput>) => update.mutateAsync({ task, patch }),
     create: (title: string) => create.mutateAsync(title),
     remove: (id: string) => remove.mutateAsync(id),

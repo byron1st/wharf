@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
-import { keys, useRequests, useTaskActions, useTasks, useTodos } from '@/hooks/data'
+import { keys, useRequests, useTaskActions, useTasks, useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
-import type { TaskListItem, Todo } from '@/lib/api'
-import { fromTaskDate, isTodayTask, isTodayTodo, startOfToday } from '@/lib/dates'
+import type { TaskListItem, TaskStatus, Todo } from '@/lib/api'
+import { compareTodayTasks, isTodayTask, isTodayTodo, startOfToday } from '@/lib/dates'
 import { Header } from './Header'
 import { RequestInspector } from './RequestInspector'
 import { RequestsCard } from './RequestsCard'
@@ -23,11 +23,12 @@ function selectionOf(params: URLSearchParams): Selection {
   return null
 }
 
-/** byDue orders task groups by due date, undated last, then by ID. */
-function byDue(a: TaskListItem, b: TaskListItem) {
-  const da = fromTaskDate(a.due_date) ?? '9999'
-  const db = fromTaskDate(b.due_date) ?? '9999'
-  return da === db ? a.id.localeCompare(b.id) : da < db ? -1 : 1
+/** toggled returns a copy of s with v added, or removed when on is false. */
+function toggled<T>(s: Set<T>, v: T, on: boolean): Set<T> {
+  const next = new Set(s)
+  if (on) next.add(v)
+  else next.delete(v)
+  return next
 }
 
 export function TodayPage() {
@@ -38,7 +39,12 @@ export function TodayPage() {
   const [params, setParams] = useSearchParams()
   const selection = selectionOf(params)
   const [adding, setAdding] = useState<string | null>(null)
-  const { create } = useTaskActions()
+  const { create, setStatus, reorder } = useTaskActions()
+  const { update } = useTodoActions()
+  // Todos checked and tasks whose status changed in this visit stay where
+  // they are instead of leaving Today; the next visit tidies them away.
+  const [keptTodos, setKeptTodos] = useState<Set<number>>(() => new Set())
+  const [keptTasks, setKeptTasks] = useState<Set<string>>(() => new Set())
 
   const { data: tasks = [] } = useTasks()
   const { data: open = [] } = useTodos({ is_done: false })
@@ -47,19 +53,13 @@ export function TodayPage() {
   const { data: requests = [] } = useRequests()
 
   // A todo toggled in one list is patched in place, so merge both lists and
-  // sort each todo by its current state.
-  const { todayTodos, completed, all } = useMemo(() => {
+  // pick each todo by its current state. Todos done today include the kept ones.
+  const { todayTodos, all } = useMemo(() => {
     const byID = new Map<number, Todo>()
     for (const t of [...open, ...doneToday]) byID.set(t.id, t)
     const all = [...byID.values()]
-    return {
-      all,
-      todayTodos: all.filter((t) => isTodayTodo(t, today)),
-      completed: all
-        .filter((t) => t.is_done && t.completed_at && t.completed_at >= since)
-        .sort((a, b) => (a.completed_at! < b.completed_at! ? -1 : 1)),
-    }
-  }, [open, doneToday, today, since])
+    return { all, todayTodos: all.filter((t) => keptTodos.has(t.id) || isTodayTodo(t, today)) }
+  }, [open, doneToday, today, keptTodos])
 
   const taskMap = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks])
 
@@ -68,13 +68,32 @@ export function TodayPage() {
     const byTask = new Map<string, Todo[]>()
     for (const t of todayTodos) byTask.set(t.task_id, [...(byTask.get(t.task_id) ?? []), t])
     return tasks
-      .filter((t) => isTodayTask(t, byTask.has(t.id)) || adding === t.id)
-      .sort(byDue)
+      .filter((t) => isTodayTask(t, byTask.has(t.id)) || adding === t.id || keptTasks.has(t.id))
+      .sort(compareTodayTasks)
       .map((task) => ({
         task,
         todos: (byTask.get(task.id) ?? []).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
       }))
-  }, [tasks, todayTodos, adding])
+  }, [tasks, todayTodos, adding, keptTasks])
+
+  const toggleDone = (todo: Todo, done: boolean) => {
+    update(todo, { is_done: done })
+    setKeptTodos((s) => toggled(s, todo.id, done))
+  }
+
+  const changeStatus = (task: TaskListItem, status: TaskStatus) => {
+    setStatus(task, status)
+    setKeptTasks((s) => toggled(s, task.id, true))
+  }
+
+  // Positions cover every task, not only the listed ones, so tasks that
+  // come back to Today return to where they were.
+  const move = (id: string, before: string | null) => {
+    const order = [...tasks].sort(compareTodayTasks).map((t) => t.id)
+    const next = order.filter((x) => x !== id)
+    next.splice(before === null ? next.length : next.indexOf(before), 0, id)
+    if (next.some((x, i) => x !== order[i])) reorder(next)
+  }
 
   const select = (s: Selection) => {
     const next = new URLSearchParams()
@@ -108,11 +127,13 @@ export function TodayPage() {
         <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
           <TodosCard
             groups={groups}
-            completed={completed}
             selection={selection}
             onSelect={select}
             adding={adding}
             setAdding={setAdding}
+            onToggleDone={toggleDone}
+            onSetStatus={changeStatus}
+            onMove={move}
           />
         </div>
         <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3">
@@ -128,6 +149,7 @@ export function TodayPage() {
                   onClose={close}
                   onSelectTask={(id) => select({ kind: 'task', id })}
                   onSelectRequest={(id) => select({ kind: 'req', id })}
+                  onToggleDone={toggleDone}
                 />
               )}
               {selection.kind === 'task' && (

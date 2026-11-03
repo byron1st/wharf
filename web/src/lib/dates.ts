@@ -122,6 +122,27 @@ export function dueTag(due: string | null, today: string, done: boolean) {
   return { label: `Due ${monthDay(due)}`, tone: 'plain' as Tone }
 }
 
+/** doneLabel is the When column of a done todo: "Done today" or "Done Oct 22", from when it was completed. */
+export function doneLabel(completedAt: string | null, today: string) {
+  const day = completedAt ? ymd(new Date(completedAt)) : today
+  return day === today ? { label: 'Done today', today: true } : { label: `Done ${monthDay(day)}`, today: false }
+}
+
+/** compareTodayTasks orders Today's task groups: by stored position, then unpositioned ones by due date, undated last, then by ID. */
+export function compareTodayTasks(
+  a: { id: string; position: number | null; due_date: string | null },
+  b: { id: string; position: number | null; due_date: string | null },
+): number {
+  if (a.position !== b.position) {
+    if (a.position === null) return 1
+    if (b.position === null) return -1
+    return a.position - b.position
+  }
+  const da = fromTaskDate(a.due_date) ?? '9999'
+  const db = fromTaskDate(b.due_date) ?? '9999'
+  return da === db ? a.id.localeCompare(b.id) : da < db ? -1 : 1
+}
+
 /** isTodayTodo picks the todos Today lists: open ones that can start by today. */
 export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, today: string): boolean {
   return !t.is_done && (!t.start_date || t.start_date <= today)
