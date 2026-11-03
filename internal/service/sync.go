@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,6 +32,9 @@ var (
 // fetched before anything is stored, so a failed fetch changes nothing. Items
 // that failed to read are counted and their messages returned; a Jira issue
 // whose fields failed to convert is still stored, as GetMyTasks returns it.
+// Stored Jira tasks that are still open but missing from the search, such as
+// ones done in Jira since the last sync, are fetched again one by one; one
+// that fails to fetch keeps its stored copy and counts as a failed issue.
 func (s *service) SyncAtlassian(ctx context.Context) (AtlassianSync, error) {
 	// A nil slice with an error is a failed fetch; see atlassian.Client.
 	tasks, taskErr := s.jira.GetMyTasks(ctx)
@@ -48,7 +52,19 @@ func (s *service) SyncAtlassian(ctx context.Context) (AtlassianSync, error) {
 		return AtlassianSync{}, err
 	}
 
-	if err := s.db.UpsertTasks(ctx, tasks); err != nil {
+	stored, err := s.db.ListTasks(ctx)
+	if err != nil {
+		return AtlassianSync{}, err
+	}
+
+	refetched, refetchErrs := s.refetchDroppedTasks(ctx, stored, tasks)
+
+	toStore := tasks
+	if len(refetched) > 0 {
+		toStore = slices.Concat(tasks, refetched)
+	}
+
+	if err := s.db.UpsertTasks(ctx, toStore); err != nil {
 		return AtlassianSync{}, err
 	}
 
@@ -57,7 +73,8 @@ func (s *service) SyncAtlassian(ctx context.Context) (AtlassianSync, error) {
 	}
 
 	open, closed := countRequests(wasOpen, requests)
-	taskErrs, requestErrs := unwrapAll(taskErr), unwrapAll(requestErr)
+
+	taskErrs, requestErrs := append(unwrapAll(taskErr), refetchErrs...), unwrapAll(requestErr)
 
 	record := atlassiansync.Record{
 		SyncedAt:        s.now().UTC(),
@@ -152,6 +169,40 @@ func classifyAtlassianError(err error) error {
 	}
 
 	return err
+}
+
+// refetchDroppedTasks fetches again each stored Jira task that is neither done
+// nor canceled but is missing from fetched. A task that fails to fetch is
+// left out, so its stored copy is kept, and its error is returned.
+func (s *service) refetchDroppedTasks(ctx context.Context, stored, fetched []task.Task) ([]task.Task, []error) {
+	seen := make(map[string]bool, len(fetched))
+	for _, t := range fetched {
+		seen[t.ID] = true
+	}
+
+	var (
+		refetched []task.Task
+		errs      []error
+	)
+
+	for _, t := range stored {
+		if t.Originated != task.OriginJira || t.Status == task.StatusDone || t.Status == task.StatusCanceled ||
+			seen[t.ID] {
+			continue
+		}
+
+		key := strings.TrimPrefix(t.ID, task.NewID(task.OriginJira, ""))
+
+		fresh, err := s.jira.GetTask(ctx, key)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%w: id=%s", err, t.ID))
+			continue
+		}
+
+		refetched = append(refetched, fresh)
+	}
+
+	return refetched, errs
 }
 
 // countRequests returns how many of requests are open, and how many of them
