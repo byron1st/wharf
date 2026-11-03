@@ -608,12 +608,14 @@ func fromNullTime(t sql.NullTime) *time.Time {
 	return &t.Time
 }
 
+// toNullTime stores t at UTC. SQLite keeps times as text and compares them
+// as strings, so every stored or compared time must share one zone.
 func toNullTime(t *time.Time) sql.NullTime {
 	if t == nil {
 		return sql.NullTime{}
 	}
 
-	return sql.NullTime{Time: *t, Valid: true}
+	return sql.NullTime{Time: t.UTC(), Valid: true}
 }
 
 func (m *manager) checkConnected() error {

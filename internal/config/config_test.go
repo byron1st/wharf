@@ -347,6 +347,17 @@ func TestSaveAtlassian(t *testing.T) {
 		require.Equal(t, "# dotfiles\n"+atlassianKeys, string(data))
 	})
 
+	t.Run("names the symlink, not its target, in errors", func(t *testing.T) {
+		target := writeFile(t, filepath.Join(t.TempDir(), "real.toml"), "adr = \":8080\"\n", 0o600)
+		link := filepath.Join(t.TempDir(), "config.toml")
+		require.NoError(t, os.Symlink(target, link))
+
+		err := config.SaveAtlassian(link, "https://example.atlassian.net", "me@example.com", "secret-token")
+		require.ErrorIs(t, err, config.ErrUnknownConfigKeys)
+		require.ErrorContains(t, err, "path="+link)
+		require.NotContains(t, err.Error(), target)
+	})
+
 	t.Run("fails when the file cannot be read", func(t *testing.T) {
 		err := config.SaveAtlassian(t.TempDir(), "https://example.atlassian.net", "me@example.com", "secret-token")
 		require.ErrorIs(t, err, config.ErrFailedToReadConfigFileToSave)
