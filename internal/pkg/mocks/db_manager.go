@@ -1016,6 +1016,63 @@ func (_c *MockManager_Migrate_Call) RunAndReturn(run func(ctx context.Context) e
 	return _c
 }
 
+// SetTaskPositions provides a mock function for the type MockManager
+func (_mock *MockManager) SetTaskPositions(ctx context.Context, ids []string) error {
+	ret := _mock.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetTaskPositions")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) error); ok {
+		r0 = returnFunc(ctx, ids)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockManager_SetTaskPositions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetTaskPositions'
+type MockManager_SetTaskPositions_Call struct {
+	*mock.Call
+}
+
+// SetTaskPositions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []string
+func (_e *MockManager_Expecter) SetTaskPositions(ctx any, ids any) *MockManager_SetTaskPositions_Call {
+	return &MockManager_SetTaskPositions_Call{Call: _e.mock.On("SetTaskPositions", ctx, ids)}
+}
+
+func (_c *MockManager_SetTaskPositions_Call) Run(run func(ctx context.Context, ids []string)) *MockManager_SetTaskPositions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []string
+		if args[1] != nil {
+			arg1 = args[1].([]string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_SetTaskPositions_Call) Return(err error) *MockManager_SetTaskPositions_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockManager_SetTaskPositions_Call) RunAndReturn(run func(ctx context.Context, ids []string) error) *MockManager_SetTaskPositions_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UnlinkServiceDeskRequest provides a mock function for the type MockManager
 func (_mock *MockManager) UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error {
 	ret := _mock.Called(ctx, todoID, key)
@@ -1132,6 +1189,69 @@ func (_c *MockManager_UpdateLocalTask_Call) Return(err error) *MockManager_Updat
 }
 
 func (_c *MockManager_UpdateLocalTask_Call) RunAndReturn(run func(ctx context.Context, t task.Task) error) *MockManager_UpdateLocalTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateLocalTaskStatus provides a mock function for the type MockManager
+func (_mock *MockManager) UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status) error {
+	ret := _mock.Called(ctx, id, status)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateLocalTaskStatus")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, task.Status) error); ok {
+		r0 = returnFunc(ctx, id, status)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockManager_UpdateLocalTaskStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateLocalTaskStatus'
+type MockManager_UpdateLocalTaskStatus_Call struct {
+	*mock.Call
+}
+
+// UpdateLocalTaskStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - status task.Status
+func (_e *MockManager_Expecter) UpdateLocalTaskStatus(ctx any, id any, status any) *MockManager_UpdateLocalTaskStatus_Call {
+	return &MockManager_UpdateLocalTaskStatus_Call{Call: _e.mock.On("UpdateLocalTaskStatus", ctx, id, status)}
+}
+
+func (_c *MockManager_UpdateLocalTaskStatus_Call) Run(run func(ctx context.Context, id string, status task.Status)) *MockManager_UpdateLocalTaskStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 task.Status
+		if args[2] != nil {
+			arg2 = args[2].(task.Status)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_UpdateLocalTaskStatus_Call) Return(err error) *MockManager_UpdateLocalTaskStatus_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockManager_UpdateLocalTaskStatus_Call) RunAndReturn(run func(ctx context.Context, id string, status task.Status) error) *MockManager_UpdateLocalTaskStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }

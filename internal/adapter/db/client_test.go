@@ -185,7 +185,7 @@ func TestInitialMigrationSchema(t *testing.T) {
 
 	require.Equal(
 		t,
-		[]string{"id", "originated", "title", "description", "status", "start_date", "due_date"},
+		[]string{"id", "originated", "title", "description", "status", "start_date", "due_date", "position"},
 		columns("tasks"),
 	)
 	require.Equal(t, []string{"child_id", "parent_id"}, columns("task_hierarchies"))
@@ -741,6 +741,64 @@ func TestUpdateLocalTaskRejectsMissingOrNonLocalTask(t *testing.T) {
 	require.Equal(t, "old", read(t, path, "J1").title)
 	requireExists(t, path, "local-WHF-404", false)
 	require.Equal(t, []string{"C1<J1"}, relations(t, path))
+}
+
+func TestUpdateLocalTaskStatus(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	created := newTask("ignored")
+	created.Title = "local"
+	created.ChildrenIDs = []string{"C1"}
+
+	id, err := manager.CreateLocalTask(context.Background(), created)
+	require.NoError(t, err)
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("J1")}))
+
+	require.NoError(t, manager.UpdateLocalTaskStatus(context.Background(), id, task.StatusDone))
+	require.Equal(t, readTask{originated: "local", title: "local", status: "done"}, read(t, path, id))
+	require.Equal(t, []string{"C1<" + id}, relations(t, path))
+
+	for _, missing := range []string{"J1", "local-WHF-404"} {
+		err := manager.UpdateLocalTaskStatus(context.Background(), missing, task.StatusDone)
+		require.ErrorIs(t, err, db.ErrLocalTaskToSetStatusNotFound)
+		require.ErrorContains(t, err, "id="+missing)
+	}
+
+	require.Equal(t, "todo", read(t, path, "J1").status)
+}
+
+func TestSetTaskPositions(t *testing.T) {
+	manager := newManager(t)
+	require.NoError(
+		t,
+		manager.UpsertTasks(context.Background(), []task.Task{newTask("T1"), newTask("T2"), newTask("T3")}),
+	)
+
+	positions := func() map[string]*int {
+		tasks, err := manager.ListTasks(context.Background())
+		require.NoError(t, err)
+
+		got := map[string]*int{}
+		for _, t := range tasks {
+			got[t.ID] = t.Position
+		}
+
+		return got
+	}
+
+	require.Equal(t, map[string]*int{"T1": nil, "T2": nil, "T3": nil}, positions())
+
+	require.NoError(t, manager.SetTaskPositions(context.Background(), []string{"T3", "MISSING", "T1"}))
+	require.Equal(t, map[string]*int{"T1": new(2), "T2": nil, "T3": new(0)}, positions())
+
+	got, err := manager.GetTask(context.Background(), "T1")
+	require.NoError(t, err)
+	require.Equal(t, new(2), got.Position)
+
+	// A sync keeps the positions, and tasks left out keep theirs.
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("T3")}))
+	require.NoError(t, manager.SetTaskPositions(context.Background(), []string{"T2"}))
+	require.Equal(t, map[string]*int{"T1": new(2), "T2": new(0), "T3": new(0)}, positions())
 }
 
 func TestDeleteTask(t *testing.T) {

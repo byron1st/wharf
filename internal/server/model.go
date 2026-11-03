@@ -25,6 +25,16 @@ type taskRequest struct {
 	LinkedIDs   []string    `json:"linked_ids"`
 }
 
+// taskStatusRequest is the body of PUT /tasks/{id}/status.
+type taskStatusRequest struct {
+	Status task.Status `json:"status"`
+}
+
+// taskOrderRequest is the body of PUT /tasks/order.
+type taskOrderRequest struct {
+	IDs []string `json:"ids"`
+}
+
 type taskSummary struct {
 	ID          string      `json:"id"`
 	Originated  task.Origin `json:"originated"`
@@ -35,12 +45,14 @@ type taskSummary struct {
 	DueDate     *time.Time  `json:"due_date"`
 }
 
-// taskListItem is a summary with the task's todo counts, for GET /api/tasks.
+// taskListItem is a summary with the task's todo counts and its position on
+// Today, for GET /api/tasks.
 type taskListItem struct {
 	taskSummary
 
-	TodoCount     int `json:"todo_count"`
-	DoneTodoCount int `json:"done_todo_count"`
+	TodoCount     int  `json:"todo_count"`
+	DoneTodoCount int  `json:"done_todo_count"`
+	Position      *int `json:"position"`
 }
 
 type taskListResponse struct {

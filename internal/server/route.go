@@ -39,7 +39,9 @@ func NewHandler(svc service.Service, settings service.Settings, static fs.FS, lo
 	mux.HandleFunc("GET /api/tasks", listTasks(svc, logger))
 	mux.HandleFunc("POST /api/tasks", createTask(svc, logger))
 	mux.HandleFunc("GET /api/tasks/{id}", getTask(svc, logger))
+	mux.HandleFunc("PUT /api/tasks/order", reorderTasks(svc, logger))
 	mux.HandleFunc("PUT /api/tasks/{id}", updateTask(svc, logger))
+	mux.HandleFunc("PUT /api/tasks/{id}/status", updateTaskStatus(svc, logger))
 	mux.HandleFunc("DELETE /api/tasks/{id}", deleteTask(svc, logger))
 	mux.HandleFunc("POST /api/tasks/{id}/sync", syncJiraTask(svc, logger))
 	mux.HandleFunc("GET /api/todos", listTodos(svc, logger))
@@ -79,6 +81,7 @@ func listTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 				taskSummary:   toSummary(t.Task),
 				TodoCount:     t.Todos.Todos,
 				DoneTodoCount: t.Todos.Done,
+				Position:      t.Task.Position,
 			})
 		}
 
@@ -156,6 +159,40 @@ func updateTask(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 	}
 }
 
+func updateTaskStatus(svc service.Service, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req taskStatusRequest
+		if err := decodeTaskBody(w, r, &req); err != nil {
+			writeError(w, r, logger, "failed to update task status", err)
+			return
+		}
+
+		if err := svc.UpdateTaskStatus(r.Context(), r.PathValue("id"), req.Status); err != nil {
+			writeError(w, r, logger, "failed to update task status", err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func reorderTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req taskOrderRequest
+		if err := decodeTaskBody(w, r, &req); err != nil {
+			writeError(w, r, logger, "failed to reorder tasks", err)
+			return
+		}
+
+		if err := svc.ReorderTasks(r.Context(), req.IDs); err != nil {
+			writeError(w, r, logger, "failed to reorder tasks", err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func deleteTask(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := svc.DeleteTask(r.Context(), r.PathValue("id")); err != nil {
@@ -167,25 +204,12 @@ func deleteTask(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 	}
 }
 
-// decodeTask reads a taskRequest body, rejecting unknown fields such as id
-// and originated, and anything but whitespace after the object.
+// decodeTask reads a taskRequest body as decodeTaskBody does, which rejects
+// unknown fields such as id and originated.
 func decodeTask(w http.ResponseWriter, r *http.Request) (task.Task, error) {
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxTaskRequestBytes))
-	decoder.DisallowUnknownFields()
-
 	var req taskRequest
-
-	err := decoder.Decode(&req)
-	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		return task.Task{}, errors.Join(ErrTaskRequestTooLarge, err)
-	}
-
-	if err != nil {
-		return task.Task{}, errors.Join(ErrFailedToDecodeTaskRequest, err)
-	}
-
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return task.Task{}, errors.Join(ErrTaskRequestHasTrailingData, err)
+	if err := decodeTaskBody(w, r, &req); err != nil {
+		return task.Task{}, err
 	}
 
 	return task.Task{
@@ -198,6 +222,28 @@ func decodeTask(w http.ResponseWriter, r *http.Request) (task.Task, error) {
 		ChildrenIDs: req.ChildrenIDs,
 		LinkedIDs:   req.LinkedIDs,
 	}, nil
+}
+
+// decodeTaskBody reads a task API request body into dst, rejecting unknown
+// fields and anything but whitespace after the object.
+func decodeTaskBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxTaskRequestBytes))
+	decoder.DisallowUnknownFields()
+
+	err := decoder.Decode(dst)
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		return errors.Join(ErrTaskRequestTooLarge, err)
+	}
+
+	if err != nil {
+		return errors.Join(ErrFailedToDecodeTaskRequest, err)
+	}
+
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.Join(ErrTaskRequestHasTrailingData, err)
+	}
+
+	return nil
 }
 
 func toSummaries(tasks []task.Task) []taskSummary {

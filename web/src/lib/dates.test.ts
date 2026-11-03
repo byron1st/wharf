@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   atLocal,
+  compareTodayTasks,
+  doneLabel,
+  reorderedIDs,
   dueTag,
   isTime,
   isTodayTask,
@@ -135,5 +138,64 @@ describe('isTime', () => {
     expect(isTime('23:59')).toBe(true)
     expect(isTime('9:30')).toBe(false)
     expect(isTime('24:00')).toBe(false)
+  })
+})
+
+describe('doneLabel', () => {
+  it('says today for a todo completed today in local time, else the day', () => {
+    expect(doneLabel(atLocal(today, '00:05').toISOString(), today)).toEqual({ label: 'Done today', today: true })
+    expect(doneLabel(atLocal('2026-10-22', '23:55').toISOString(), today)).toEqual({ label: 'Done Oct 22', today: false })
+  })
+
+  it('treats a todo just checked, without a completion time yet, as done today', () => {
+    expect(doneLabel(null, today).label).toBe('Done today')
+  })
+})
+
+describe('compareTodayTasks', () => {
+  const t = (id: string, position: number | null, due: string | null = null) => ({
+    id,
+    position,
+    due_date: due && `${due}T00:00:00Z`,
+  })
+
+  it('puts positioned tasks first in position order, then the rest by due date and ID', () => {
+    const tasks = [
+      t('jira-C', null, '2026-10-28'),
+      t('jira-A', null),
+      t('local-B', 1),
+      t('jira-D', null, '2026-10-27'),
+      t('jira-E', 0, '2026-11-30'),
+      t('jira-B', null),
+    ]
+    expect(tasks.sort(compareTodayTasks).map((x) => x.id)).toEqual(['jira-E', 'local-B', 'jira-D', 'jira-C', 'jira-A', 'jira-B'])
+  })
+})
+
+describe('reorderedIDs', () => {
+  // B is hidden from Today (say, done), but it still holds its place.
+  const tasks = [
+    { id: 'A', position: 0, due_date: null },
+    { id: 'B', position: 1, due_date: null },
+    { id: 'C', position: 2, due_date: null },
+    { id: 'D', position: null, due_date: null },
+  ]
+
+  it('moves a task up before another', () => {
+    expect(reorderedIDs(tasks, 'C', 'A')).toEqual(['C', 'A', 'B', 'D'])
+  })
+
+  it('moves a task down past a hidden one', () => {
+    expect(reorderedIDs(tasks, 'A', 'D')).toEqual(['B', 'C', 'A', 'D'])
+  })
+
+  it('moves a task to the end, also when its target is gone', () => {
+    expect(reorderedIDs(tasks, 'A', null)).toEqual(['B', 'C', 'D', 'A'])
+    expect(reorderedIDs(tasks, 'A', 'GONE')).toEqual(['B', 'C', 'D', 'A'])
+  })
+
+  it('is null when nothing would move', () => {
+    expect(reorderedIDs(tasks, 'B', 'C')).toBeNull()
+    expect(reorderedIDs(tasks, 'D', null)).toBeNull()
   })
 })

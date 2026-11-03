@@ -28,6 +28,10 @@ var (
 	ErrLocalTaskToUpdateNotFound        = errors.New("service: local task to update not found")
 	ErrTaskNotLocal                     = errors.New("service: only local tasks can be updated")
 	ErrTaskToDeleteNotFound             = errors.New("service: task to delete not found")
+	ErrUnknownTaskStatusToSet           = errors.New("service: unknown task status to set")
+	ErrLocalTaskToSetStatusNotFound     = errors.New("service: local task to set status not found")
+	ErrEmptyTaskIDToReorder             = errors.New("service: task id to reorder is empty")
+	ErrDuplicateTaskIDToReorder         = errors.New("service: task id to reorder is duplicated")
 	ErrTodoToLinkNotFound               = errors.New("service: todo to link not found")
 	ErrServiceDeskRequestToLinkNotFound = errors.New(
 		"service: service desk request to link not found",
@@ -47,6 +51,8 @@ type Service interface {
 	CreateTask(ctx context.Context, t task.Task) (string, error)
 	UpdateTask(ctx context.Context, t task.Task) error
 	DeleteTask(ctx context.Context, id string) error
+	UpdateTaskStatus(ctx context.Context, id string, status task.Status) error
+	ReorderTasks(ctx context.Context, ids []string) error
 	LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
 	UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
 	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
@@ -193,6 +199,48 @@ func (s *service) DeleteTask(ctx context.Context, id string) error {
 	}
 
 	return err
+}
+
+// UpdateTaskStatus sets the status of the local task id, leaving its other
+// fields and relations as they are. It fails with ErrUnknownTaskStatusToSet
+// for a status other than todo, in-progress, done, and canceled, and with
+// ErrLocalTaskToSetStatusNotFound when no local task has id, since a sync
+// would overwrite the status of any other task.
+func (s *service) UpdateTaskStatus(ctx context.Context, id string, status task.Status) error {
+	switch status {
+	case task.StatusTodo, task.StatusInProgress, task.StatusDone, task.StatusCanceled:
+	default:
+		return fmt.Errorf("%w: status=%s", ErrUnknownTaskStatusToSet, status)
+	}
+
+	err := s.db.UpdateLocalTaskStatus(ctx, id, status)
+	if errors.Is(err, db.ErrLocalTaskToSetStatusNotFound) {
+		return fmt.Errorf("%w: id=%s", ErrLocalTaskToSetStatusNotFound, id)
+	}
+
+	return err
+}
+
+// ReorderTasks orders the tasks on Today as ids lists them, whatever their
+// origin. ids should list every stored task: IDs that are not stored are
+// skipped, and tasks not in ids keep their positions, which may then tie
+// with listed ones. It fails with ErrEmptyTaskIDToReorder for a blank ID and
+// with ErrDuplicateTaskIDToReorder for an ID listed twice.
+func (s *service) ReorderTasks(ctx context.Context, ids []string) error {
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if isBlank(id) {
+			return ErrEmptyTaskIDToReorder
+		}
+
+		if seen[id] {
+			return fmt.Errorf("%w: id=%s", ErrDuplicateTaskIDToReorder, id)
+		}
+
+		seen[id] = true
+	}
+
+	return s.db.SetTaskPositions(ctx, ids)
 }
 
 // LinkServiceDeskRequest links the stored todo todoID to the stored Service

@@ -120,6 +120,7 @@ func TestListTasks(t *testing.T) {
 				Title:       "second",
 				Description: strings.Repeat("가", 100),
 				Status:      task.StatusDone,
+				Position:    new(3),
 			},
 		},
 	}, nil).Once()
@@ -129,9 +130,10 @@ func TestListTasks(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{"tasks":[
 		{"id":"jira-WHF-1","originated":"jira","title":"first","description":"`+strings.Repeat("가", 100)+`…",
-		 "status":"todo","start_date":null,"due_date":"2026-10-31T00:00:00Z","todo_count":5,"done_todo_count":2},
+		 "status":"todo","start_date":null,"due_date":"2026-10-31T00:00:00Z","todo_count":5,"done_todo_count":2,
+		 "position":null},
 		{"id":"local-WHF-001","originated":"local","title":"second","description":"`+strings.Repeat("가", 100)+`",
-		 "status":"done","start_date":null,"due_date":null,"todo_count":0,"done_todo_count":0}
+		 "status":"done","start_date":null,"due_date":null,"todo_count":0,"done_todo_count":0,"position":3}
 	]}`, rec.Body.String())
 }
 
@@ -371,6 +373,79 @@ func TestUpdateTaskRejectsInvalidBody(t *testing.T) {
 	)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestUpdateTaskStatus(t *testing.T) {
+	svc := mocks.NewMockService(t)
+	svc.EXPECT().UpdateTaskStatus(mock.Anything, "local-WHF-001", task.Status(task.StatusDone)).Return(nil).Once()
+
+	rec, _ := serveBody(
+		t,
+		svc,
+		http.MethodPut,
+		"/api/tasks/local-WHF-001/status",
+		strings.NewReader(`{"status":"done"}`),
+	)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	require.Empty(t, rec.Body.String())
+}
+
+func TestReorderTasks(t *testing.T) {
+	svc := mocks.NewMockService(t)
+	svc.EXPECT().ReorderTasks(mock.Anything, []string{"local-WHF-001", "jira-WHF-1"}).Return(nil).Once()
+
+	rec, _ := serveBody(
+		t,
+		svc,
+		http.MethodPut,
+		"/api/tasks/order",
+		strings.NewReader(`{"ids":["local-WHF-001","jira-WHF-1"]}`),
+	)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	require.Empty(t, rec.Body.String())
+}
+
+func TestTaskStatusAndOrderRoutesRejectInvalidBody(t *testing.T) {
+	for _, req := range []struct{ path, body string }{
+		{path: "/api/tasks/local-WHF-001/status", body: `{"status":"done","title":"x"}`},
+		{path: "/api/tasks/local-WHF-001/status", body: `{"status":"done"} {}`},
+		{path: "/api/tasks/order", body: `{"ids":"T1"}`},
+	} {
+		rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPut, req.path, strings.NewReader(req.body))
+
+		require.Equal(t, http.StatusBadRequest, rec.Code, req.body)
+	}
+}
+
+func TestTaskStatusAndOrderRoutesMapServiceErrors(t *testing.T) {
+	tests := []struct {
+		err    error
+		status int
+	}{
+		{err: service.ErrUnknownTaskStatusToSet, status: http.StatusBadRequest},
+		{err: service.ErrLocalTaskToSetStatusNotFound, status: http.StatusNotFound},
+		{err: service.ErrEmptyTaskIDToReorder, status: http.StatusBadRequest},
+		{err: service.ErrDuplicateTaskIDToReorder, status: http.StatusBadRequest},
+		{err: errors.New("disk failed"), status: http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		svc := mocks.NewMockService(t)
+		svc.EXPECT().UpdateTaskStatus(mock.Anything, "T1", mock.Anything).Return(tt.err).Once()
+		svc.EXPECT().ReorderTasks(mock.Anything, mock.Anything).Return(tt.err).Once()
+
+		for _, req := range []struct{ path, body string }{
+			{path: "/api/tasks/T1/status", body: `{"status":"x"}`},
+			{path: "/api/tasks/order", body: `{"ids":["T1"]}`},
+		} {
+			rec, _ := serveBody(t, svc, http.MethodPut, req.path, strings.NewReader(req.body))
+
+			require.Equal(t, tt.status, rec.Code, "%s: %v", req.path, tt.err)
+			require.JSONEq(t, `{"error":`+strconv.Quote(tt.err.Error())+`}`, rec.Body.String())
+		}
+	}
 }
 
 func TestDeleteTask(t *testing.T) {

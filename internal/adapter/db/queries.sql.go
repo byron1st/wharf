@@ -435,7 +435,7 @@ func (q *Queries) GetLastAtlassianSync(ctx context.Context) (AtlassianSync, erro
 }
 
 const getTask = `-- name: GetTask :one
-SELECT tasks.id, tasks.originated, tasks.title, tasks.description, tasks.status, tasks.start_date, tasks.due_date, task_hierarchies.parent_id
+SELECT tasks.id, tasks.originated, tasks.title, tasks.description, tasks.status, tasks.start_date, tasks.due_date, tasks.position, task_hierarchies.parent_id
 FROM tasks
 LEFT JOIN task_hierarchies ON task_hierarchies.child_id = tasks.id
 WHERE tasks.id = ?
@@ -457,6 +457,7 @@ func (q *Queries) GetTask(ctx context.Context, id string) (GetTaskRow, error) {
 		&i.Task.Status,
 		&i.Task.StartDate,
 		&i.Task.DueDate,
+		&i.Task.Position,
 		&i.ParentID,
 	)
 	return i, err
@@ -568,7 +569,7 @@ func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]string, e
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, originated, title, description, status, start_date, due_date FROM tasks ORDER BY id
+SELECT id, originated, title, description, status, start_date, due_date, position FROM tasks ORDER BY id
 `
 
 func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
@@ -588,6 +589,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 			&i.Status,
 			&i.StartDate,
 			&i.DueDate,
+			&i.Position,
 		); err != nil {
 			return nil, err
 		}
@@ -603,7 +605,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 }
 
 const listTasksByIDs = `-- name: ListTasksByIDs :many
-SELECT id, originated, title, description, status, start_date, due_date FROM tasks WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+SELECT id, originated, title, description, status, start_date, due_date, position FROM tasks WHERE id IN (/*SLICE:ids*/?) ORDER BY id
 `
 
 func (q *Queries) ListTasksByIDs(ctx context.Context, ids []string) ([]Task, error) {
@@ -633,6 +635,7 @@ func (q *Queries) ListTasksByIDs(ctx context.Context, ids []string) ([]Task, err
 			&i.Status,
 			&i.StartDate,
 			&i.DueDate,
+			&i.Position,
 		); err != nil {
 			return nil, err
 		}
@@ -898,6 +901,37 @@ func (q *Queries) UpdateLocalTask(ctx context.Context, arg UpdateLocalTaskParams
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateLocalTaskStatus = `-- name: UpdateLocalTaskStatus :execrows
+UPDATE tasks SET status = ? WHERE id = ? AND originated = 'local'
+`
+
+type UpdateLocalTaskStatusParams struct {
+	Status string
+	ID     string
+}
+
+func (q *Queries) UpdateLocalTaskStatus(ctx context.Context, arg UpdateLocalTaskStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateLocalTaskStatus, arg.Status, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateTaskPosition = `-- name: UpdateTaskPosition :exec
+UPDATE tasks SET position = ? WHERE id = ?
+`
+
+type UpdateTaskPositionParams struct {
+	Position sql.NullInt64
+	ID       string
+}
+
+func (q *Queries) UpdateTaskPosition(ctx context.Context, arg UpdateTaskPositionParams) error {
+	_, err := q.db.ExecContext(ctx, updateTaskPosition, arg.Position, arg.ID)
+	return err
 }
 
 const updateTodo = `-- name: UpdateTodo :execrows

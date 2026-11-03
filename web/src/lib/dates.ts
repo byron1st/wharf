@@ -122,6 +122,45 @@ export function dueTag(due: string | null, today: string, done: boolean) {
   return { label: `Due ${monthDay(due)}`, tone: 'plain' as Tone }
 }
 
+/** doneLabel is the When column of a done todo: "Done today" or "Done Oct 22", from when it was completed. */
+export function doneLabel(completedAt: string | null, today: string) {
+  const day = completedAt ? ymd(new Date(completedAt)) : today
+  return day === today ? { label: 'Done today', today: true } : { label: `Done ${monthDay(day)}`, today: false }
+}
+
+/** compareTodayTasks orders Today's task groups: by stored position, then unpositioned ones by due date, undated last, then by ID. */
+export function compareTodayTasks(
+  a: { id: string; position: number | null; due_date: string | null },
+  b: { id: string; position: number | null; due_date: string | null },
+): number {
+  if (a.position !== b.position) {
+    if (a.position === null) return 1
+    if (b.position === null) return -1
+    return a.position - b.position
+  }
+  const da = fromTaskDate(a.due_date) ?? '9999'
+  const db = fromTaskDate(b.due_date) ?? '9999'
+  return da === db ? a.id.localeCompare(b.id) : da < db ? -1 : 1
+}
+
+/**
+ * reorderedIDs is every task's ID in Today's order after moving id right
+ * before the task before, or last when before is null or no longer listed.
+ * It covers hidden tasks too, so a task that comes back to Today returns to
+ * its place. It is null when nothing would move.
+ */
+export function reorderedIDs(
+  tasks: { id: string; position: number | null; due_date: string | null }[],
+  id: string,
+  before: string | null,
+): string[] | null {
+  const order = [...tasks].sort(compareTodayTasks).map((t) => t.id)
+  const next = order.filter((x) => x !== id)
+  const at = before === null ? -1 : next.indexOf(before)
+  next.splice(at < 0 ? next.length : at, 0, id)
+  return next.some((x, i) => x !== order[i]) ? next : null
+}
+
 /** isTodayTodo picks the todos Today lists: open ones that can start by today. */
 export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, today: string): boolean {
   return !t.is_done && (!t.start_date || t.start_date <= today)

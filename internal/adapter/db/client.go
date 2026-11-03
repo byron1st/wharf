@@ -35,6 +35,9 @@ var (
 	ErrFailedToListTaskLinks                = errors.New("db: failed to list task links")
 	ErrFailedToUpdateLocalTask              = errors.New("db: failed to update local task")
 	ErrLocalTaskToUpdateNotFound            = errors.New("db: local task to update not found")
+	ErrFailedToUpdateLocalTaskStatus        = errors.New("db: failed to update local task status")
+	ErrLocalTaskToSetStatusNotFound         = errors.New("db: local task to set status not found")
+	ErrFailedToUpdateTaskPosition           = errors.New("db: failed to update task position")
 	ErrFailedToDeleteTaskChildren           = errors.New("db: failed to delete task children")
 	ErrFailedToDeleteLocalTaskLinks         = errors.New("db: failed to delete links of local task")
 	ErrFailedToDeleteTask                   = errors.New("db: failed to delete task")
@@ -73,6 +76,8 @@ type Manager interface {
 	ListTasksByIDs(ctx context.Context, ids []string) ([]task.Task, error)
 	GetTask(ctx context.Context, id string) (task.Task, error)
 	UpdateLocalTask(ctx context.Context, t task.Task) error
+	UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status) error
+	SetTaskPositions(ctx context.Context, ids []string) error
 	DeleteTask(ctx context.Context, id string) error
 	CreateTodo(ctx context.Context, t todo.Todo) (int64, error)
 	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
@@ -270,6 +275,46 @@ func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 		}
 
 		return storeRelations(ctx, queries, t)
+	})
+}
+
+// UpdateLocalTaskStatus sets the status of the stored local task id, leaving
+// its other fields and relations as they are. It fails with
+// ErrLocalTaskToSetStatusNotFound when no local task has id.
+func (m *manager) UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	updated, err := m.queries.UpdateLocalTaskStatus(ctx, UpdateLocalTaskStatusParams{Status: string(status), ID: id})
+	if err != nil {
+		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpdateLocalTaskStatus, err), id)
+	}
+
+	if updated == 0 {
+		return fmt.Errorf("%w: id=%s", ErrLocalTaskToSetStatusNotFound, id)
+	}
+
+	return nil
+}
+
+// SetTaskPositions stores the index of each ID in ids as the position of
+// that task, in one transaction. IDs that are not stored are skipped, and
+// tasks not in ids keep their positions.
+func (m *manager) SetTaskPositions(ctx context.Context, ids []string) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	return m.inTx(ctx, func(queries *Queries) error {
+		for i, id := range ids {
+			params := UpdateTaskPositionParams{Position: sql.NullInt64{Int64: int64(i), Valid: true}, ID: id}
+			if err := queries.UpdateTaskPosition(ctx, params); err != nil {
+				return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpdateTaskPosition, err), id)
+			}
+		}
+
+		return nil
 	})
 }
 
@@ -597,7 +642,18 @@ func fromTask(row Task) task.Task {
 		Status:      task.Status(row.Status),
 		StartDate:   fromNullTime(row.StartDate),
 		DueDate:     fromNullTime(row.DueDate),
+		Position:    fromNullInt(row.Position),
 	}
+}
+
+func fromNullInt(n sql.NullInt64) *int {
+	if !n.Valid {
+		return nil
+	}
+
+	v := int(n.Int64)
+
+	return &v
 }
 
 func fromNullTime(t sql.NullTime) *time.Time {
