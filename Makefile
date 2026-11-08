@@ -85,11 +85,17 @@ web-check:
 web-dev:
 	@cd web && npm run dev
 
-.PHONY: build run
+.PHONY: build install run
 # Build application binaries from ./cmd/<binary>, embedding the web app
 build: web
 	@for bin in $(BINS); do \
 		$(BUILD_FLAGS) go build -o $$bin ./cmd/$$bin || exit 1; \
+	done
+
+# Install application binaries into $GOBIN (default $GOPATH/bin), embedding the web app
+install: web
+	@for bin in $(BINS); do \
+		$(BUILD_FLAGS) go install ./cmd/$$bin || exit 1; \
 	done
 
 # Run the default application binary
