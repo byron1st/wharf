@@ -18,6 +18,8 @@ make build
 
 `make build`는 먼저 웹 앱을 빌드(`npm ci` + `npm run build`, 결과는 `web/dist`)한 뒤, 이를 내장한 서버 바이너리를 저장소 루트에 `./wharf`로 생성합니다.
 
+`PATH`에서 바로 `wharf`를 실행하려면 대신 `make install`을 사용합니다. 같은 방식으로 웹 앱을 빌드한 뒤 `go install`로 바이너리를 `$GOBIN`(설정하지 않았다면 `$GOPATH/bin`)에 설치합니다.
+
 바이너리 없이 소스에서 바로 실행하는 `make run`도 있지만, 웹 UI를 보려면 `make web`으로 `web/dist`를 먼저 만들어 두어야 합니다.
 
 ## 2. 설정 파일
