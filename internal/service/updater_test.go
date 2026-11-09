@@ -264,10 +264,10 @@ func TestApplyUpdateLeavesExecutableOnFailure(t *testing.T) {
 		sums        string
 		sumsErr     error
 		want        error
-		skipSumsGet bool
+		skipArchive bool
 	}{
-		"archive download fails":   {archiveErr: downloadErr, want: downloadErr, skipSumsGet: true},
-		"checksums download fails": {archive: good, sumsErr: downloadErr, want: downloadErr},
+		"checksums download fails": {sumsErr: downloadErr, want: downloadErr, skipArchive: true},
+		"archive download fails":   {archiveErr: downloadErr, sums: sum(good) + "  " + archiveName + "\n", want: downloadErr},
 		"checksum missing":         {archive: good, sums: sum(good) + "  other.tar.gz\n", want: service.ErrReleaseChecksumNotFound},
 		"checksum mismatch": {
 			archive: good, sums: sum([]byte("tampered")) + "  " + archiveName + "\n", want: service.ErrReleaseChecksumMismatch,
@@ -283,11 +283,17 @@ func TestApplyUpdateLeavesExecutableOnFailure(t *testing.T) {
 			f := newUpdaterFixture(t)
 			u := availableUpdater(t, f)
 
-			f.releases.EXPECT().Download(mock.Anything, "v0.2.0", archiveName).Return(tc.archive, tc.archiveErr).Once()
+			f.releases.EXPECT().
+				Download(mock.Anything, "v0.2.0", "checksums.txt").
+				Return([]byte(tc.sums), tc.sumsErr).
+				Once()
 
-			if !tc.skipSumsGet {
-				f.releases.EXPECT().Download(mock.Anything, "v0.2.0", "checksums.txt").
-					Return([]byte(tc.sums), tc.sumsErr).Once()
+			// A failed checksums download stops before the archive.
+			if !tc.skipArchive {
+				f.releases.EXPECT().
+					Download(mock.Anything, "v0.2.0", archiveName).
+					Return(tc.archive, tc.archiveErr).
+					Once()
 			}
 
 			// ReplaceExecutable is not expected: the mock fails if it is called.

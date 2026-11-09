@@ -112,6 +112,8 @@ func TestReplaceExecutable(t *testing.T) {
 		dir := t.TempDir()
 		exe := filepath.Join(dir, "wharf")
 		require.NoError(t, os.WriteFile(exe, []byte("old"), 0o755))
+		// A backup left by an earlier update is replaced.
+		require.NoError(t, os.WriteFile(exe+".old", []byte("older"), 0o755))
 		before, err := os.Stat(exe)
 		require.NoError(t, err)
 
@@ -131,6 +133,10 @@ func TestReplaceExecutable(t *testing.T) {
 		old, err := os.ReadFile(exe + ".old")
 		require.NoError(t, err)
 		require.Equal(t, "old", string(old))
+
+		oldInfo, err := os.Stat(exe + ".old")
+		require.NoError(t, err)
+		require.True(t, os.SameFile(before, oldInfo))
 
 		entries, err := os.ReadDir(dir)
 		require.NoError(t, err)
@@ -160,7 +166,18 @@ func TestReplaceExecutable(t *testing.T) {
 		exe := filepath.Join(t.TempDir(), "missing")
 
 		err := system.NewDesktopFor("darwin", nil, exe, "", 501).ReplaceExecutable(t.Context(), []byte("new"))
-		require.ErrorIs(t, err, system.ErrFailedToFindExecutable)
+		require.ErrorIs(t, err, system.ErrFailedToFindExecutableToReplace)
+	})
+
+	t.Run("leaves the executable when it cannot be backed up", func(t *testing.T) {
+		dir := t.TempDir()
+		exe := filepath.Join(dir, "wharf")
+		// A directory cannot be hard-linked, so the backup fails first.
+		require.NoError(t, os.MkdirAll(filepath.Join(exe, "keep"), 0o755))
+
+		err := system.NewDesktopFor("darwin", nil, exe, dir, 501).ReplaceExecutable(t.Context(), []byte("new"))
+		require.ErrorIs(t, err, system.ErrFailedToBackUpExecutable)
+		require.DirExists(t, filepath.Join(exe, "keep"))
 	})
 }
 

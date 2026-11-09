@@ -245,12 +245,14 @@ func (u *updater) replace(ctx context.Context, version string) error {
 	tag := "v" + version
 	name := fmt.Sprintf("%s_%s_%s_%s.tar.gz", binaryName, version, u.goos, u.goarch)
 
-	archive, err := u.releases.Download(ctx, tag, name)
+	// The small checksums file goes first, so a release without one fails
+	// before the archive is downloaded.
+	sums, err := u.releases.Download(ctx, tag, checksumsName)
 	if err != nil {
 		return err
 	}
 
-	sums, err := u.releases.Download(ctx, tag, checksumsName)
+	archive, err := u.releases.Download(ctx, tag, name)
 	if err != nil {
 		return err
 	}

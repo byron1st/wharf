@@ -26,7 +26,8 @@ var (
 	ErrEmptyChosenFilePath = errors.New("system: chosen file path is empty")
 
 	ErrFailedToNotify                  = errors.New("system: failed to show notification")
-	ErrFailedToFindExecutable          = errors.New("system: failed to find executable")
+	ErrFailedToFindExecutableToReplace = errors.New("system: failed to find executable to replace")
+	ErrFailedToFindExecutableToInstall = errors.New("system: failed to find executable to install")
 	ErrFailedToCreateTempExecutable    = errors.New("system: failed to create temp executable")
 	ErrFailedToWriteTempExecutable     = errors.New("system: failed to write temp executable")
 	ErrFailedToBackUpExecutable        = errors.New("system: failed to back up executable")
@@ -182,11 +183,11 @@ func (c *client) Notify(ctx context.Context, title, message string) error {
 }
 
 // ReplaceExecutable makes data the running executable, resolved through
-// symlinks, and keeps the previous one next to it with an ".old" suffix. The
-// new file is written next to the executable and renamed over it, so the swap
-// is atomic and the running process keeps its own file: overwriting it in
-// place would get the process killed by macOS code signing. On failure the
-// executable is left as it was.
+// symlinks, and keeps the previous one next to it with an ".old" suffix, a
+// hard link. The new file is written next to the executable and renamed over
+// it, so a file is at the path at every moment and the running process keeps
+// its own file: overwriting it in place would get the process killed by macOS
+// code signing. On failure the executable is left as it was.
 func (c *client) ReplaceExecutable(_ context.Context, data []byte) error {
 	exe, err := c.executable()
 	if err == nil {
@@ -194,7 +195,7 @@ func (c *client) ReplaceExecutable(_ context.Context, data []byte) error {
 	}
 
 	if err != nil {
-		return errors.Join(ErrFailedToFindExecutable, err)
+		return errors.Join(ErrFailedToFindExecutableToReplace, err)
 	}
 
 	f, err := os.CreateTemp(filepath.Dir(exe), "."+filepath.Base(exe)+"-*")
@@ -218,15 +219,16 @@ func (c *client) ReplaceExecutable(_ context.Context, data []byte) error {
 		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToWriteTempExecutable, exe), err)
 	}
 
+	// A stale backup must go first since Link does not replace; a missing one
+	// is fine, and any other failure surfaces in Link.
 	old := exe + ".old"
-	if err := os.Rename(exe, old); err != nil {
+	_ = os.Remove(old)
+
+	if err := os.Link(exe, old); err != nil {
 		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToBackUpExecutable, exe), err)
 	}
 
 	if err := os.Rename(f.Name(), exe); err != nil {
-		// Put the previous executable back; if that fails too, it is still at old.
-		_ = os.Rename(old, exe)
-
 		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReplaceExecutable, exe), err)
 	}
 
@@ -244,7 +246,7 @@ func (c *client) InstallLaunchAgent(ctx context.Context, configPath string) erro
 
 	exe, err := c.executable()
 	if err != nil {
-		return errors.Join(ErrFailedToFindExecutable, err)
+		return errors.Join(ErrFailedToFindExecutableToInstall, err)
 	}
 
 	if configPath != "" {
@@ -254,12 +256,12 @@ func (c *client) InstallLaunchAgent(ctx context.Context, configPath string) erro
 		}
 	}
 
-	plistPath, err := c.launchAgentPath()
+	home, err := c.home()
 	if err != nil {
 		return err
 	}
 
-	home := filepath.Dir(filepath.Dir(filepath.Dir(plistPath)))
+	plistPath := launchAgentPath(home)
 	logPath := filepath.Join(home, "Library", "Logs", "wharf", "wharf.log")
 
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
@@ -302,10 +304,12 @@ func (c *client) UninstallLaunchAgent(ctx context.Context) error {
 		return ErrUnsupportedOS
 	}
 
-	plistPath, err := c.launchAgentPath()
+	home, err := c.home()
 	if err != nil {
 		return err
 	}
+
+	plistPath := launchAgentPath(home)
 
 	// bootout fails when the agent is not loaded, which is the wanted state.
 	_, _ = c.run(ctx, "launchctl", "bootout", c.launchAgentTarget())
@@ -317,13 +321,17 @@ func (c *client) UninstallLaunchAgent(ctx context.Context) error {
 	return nil
 }
 
-func (c *client) launchAgentPath() (string, error) {
+func (c *client) home() (string, error) {
 	home, err := c.homeDir()
 	if err != nil {
 		return "", errors.Join(ErrFailedToFindHomeDir, err)
 	}
 
-	return filepath.Join(home, "Library", "LaunchAgents", LaunchAgentLabel+".plist"), nil
+	return home, nil
+}
+
+func launchAgentPath(home string) string {
+	return filepath.Join(home, "Library", "LaunchAgents", LaunchAgentLabel+".plist")
 }
 
 // launchDomain is the user's GUI session domain.
