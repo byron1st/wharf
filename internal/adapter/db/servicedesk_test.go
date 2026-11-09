@@ -16,7 +16,7 @@ import (
 )
 
 func TestUpsertServiceDeskRequests(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	created := time.UnixMilli(1444290120000).UTC()
 	statusAt := time.UnixMilli(1444287660000).UTC()
@@ -32,28 +32,28 @@ func TestUpsertServiceDeskRequests(t *testing.T) {
 	}))
 	require.NoError(t, manager.UpsertServiceDeskRequests(context.Background(), nil))
 
-	got := readServiceDeskRequest(t, path, "SD-1")
+	got := readServiceDeskRequest(t, dsn, "SD-1")
 	require.Equal(t, "New mouse", got.title)
 	require.Equal(t, "Done", got.status)
 	require.Equal(t, "DONE", got.statusCategory)
 	require.True(t, created.Equal(got.created))
 	require.True(t, later.Equal(got.statusAt))
 
-	kept := readServiceDeskRequest(t, path, "SD-2")
+	kept := readServiceDeskRequest(t, dsn, "SD-2")
 	require.Equal(t, "Account", kept.title)
 	require.Equal(t, "Open", kept.status)
 
-	requireExists(t, path, "WHF-1", true)
+	requireExists(t, dsn, "WHF-1", true)
 
 	var tasks int
 
-	err := open(t, path).QueryRowContext(context.Background(), "SELECT COUNT(*) FROM tasks").Scan(&tasks)
+	err := open(t, dsn).QueryRowContext(context.Background(), "SELECT COUNT(*) FROM tasks").Scan(&tasks)
 	require.NoError(t, err)
 	require.Equal(t, 1, tasks)
 }
 
 func TestUpsertServiceDeskRequestsCanceled(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -71,7 +71,7 @@ func TestUpsertServiceDeskRequestsCanceled(t *testing.T) {
 
 	var count int
 
-	scanErr := open(t, path).QueryRowContext(
+	scanErr := open(t, dsn).QueryRowContext(
 		context.Background(),
 		"SELECT COUNT(*) FROM service_desk_requests",
 	).Scan(&count)
@@ -87,14 +87,14 @@ type readServiceDeskRequestRow struct {
 	statusAt       time.Time
 }
 
-func readServiceDeskRequest(t *testing.T, path, key string) readServiceDeskRequestRow {
+func readServiceDeskRequest(t *testing.T, dsn, key string) readServiceDeskRequestRow {
 	t.Helper()
 
 	var row readServiceDeskRequestRow
 
-	err := open(t, path).QueryRowContext(
+	err := open(t, dsn).QueryRowContext(
 		context.Background(),
-		"SELECT title, status, status_category, created_at, status_at FROM service_desk_requests WHERE issue_key = ?",
+		"SELECT title, status, status_category, created_at, status_at FROM service_desk_requests WHERE issue_key = $1",
 		key,
 	).Scan(&row.title, &row.status, &row.statusCategory, &row.created, &row.statusAt)
 	require.NoError(t, err)
@@ -104,12 +104,12 @@ func readServiceDeskRequest(t *testing.T, path, key string) readServiceDeskReque
 
 // serviceDeskLinks is every stored todo_service_desk_requests row as
 // "todo>key", sorted.
-func serviceDeskLinks(t *testing.T, path string) []string {
+func serviceDeskLinks(t *testing.T, dsn string) []string {
 	t.Helper()
 
 	return texts(
 		t,
-		path,
+		dsn,
 		"SELECT todo_id || '>' || issue_key FROM todo_service_desk_requests ORDER BY todo_id, issue_key",
 	)
 }
@@ -146,7 +146,7 @@ func link(id int64, key string) string {
 }
 
 func TestLinkServiceDeskRequest(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 	a, b := seedLinkable(t, manager)
 	ctx := context.Background()
 
@@ -156,11 +156,11 @@ func TestLinkServiceDeskRequest(t *testing.T) {
 	// Linking again is a no-op.
 	require.NoError(t, manager.LinkServiceDeskRequest(ctx, a, "SD-1"))
 
-	require.Equal(t, []string{link(a, "SD-1"), link(a, "SD-2"), link(b, "SD-1")}, serviceDeskLinks(t, path))
+	require.Equal(t, []string{link(a, "SD-1"), link(a, "SD-2"), link(b, "SD-1")}, serviceDeskLinks(t, dsn))
 }
 
 func TestLinkServiceDeskRequestNotFound(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 	a, b := seedLinkable(t, manager)
 	missing := b + 1
 
@@ -177,11 +177,11 @@ func TestLinkServiceDeskRequestNotFound(t *testing.T) {
 	// A missing todo is reported first.
 	require.ErrorIs(t, manager.LinkServiceDeskRequest(ctx, missing, "SD-9"), db.ErrTodoToLinkNotFound)
 
-	require.Equal(t, []string{}, serviceDeskLinks(t, path))
+	require.Equal(t, []string{}, serviceDeskLinks(t, dsn))
 }
 
 func TestUnlinkServiceDeskRequest(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 	a, b := seedLinkable(t, manager)
 	ctx := context.Background()
 
@@ -190,10 +190,10 @@ func TestUnlinkServiceDeskRequest(t *testing.T) {
 	require.NoError(t, manager.LinkServiceDeskRequest(ctx, b, "SD-1"))
 
 	require.NoError(t, manager.UnlinkServiceDeskRequest(ctx, a, "SD-1"))
-	require.Equal(t, []string{link(a, "SD-2"), link(b, "SD-1")}, serviceDeskLinks(t, path))
-	require.Equal(t, "Request SD-1", readServiceDeskRequest(t, path, "SD-1").title)
+	require.Equal(t, []string{link(a, "SD-2"), link(b, "SD-1")}, serviceDeskLinks(t, dsn))
+	require.Equal(t, "Request SD-1", readServiceDeskRequest(t, dsn, "SD-1").title)
 
-	todos, _ := stored(t, path)
+	todos, _ := stored(t, dsn)
 	require.Equal(t, []string{fmt.Sprint(a), fmt.Sprint(b)}, todos)
 
 	require.ErrorIs(
@@ -201,11 +201,11 @@ func TestUnlinkServiceDeskRequest(t *testing.T) {
 		manager.UnlinkServiceDeskRequest(ctx, a, "SD-1"),
 		db.ErrServiceDeskRequestLinkToDeleteNotFound,
 	)
-	require.Equal(t, []string{link(a, "SD-2"), link(b, "SD-1")}, serviceDeskLinks(t, path))
+	require.Equal(t, []string{link(a, "SD-2"), link(b, "SD-1")}, serviceDeskLinks(t, dsn))
 }
 
 func TestListTodosWithServiceDeskRequests(t *testing.T) {
-	manager, _ := newFileManager(t, scripts.Migrations())
+	manager, _ := newDBManager(t, scripts.Migrations())
 	a, b := seedLinkable(t, manager)
 	ctx := context.Background()
 
@@ -239,7 +239,7 @@ func TestListTodosWithServiceDeskRequests(t *testing.T) {
 }
 
 func TestListTodosByServiceDeskRequest(t *testing.T) {
-	manager, _ := newFileManager(t, scripts.Migrations())
+	manager, _ := newDBManager(t, scripts.Migrations())
 	a, b := seedLinkable(t, manager)
 	done := create(t, manager, todo.Todo{TaskID: "J2", Description: "done", IsDone: true})
 	ctx := context.Background()
@@ -268,7 +268,7 @@ func TestListTodosByServiceDeskRequest(t *testing.T) {
 }
 
 func TestListServiceDeskRequests(t *testing.T) {
-	manager, _ := newFileManager(t, scripts.Migrations())
+	manager, _ := newDBManager(t, scripts.Migrations())
 	ctx := context.Background()
 
 	closed := newRequest("SD-1")
@@ -307,7 +307,7 @@ func TestListServiceDeskRequests(t *testing.T) {
 }
 
 func TestDeleteTodoAndTaskDeleteServiceDeskLinks(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 	a, b := seedLinkable(t, manager)
 	c := create(t, manager, todo.Todo{TaskID: "J2", Description: "c"})
 	ctx := context.Background()
@@ -322,23 +322,23 @@ func TestDeleteTodoAndTaskDeleteServiceDeskLinks(t *testing.T) {
 	require.NoError(t, manager.UpsertTasks(ctx, []task.Task{newTask("J1")}))
 	require.NoError(t, manager.UpsertServiceDeskRequests(ctx, []servicedesk.Request{newRequest("SD-1")}))
 	require.NoError(t, manager.UpdateTodo(ctx, todo.Todo{ID: a, TaskID: "J2", Description: "moved"}))
-	require.Len(t, serviceDeskLinks(t, path), 4)
+	require.Len(t, serviceDeskLinks(t, dsn), 4)
 
 	require.NoError(t, manager.DeleteTodo(ctx, c))
-	require.Equal(t, []string{link(a, "SD-1"), link(a, "SD-2"), link(b, "SD-1")}, serviceDeskLinks(t, path))
+	require.Equal(t, []string{link(a, "SD-1"), link(a, "SD-2"), link(b, "SD-1")}, serviceDeskLinks(t, dsn))
 
 	// a moved to J2, so deleting J1 keeps every link and deleting J2 drops them.
 	require.NoError(t, manager.DeleteTask(ctx, "J1"))
-	require.Len(t, serviceDeskLinks(t, path), 3)
+	require.Len(t, serviceDeskLinks(t, dsn), 3)
 
 	require.NoError(t, manager.DeleteTask(ctx, "J2"))
-	require.Equal(t, []string{}, serviceDeskLinks(t, path))
-	require.Equal(t, "Request SD-1", readServiceDeskRequest(t, path, "SD-1").title)
-	require.Equal(t, "Request SD-2", readServiceDeskRequest(t, path, "SD-2").title)
+	require.Equal(t, []string{}, serviceDeskLinks(t, dsn))
+	require.Equal(t, "Request SD-1", readServiceDeskRequest(t, dsn, "SD-1").title)
+	require.Equal(t, "Request SD-2", readServiceDeskRequest(t, dsn, "SD-2").title)
 }
 
 func TestServiceDeskLinkMethodsCanceled(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 	a, _ := seedLinkable(t, manager)
 	require.NoError(t, manager.LinkServiceDeskRequest(context.Background(), a, "SD-1"))
 
@@ -351,5 +351,5 @@ func TestServiceDeskLinkMethodsCanceled(t *testing.T) {
 	require.ErrorIs(t, err, db.ErrFailedToUnlinkServiceDeskRequest)
 	require.ErrorIs(t, err, context.Canceled)
 
-	require.Equal(t, []string{link(a, "SD-1")}, serviceDeskLinks(t, path))
+	require.Equal(t, []string{link(a, "SD-1")}, serviceDeskLinks(t, dsn))
 }

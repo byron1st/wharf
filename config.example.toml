@@ -11,9 +11,15 @@
 # [::1]); others get 403, so listening on other interfaces does not open the API to them.
 # addr = "127.0.0.1:8080"
 
-# SQLite database file path.
-# Default: <os.UserConfigDir()>/wharf/wharf.db (its directory is created when missing)
-# db_path = "/path/to/wharf.db"
+# Postgres (Supabase) connection URL, postgres:// or postgresql://, WITHOUT a password.
+# Tables live in the wharf schema, which wharf creates when missing.
+# The password is read at startup from the macOS login keychain, from the generic password
+# item whose service is "wharf-db". Add it once (the -w flag with no value prompts for it):
+#   security add-generic-password -a "$USER" -s wharf-db -w
+# With Supabase, use the Session pooler URL (port 5432) from Connect › Session pooler;
+# the Transaction pooler (port 6543) does not keep the session wharf relies on.
+# Required: the server does not start, and Settings will not restart into a file, without it.
+# db_url = "postgresql://postgres.<project-ref>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
 
 # Jira Cloud REST API base URL (https only, no query or fragment).
 # Either your site URL, or for a scoped API token the gateway URL

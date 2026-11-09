@@ -13,7 +13,7 @@ import (
 )
 
 func TestAtlassianSyncs(t *testing.T) {
-	manager, _ := newFileManager(t, scripts.Migrations())
+	manager, _ := newDBManager(t, scripts.Migrations())
 	ctx := context.Background()
 
 	_, err := manager.GetLastAtlassianSync(ctx)
@@ -41,7 +41,7 @@ func TestAtlassianSyncs(t *testing.T) {
 }
 
 func TestAtlassianSyncsCanceled(t *testing.T) {
-	manager, _ := newFileManager(t, scripts.Migrations())
+	manager, _ := newDBManager(t, scripts.Migrations())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

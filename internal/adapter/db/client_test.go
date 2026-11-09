@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"io/fs"
-	"path/filepath"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -16,8 +15,8 @@ import (
 	"github.com/byron1st/wharf/scripts"
 )
 
-// newManager connects a manager to a fresh in-memory database with the
-// project migrations applied.
+// newManager connects a manager to a fresh database with the project
+// migrations applied.
 func newManager(t *testing.T) db.Manager {
 	t.Helper()
 
@@ -27,29 +26,24 @@ func newManager(t *testing.T) db.Manager {
 	return manager
 }
 
+// connect connects a manager for migrations to a fresh database.
 func connect(t *testing.T, migrations fs.FS) db.Manager {
 	t.Helper()
 
-	manager := db.NewManager(":memory:", migrations)
-	require.NoError(t, manager.Connect(context.Background()))
-	t.Cleanup(func() { _ = manager.Close() })
-
-	return manager
+	return dbManager(t, newDatabase(t), migrations)
 }
 
-// newFileManager connects a manager to a fresh database file migrated with
-// migrations, and returns the file path so tests can read rows directly.
-func newFileManager(t *testing.T, migrations fs.FS) (db.Manager, string) {
+// newDBManager connects a manager to a fresh database migrated with
+// migrations, and returns the database URL so tests can read rows directly.
+func newDBManager(t *testing.T, migrations fs.FS) (db.Manager, string) {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "wharf.db")
+	dsn := newDatabase(t)
 
-	manager := db.NewManager(path, migrations)
-	require.NoError(t, manager.Connect(context.Background()))
-	t.Cleanup(func() { _ = manager.Close() })
+	manager := dbManager(t, dsn, migrations)
 	require.NoError(t, manager.Migrate(context.Background()))
 
-	return manager, path
+	return manager, dsn
 }
 
 // projectMigrationsWith returns the project migrations plus extra files in
@@ -87,14 +81,14 @@ type readTask struct {
 
 // read loads a stored task through a separate connection, since Manager has
 // no read query for task fields.
-func read(t *testing.T, path, id string) readTask {
+func read(t *testing.T, dsn, id string) readTask {
 	t.Helper()
 
 	var task readTask
 
-	err := open(t, path).QueryRowContext(
+	err := open(t, dsn).QueryRowContext(
 		context.Background(),
-		"SELECT originated, title, status, start_date, due_date FROM tasks WHERE id = ?",
+		"SELECT originated, title, status, start_date, due_date FROM tasks WHERE id = $1",
 		id,
 	).Scan(&task.originated, &task.title, &task.status, &task.startDate, &task.dueDate)
 	require.NoError(t, err)
@@ -104,12 +98,12 @@ func read(t *testing.T, path, id string) readTask {
 
 // requireExists checks through a separate connection whether a task with id
 // is stored, since Manager has no read query for tasks.
-func requireExists(t *testing.T, path, id string, want bool) {
+func requireExists(t *testing.T, dsn, id string, want bool) {
 	t.Helper()
 
 	var exists bool
 
-	err := open(t, path).QueryRowContext(context.Background(), "SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?)", id).
+	err := open(t, dsn).QueryRowContext(context.Background(), "SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1)", id).
 		Scan(&exists)
 	require.NoError(t, err)
 	require.Equal(t, want, exists, "id=%s", id)
@@ -117,10 +111,10 @@ func requireExists(t *testing.T, path, id string, want bool) {
 
 // relations is every stored relation, as "child<parent" for task_hierarchies
 // and "task>linked" for task_links rows, sorted.
-func relations(t *testing.T, path string) []string {
+func relations(t *testing.T, dsn string) []string {
 	t.Helper()
 
-	rows, err := open(t, path).QueryContext(
+	rows, err := open(t, dsn).QueryContext(
 		context.Background(),
 		"SELECT child_id || '<' || parent_id FROM task_hierarchies "+
 			"UNION ALL SELECT task_id || '>' || linked_id FROM task_links ORDER BY 1",
@@ -142,14 +136,23 @@ func relations(t *testing.T, path string) []string {
 	return got
 }
 
-func open(t *testing.T, path string) *sql.DB {
+// indexColumns returns the columns of the wharf index name, comma-separated
+// in index order.
+func indexColumns(t *testing.T, conn *sql.DB, name string) string {
 	t.Helper()
 
-	conn, err := sql.Open("sqlite", path)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = conn.Close() })
+	var columns string
 
-	return conn
+	err := conn.QueryRowContext(
+		context.Background(),
+		"SELECT string_agg(a.attname, ',' ORDER BY array_position(i.indkey::int2[], a.attnum)) "+
+			"FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "+
+			"WHERE i.indexrelid = to_regclass('wharf.' || $1)",
+		name,
+	).Scan(&columns)
+	require.NoError(t, err)
+
+	return columns
 }
 
 func newTask(id string) task.Task {
@@ -157,13 +160,14 @@ func newTask(id string) task.Task {
 }
 
 func TestInitialMigrationSchema(t *testing.T) {
-	_, path := newFileManager(t, scripts.Migrations())
-	conn := open(t, path)
+	_, dsn := newDBManager(t, scripts.Migrations())
+	conn := open(t, dsn)
 
 	columns := func(table string) []string {
 		rows, err := conn.QueryContext(
 			context.Background(),
-			"SELECT name FROM pragma_table_info(?) ORDER BY cid",
+			"SELECT column_name FROM information_schema.columns "+
+				"WHERE table_schema = 'wharf' AND table_name = $1 ORDER BY ordinal_position",
 			table,
 		)
 		require.NoError(t, err)
@@ -205,35 +209,19 @@ func TestInitialMigrationSchema(t *testing.T) {
 	)
 	require.Equal(t, []string{"todo_id", "issue_key"}, columns("todo_service_desk_requests"))
 
-	var linkPK string
-
-	err := conn.QueryRowContext(
-		context.Background(),
-		"SELECT group_concat(name, ',') FROM "+
-			"(SELECT name FROM pragma_table_info('todo_service_desk_requests') WHERE pk > 0 ORDER BY pk)",
-	).Scan(&linkPK)
-	require.NoError(t, err)
-	require.Equal(t, "todo_id,issue_key", linkPK)
-
-	var todoIDIsPK bool
-
-	err = conn.QueryRowContext(
-		context.Background(),
-		"SELECT pk = 1 FROM pragma_table_info('task_todos') WHERE name = 'todo_id'",
-	).Scan(&todoIDIsPK)
-	require.NoError(t, err)
-	require.True(t, todoIDIsPK)
+	require.Equal(t, "todo_id,issue_key", indexColumns(t, conn, "todo_service_desk_requests_pkey"))
+	require.Equal(t, "todo_id", indexColumns(t, conn, "task_todos_pkey"))
 
 	var value int64
 
-	err = conn.QueryRowContext(context.Background(), "SELECT value FROM counters WHERE name = 'local_task'").
+	err := conn.QueryRowContext(context.Background(), "SELECT value FROM counters WHERE name = 'local_task'").
 		Scan(&value)
 	require.NoError(t, err)
 	require.Zero(t, value)
 }
 
 func TestUpsertTasks(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	due := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
@@ -247,17 +235,17 @@ func TestUpsertTasks(t *testing.T) {
 
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{full, newTask("T2")}))
 
-	got := read(t, path, "T1")
+	got := read(t, dsn, "T1")
 	require.True(t, got.startDate.Valid)
 	require.True(t, start.Equal(got.startDate.Time))
 	require.True(t, got.dueDate.Valid)
 	require.True(t, due.Equal(got.dueDate.Time))
 
 	// T2 declares no parent, so storing it after T1 removes the T2<T1 row.
-	require.Equal(t, []string{"T1<T0", "T1>T4", "T3<T1"}, relations(t, path))
+	require.Equal(t, []string{"T1<T0", "T1>T4", "T3<T1"}, relations(t, dsn))
 
-	require.Equal(t, readTask{originated: "jira", title: "T2", status: "todo"}, read(t, path, "T2"))
-	requireExists(t, path, "T9", false)
+	require.Equal(t, readTask{originated: "jira", title: "T2", status: "todo"}, read(t, dsn, "T2"))
+	requireExists(t, dsn, "T9", false)
 }
 
 func TestUpsertTasksEmpty(t *testing.T) {
@@ -268,7 +256,7 @@ func TestUpsertTasksEmpty(t *testing.T) {
 }
 
 func TestUpsertTasksOverwritesExistingTask(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 
@@ -282,29 +270,29 @@ func TestUpsertTasksOverwritesExistingTask(t *testing.T) {
 	updated.Status = task.StatusDone
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{updated, newTask("T2")}))
 
-	require.Equal(t, readTask{originated: "jira", title: "new", status: "done"}, read(t, path, "T1"))
-	requireExists(t, path, "T2", true)
+	require.Equal(t, readTask{originated: "jira", title: "new", status: "done"}, read(t, dsn, "T1"))
+	requireExists(t, dsn, "T2", true)
 }
 
 func TestUpsertTasksReplacesParent(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	child := newTask("T1")
 	child.ParentID = "P1"
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{child}))
-	require.Equal(t, []string{"T1<P1"}, relations(t, path))
+	require.Equal(t, []string{"T1<P1"}, relations(t, dsn))
 
 	child.ParentID = "P2"
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{child}))
-	require.Equal(t, []string{"T1<P2"}, relations(t, path))
+	require.Equal(t, []string{"T1<P2"}, relations(t, dsn))
 
 	child.ParentID = ""
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{child}))
-	require.Equal(t, []string{}, relations(t, path))
+	require.Equal(t, []string{}, relations(t, dsn))
 }
 
 func TestUpsertTasksAddsAndMovesChildren(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	first := newTask("P1")
 	first.ChildrenIDs = []string{"C1", "C2"}
@@ -317,11 +305,11 @@ func TestUpsertTasksAddsAndMovesChildren(t *testing.T) {
 	first.ChildrenIDs = []string{"C3"}
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{second, first}))
 
-	require.Equal(t, []string{"C1<P1", "C2<P2", "C3<P1"}, relations(t, path))
+	require.Equal(t, []string{"C1<P1", "C2<P2", "C3<P1"}, relations(t, dsn))
 }
 
 func TestUpsertTasksKeepsStoryUnderEpicWithoutChildren(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	story := newTask("STORY")
 	story.ParentID = "EPIC"
@@ -331,11 +319,11 @@ func TestUpsertTasksKeepsStoryUnderEpicWithoutChildren(t *testing.T) {
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("EPIC")}))
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("EPIC"), story}))
 
-	require.Equal(t, []string{"STORY<EPIC"}, relations(t, path))
+	require.Equal(t, []string{"STORY<EPIC"}, relations(t, dsn))
 }
 
 func TestUpsertTasksReplacesOnlyDeclaredLinks(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	local := newTask("L1")
 	local.LinkedIDs = []string{"T1"}
@@ -346,23 +334,27 @@ func TestUpsertTasksReplacesOnlyDeclaredLinks(t *testing.T) {
 
 	jira.LinkedIDs = []string{"T3", "T4"}
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{jira}))
-	require.Equal(t, []string{"L1>T1", "T1>T3", "T1>T4"}, relations(t, path))
+	require.Equal(t, []string{"L1>T1", "T1>T3", "T1>T4"}, relations(t, dsn))
 
 	jira.LinkedIDs = []string{}
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{jira}))
-	require.Equal(t, []string{"L1>T1"}, relations(t, path))
+	require.Equal(t, []string{"L1>T1"}, relations(t, dsn))
 }
 
 func TestUpsertTasksStoresDuplicateRelationsOnce(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	dup := newTask("T1")
 	dup.ChildrenIDs = []string{"C1", "C1"}
 	dup.LinkedIDs = []string{"T2", "T2"}
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{dup}))
 
-	require.Equal(t, []string{"C1<T1", "T1>T2"}, relations(t, path))
+	require.Equal(t, []string{"C1<T1", "T1>T2"}, relations(t, dsn))
 }
+
+// rejectFunction is a trigger function that fails the write it fires on.
+const rejectFunction = "CREATE FUNCTION reject() RETURNS trigger LANGUAGE plpgsql " +
+	"AS $$ BEGIN RAISE EXCEPTION 'rejected'; END $$; "
 
 func TestUpsertTasksRollsBackOnFailure(t *testing.T) {
 	// Each trigger rejects one write so that the failure comes after the
@@ -375,37 +367,37 @@ func TestUpsertTasksRollsBackOnFailure(t *testing.T) {
 	}{
 		{
 			name:    "task",
-			trigger: "BEFORE INSERT ON tasks WHEN NEW.id = 'FAIL'",
+			trigger: "BEFORE INSERT ON tasks FOR EACH ROW WHEN (NEW.id = 'FAIL')",
 			fail:    newTask("FAIL"),
 			wantErr: db.ErrFailedToUpsertTask,
 		},
 		{
 			name:    "delete parent",
-			trigger: "BEFORE DELETE ON task_hierarchies WHEN OLD.child_id = 'T1'",
+			trigger: "BEFORE DELETE ON task_hierarchies FOR EACH ROW WHEN (OLD.child_id = 'T1')",
 			fail:    newTask("T1"),
 			wantErr: db.ErrFailedToDeleteTaskParent,
 		},
 		{
 			name:    "parent",
-			trigger: "BEFORE INSERT ON task_hierarchies WHEN NEW.parent_id = 'FAIL'",
+			trigger: "BEFORE INSERT ON task_hierarchies FOR EACH ROW WHEN (NEW.parent_id = 'FAIL')",
 			fail:    task.Task{ID: "T9", ParentID: "FAIL"},
 			wantErr: db.ErrFailedToStoreTaskParent,
 		},
 		{
 			name:    "child",
-			trigger: "BEFORE INSERT ON task_hierarchies WHEN NEW.child_id = 'FAIL'",
+			trigger: "BEFORE INSERT ON task_hierarchies FOR EACH ROW WHEN (NEW.child_id = 'FAIL')",
 			fail:    task.Task{ID: "T9", ChildrenIDs: []string{"FAIL"}},
 			wantErr: db.ErrFailedToStoreTaskChild,
 		},
 		{
 			name:    "delete links",
-			trigger: "BEFORE DELETE ON task_links WHEN OLD.task_id = 'T1'",
+			trigger: "BEFORE DELETE ON task_links FOR EACH ROW WHEN (OLD.task_id = 'T1')",
 			fail:    newTask("T1"),
 			wantErr: db.ErrFailedToDeleteTaskLinks,
 		},
 		{
 			name:    "link",
-			trigger: "BEFORE INSERT ON task_links WHEN NEW.linked_id = 'FAIL'",
+			trigger: "BEFORE INSERT ON task_links FOR EACH ROW WHEN (NEW.linked_id = 'FAIL')",
 			fail:    task.Task{ID: "T9", LinkedIDs: []string{"FAIL"}},
 			wantErr: db.ErrFailedToStoreTaskLink,
 		},
@@ -413,8 +405,8 @@ func TestUpsertTasksRollsBackOnFailure(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager, path := newFileManager(t, projectMigrationsWith(t, map[string]string{
-				"9999_reject.sql": "CREATE TRIGGER reject " + tt.trigger + " BEGIN SELECT RAISE(ABORT, 'rejected'); END;",
+			manager, dsn := newDBManager(t, projectMigrationsWith(t, map[string]string{
+				"9999_reject.sql": rejectFunction + "CREATE TRIGGER reject " + tt.trigger + " EXECUTE FUNCTION reject();",
 			}))
 
 			existing := newTask("T1")
@@ -432,27 +424,27 @@ func TestUpsertTasksRollsBackOnFailure(t *testing.T) {
 			require.ErrorIs(t, err, tt.wantErr)
 			require.ErrorContains(t, err, "id="+tt.fail.ID)
 
-			require.Equal(t, "old", read(t, path, "T1").title)
-			requireExists(t, path, "T2", false)
-			requireExists(t, path, "T3", false)
-			require.Equal(t, []string{"T1<P1", "T1>L1"}, relations(t, path))
+			require.Equal(t, "old", read(t, dsn, "T1").title)
+			requireExists(t, dsn, "T2", false)
+			requireExists(t, dsn, "T3", false)
+			require.Equal(t, []string{"T1<P1", "T1>L1"}, relations(t, dsn))
 		})
 	}
 }
 
 func TestUpsertTasksBeginTxFailure(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	err := manager.UpsertTasks(ctx, []task.Task{newTask("T1")})
 	require.ErrorIs(t, err, db.ErrFailedToBeginTx)
-	requireExists(t, path, "T1", false)
+	requireExists(t, dsn, "T1", false)
 }
 
 func TestCreateLocalTask(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	first := newTask("ignored")
 	first.ParentID = "jira-WHF-1"
@@ -466,17 +458,17 @@ func TestCreateLocalTask(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "local-WHF-002", id)
 
-	require.Equal(t, readTask{originated: "local", title: "ignored", status: "todo"}, read(t, path, "local-WHF-001"))
-	requireExists(t, path, "ignored", false)
-	require.Equal(t, []string{"local-WHF-001<jira-WHF-1", "local-WHF-001>jira-WHF-2"}, relations(t, path))
+	require.Equal(t, readTask{originated: "local", title: "ignored", status: "todo"}, read(t, dsn, "local-WHF-001"))
+	requireExists(t, dsn, "ignored", false)
+	require.Equal(t, []string{"local-WHF-001<jira-WHF-1", "local-WHF-001>jira-WHF-2"}, relations(t, dsn))
 }
 
 func TestCreateLocalTaskPastThreeDigits(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	_, err := open(
 		t,
-		path,
+		dsn,
 	).ExecContext(context.Background(), "UPDATE counters SET value = 999 WHERE name = 'local_task'")
 	require.NoError(t, err)
 
@@ -486,9 +478,9 @@ func TestCreateLocalTaskPastThreeDigits(t *testing.T) {
 }
 
 func TestCreateLocalTaskFailureKeepsNumber(t *testing.T) {
-	manager, path := newFileManager(t, projectMigrationsWith(t, map[string]string{
-		"9999_reject.sql": "CREATE TRIGGER reject BEFORE INSERT ON task_links WHEN NEW.linked_id = 'FAIL' " +
-			"BEGIN SELECT RAISE(ABORT, 'rejected'); END;",
+	manager, dsn := newDBManager(t, projectMigrationsWith(t, map[string]string{
+		"9999_reject.sql": rejectFunction + "CREATE TRIGGER reject BEFORE INSERT ON task_links FOR EACH ROW " +
+			"WHEN (NEW.linked_id = 'FAIL') EXECUTE FUNCTION reject();",
 	}))
 
 	id, err := manager.CreateLocalTask(context.Background(), newTask("first"))
@@ -502,18 +494,18 @@ func TestCreateLocalTaskFailureKeepsNumber(t *testing.T) {
 	require.ErrorIs(t, err, db.ErrFailedToStoreTaskLink)
 	require.ErrorContains(t, err, "id=local-WHF-002")
 	require.Empty(t, id)
-	requireExists(t, path, "local-WHF-002", false)
+	requireExists(t, dsn, "local-WHF-002", false)
 
 	id, err = manager.CreateLocalTask(context.Background(), newTask("second"))
 	require.NoError(t, err)
 	require.Equal(t, "local-WHF-002", id)
-	require.Equal(t, "second", read(t, path, "local-WHF-002").title)
+	require.Equal(t, "second", read(t, dsn, "local-WHF-002").title)
 }
 
 func TestCreateLocalTaskCounterFailure(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
-	_, err := open(t, path).ExecContext(context.Background(), "DELETE FROM counters")
+	_, err := open(t, dsn).ExecContext(context.Background(), "DELETE FROM counters")
 	require.NoError(t, err)
 
 	id, err := manager.CreateLocalTask(context.Background(), newTask("ignored"))
@@ -523,11 +515,12 @@ func TestCreateLocalTaskCounterFailure(t *testing.T) {
 }
 
 func TestInitialMigrationIndexes(t *testing.T) {
-	_, path := newFileManager(t, scripts.Migrations())
+	_, dsn := newDBManager(t, scripts.Migrations())
 
-	rows, err := open(t, path).QueryContext(
+	rows, err := open(t, dsn).QueryContext(
 		context.Background(),
-		"SELECT tbl_name || '(' || name || ')' FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY 1",
+		"SELECT tablename || '(' || indexname || ')' FROM pg_indexes "+
+			"WHERE schemaname = 'wharf' AND indexname NOT LIKE '%_pkey' ORDER BY 1",
 	)
 	require.NoError(t, err)
 
@@ -554,7 +547,7 @@ func TestInitialMigrationIndexes(t *testing.T) {
 }
 
 func TestUpsertTasksKeepsLocalParentOfJiraTask(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	local := newTask("ignored")
 	local.ChildrenIDs = []string{"jira-J"}
@@ -564,17 +557,17 @@ func TestUpsertTasksKeepsLocalParentOfJiraTask(t *testing.T) {
 
 	// J declares no parent, so the local parent that claimed it stays.
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("jira-J")}))
-	require.Equal(t, []string{"jira-J<" + id}, relations(t, path))
+	require.Equal(t, []string{"jira-J<" + id}, relations(t, dsn))
 
 	// A declared parent still replaces the local one.
 	child := newTask("jira-J")
 	child.ParentID = "jira-P"
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{child}))
-	require.Equal(t, []string{"jira-J<jira-P"}, relations(t, path))
+	require.Equal(t, []string{"jira-J<jira-P"}, relations(t, dsn))
 
 	// A non-local parent is dropped as before once J stops declaring it.
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("jira-J")}))
-	require.Equal(t, []string{}, relations(t, path))
+	require.Equal(t, []string{}, relations(t, dsn))
 }
 
 func TestListTasks(t *testing.T) {
@@ -683,7 +676,7 @@ func TestGetTask(t *testing.T) {
 }
 
 func TestUpdateLocalTask(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	created := newTask("ignored")
 	created.Title = "old"
@@ -715,17 +708,17 @@ func TestUpdateLocalTask(t *testing.T) {
 	}
 	require.NoError(t, manager.UpdateLocalTask(context.Background(), updated))
 
-	got := read(t, path, id)
+	got := read(t, dsn, id)
 	require.True(t, got.dueDate.Valid)
 	require.True(t, due.Equal(got.dueDate.Time))
 
 	got.dueDate = sql.NullTime{}
 	require.Equal(t, readTask{originated: "local", title: "new", status: "in-progress"}, got)
-	require.Equal(t, []string{"C3<" + id, id + "<P2", id + ">L2"}, relations(t, path))
+	require.Equal(t, []string{"C3<" + id, id + "<P2", id + ">L2"}, relations(t, dsn))
 }
 
 func TestUpdateLocalTaskRejectsMissingOrNonLocalTask(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	jira := newTask("J1")
 	jira.Title = "old"
@@ -738,13 +731,13 @@ func TestUpdateLocalTaskRejectsMissingOrNonLocalTask(t *testing.T) {
 		require.ErrorContains(t, err, "id="+id)
 	}
 
-	require.Equal(t, "old", read(t, path, "J1").title)
-	requireExists(t, path, "local-WHF-404", false)
-	require.Equal(t, []string{"C1<J1"}, relations(t, path))
+	require.Equal(t, "old", read(t, dsn, "J1").title)
+	requireExists(t, dsn, "local-WHF-404", false)
+	require.Equal(t, []string{"C1<J1"}, relations(t, dsn))
 }
 
 func TestUpdateLocalTaskStatus(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	created := newTask("ignored")
 	created.Title = "local"
@@ -755,8 +748,8 @@ func TestUpdateLocalTaskStatus(t *testing.T) {
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("J1")}))
 
 	require.NoError(t, manager.UpdateLocalTaskStatus(context.Background(), id, task.StatusDone))
-	require.Equal(t, readTask{originated: "local", title: "local", status: "done"}, read(t, path, id))
-	require.Equal(t, []string{"C1<" + id}, relations(t, path))
+	require.Equal(t, readTask{originated: "local", title: "local", status: "done"}, read(t, dsn, id))
+	require.Equal(t, []string{"C1<" + id}, relations(t, dsn))
 
 	for _, missing := range []string{"J1", "local-WHF-404"} {
 		err := manager.UpdateLocalTaskStatus(context.Background(), missing, task.StatusDone)
@@ -764,7 +757,7 @@ func TestUpdateLocalTaskStatus(t *testing.T) {
 		require.ErrorContains(t, err, "id="+missing)
 	}
 
-	require.Equal(t, "todo", read(t, path, "J1").status)
+	require.Equal(t, "todo", read(t, dsn, "J1").status)
 }
 
 func TestSetTaskPositions(t *testing.T) {
@@ -802,7 +795,7 @@ func TestSetTaskPositions(t *testing.T) {
 }
 
 func TestDeleteTask(t *testing.T) {
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 
 	target := newTask("T1")
 	target.ParentID = "P"
@@ -819,14 +812,14 @@ func TestDeleteTask(t *testing.T) {
 	child.ParentID = "T1"
 
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{target, back, sibling, child}))
-	require.Equal(t, []string{"C1<T1", "L2>L1", "L2>T1", "S1<P", "T1<P", "T1>L1"}, relations(t, path))
+	require.Equal(t, []string{"C1<T1", "L2>L1", "L2>T1", "S1<P", "T1<P", "T1>L1"}, relations(t, dsn))
 	require.NoError(t, manager.DeleteTask(context.Background(), "T1"))
 
-	requireExists(t, path, "T1", false)
-	requireExists(t, path, "C1", true)
-	requireExists(t, path, "L2", true)
-	requireExists(t, path, "S1", true)
-	require.Equal(t, []string{"L2>L1", "S1<P"}, relations(t, path))
+	requireExists(t, dsn, "T1", false)
+	requireExists(t, dsn, "C1", true)
+	requireExists(t, dsn, "L2", true)
+	requireExists(t, dsn, "S1", true)
+	require.Equal(t, []string{"L2>L1", "S1<P"}, relations(t, dsn))
 
 	err := manager.DeleteTask(context.Background(), "T1")
 	require.ErrorIs(t, err, db.ErrTaskToDeleteNotFound)

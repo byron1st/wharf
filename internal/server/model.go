@@ -160,7 +160,7 @@ type appSettingsResponse struct {
 	ConfigPath        string  `json:"config_path"`
 	PendingConfigPath *string `json:"pending_config_path"`
 	Addr              string  `json:"addr"`
-	DBPath            string  `json:"db_path"`
+	DBTarget          string  `json:"db_target"`
 	Version           string  `json:"version"`
 }
 

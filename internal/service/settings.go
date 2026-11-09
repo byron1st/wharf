@@ -36,8 +36,10 @@ type AppSettings struct {
 	// restart, or empty when none is chosen.
 	PendingConfigPath string
 	Addr              string
-	DBPath            string
-	Version           string
+	// DBTarget is the host and database the server stores data in, without
+	// credentials.
+	DBTarget string
+	Version  string
 }
 
 type Settings interface {
@@ -186,13 +188,13 @@ func (s *settings) OpenConfigFile(ctx context.Context) error {
 
 // RestartServer restarts the server with the pending config file, or the
 // current one. It fails with ErrInvalidConfigFile, without restarting, when
-// that file does not load.
+// that file does not load or the server could not start with it.
 func (s *settings) RestartServer(context.Context) error {
 	s.mu.Lock()
 	path := s.nextConfigPath()
 	s.mu.Unlock()
 
-	if _, err := config.Load(path); err != nil {
+	if _, err := config.LoadForServer(path); err != nil {
 		return errors.Join(ErrInvalidConfigFile, err)
 	}
 

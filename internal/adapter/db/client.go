@@ -3,12 +3,11 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"time"
-
-	_ "modernc.org/sqlite"
 
 	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
 	"github.com/byron1st/wharf/internal/pkg/servicedesk"
@@ -99,18 +98,21 @@ type Manager interface {
 }
 
 type manager struct {
-	path       string
+	url        string
+	password   string
 	migrations fs.FS
 	db         *sql.DB
 	queries    *Queries
 }
 
-// NewManager creates a manager for the SQLite database at path. migrations
-// holds schema_migrations.sql and the migrations directory at its root. Call
-// Connect before using it. Connect and Close are meant for program start and
-// shutdown and must not run concurrently with other methods.
-func NewManager(path string, migrations fs.FS) Manager {
-	return &manager{path: path, migrations: migrations}
+// NewManager creates a manager for the Postgres database at url, a
+// connection URL or DSN without a password, authenticating with password.
+// Its tables live in the wharf schema. migrations holds schema_migrations.sql
+// and the migrations directory at its root. Call Connect before using it.
+// Connect and Close are meant for program start and shutdown and must not run
+// concurrently with other methods.
+func NewManager(url, password string, migrations fs.FS) Manager {
+	return &manager{url: url, password: password, migrations: migrations}
 }
 
 // UpsertTasks stores all tasks with their relations in one transaction:
@@ -155,8 +157,6 @@ func (m *manager) CreateLocalTask(ctx context.Context, t task.Task) (string, err
 		return "", err
 	}
 
-	// The counter UPDATE is the transaction's first statement, keeping the
-	// write-first rule described at busyTimeoutPragma.
 	err := m.inTx(ctx, func(queries *Queries) error {
 		n, err := queries.IncrementCounter(ctx, localTaskCounter)
 		if err != nil {
@@ -196,7 +196,14 @@ func (m *manager) ListTasksByIDs(ctx context.Context, ids []string) ([]task.Task
 		return nil, err
 	}
 
-	rows, err := m.queries.ListTasksByIDs(ctx, ids)
+	if len(ids) == 0 {
+		return []task.Task{}, nil
+	}
+
+	// Marshaling a []string cannot fail.
+	encoded, _ := json.Marshal(ids)
+
+	rows, err := m.queries.ListTasksByIDs(ctx, string(encoded))
 	if err != nil {
 		return nil, errors.Join(ErrFailedToListTasksByIDs, err)
 	}
@@ -411,9 +418,8 @@ func (m *manager) LinkServiceDeskRequest(ctx context.Context, todoID int64, key 
 	}
 
 	return m.inTx(ctx, func(queries *Queries) error {
-		// The insert checks both sides, keeping the write-first rule described
-		// at busyTimeoutPragma. Only when it inserts nothing do the reads below
-		// tell a missing side from an existing link.
+		// The insert checks both sides. Only when it inserts nothing do the
+		// reads below tell a missing side from an existing link.
 		params := CreateTodoServiceDeskRequestParams{TodoID: todoID, IssueKey: key}
 
 		created, err := queries.CreateTodoServiceDeskRequest(ctx, params)
@@ -542,7 +548,8 @@ func (m *manager) GetLastAtlassianSync(ctx context.Context) (atlassiansync.Recor
 	}, nil
 }
 
-// inTx runs fn in a transaction and commits it when fn succeeds.
+// inTx runs fn in a transaction, after taking the write lock described at
+// writeLockKey, and commits it when fn succeeds.
 func (m *manager) inTx(ctx context.Context, fn func(*Queries) error) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -551,6 +558,10 @@ func (m *manager) inTx(ctx context.Context, fn func(*Queries) error) error {
 
 	// Rollback after a successful Commit is a no-op returning sql.ErrTxDone.
 	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", writeLockKey); err != nil {
+		return errors.Join(ErrFailedToLockWrites, err)
+	}
 
 	if err := fn(m.queries.WithTx(tx)); err != nil {
 		return err
@@ -664,8 +675,7 @@ func fromNullTime(t sql.NullTime) *time.Time {
 	return &t.Time
 }
 
-// toNullTime stores t at UTC. SQLite keeps times as text and compares them
-// as strings, so every stored or compared time must share one zone.
+// toNullTime stores t at UTC, so times read back are in one zone.
 func toNullTime(t *time.Time) sql.NullTime {
 	if t == nil {
 		return sql.NullTime{}

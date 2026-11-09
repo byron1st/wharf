@@ -116,7 +116,7 @@ func TestAtlassianSettingsRoutesMapErrors(t *testing.T) {
 }
 
 func TestAppSettingsRoutes(t *testing.T) {
-	app := service.AppSettings{ConfigPath: "/c.toml", Addr: ":8080", DBPath: "/w.db", Version: "v1"}
+	app := service.AppSettings{ConfigPath: "/c.toml", Addr: ":8080", DBTarget: "db.example.com/postgres", Version: "v1"}
 	pending := app
 	pending.PendingConfigPath = "/other.toml"
 
@@ -130,8 +130,12 @@ func TestAppSettingsRoutes(t *testing.T) {
 
 	rec := serveSettings(t, settings, http.MethodGet, "/api/settings/app", "")
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.JSONEq(t, `{"config_path":"/c.toml","pending_config_path":null,"addr":":8080","db_path":"/w.db",
-		"version":"v1"}`, rec.Body.String())
+	require.JSONEq(
+		t,
+		`{"config_path":"/c.toml","pending_config_path":null,"addr":":8080","db_target":"db.example.com/postgres",
+		"version":"v1"}`,
+		rec.Body.String(),
+	)
 
 	rec = serveSettings(t, settings, http.MethodPost, "/api/settings/app/config/choose", "")
 	require.Equal(t, http.StatusOK, rec.Code)

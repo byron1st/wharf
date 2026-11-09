@@ -2,7 +2,7 @@
 INSERT INTO tasks (
     id, originated, title, description, status, start_date, due_date
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?
+    $1, $2, $3, $4, $5, $6, $7
 )
 ON CONFLICT (id) DO UPDATE SET
     originated  = excluded.originated,
@@ -13,28 +13,28 @@ ON CONFLICT (id) DO UPDATE SET
     due_date    = excluded.due_date;
 
 -- name: DeleteTaskParent :exec
-DELETE FROM task_hierarchies WHERE child_id = ?;
+DELETE FROM task_hierarchies WHERE child_id = $1;
 
 -- name: DeleteTaskNonLocalParent :exec
 -- 'local' is task.OriginLocal. A local parent of a non-local task is always
 -- stored, since only CreateLocalTask and UpdateLocalTask declare one and
 -- DeleteTask removes its rows.
 DELETE FROM task_hierarchies
-WHERE child_id = ?
+WHERE child_id = $1
   AND parent_id NOT IN (SELECT id FROM tasks WHERE originated = 'local');
 
 -- name: DeleteTaskChildren :exec
-DELETE FROM task_hierarchies WHERE parent_id = ?;
+DELETE FROM task_hierarchies WHERE parent_id = $1;
 
 -- name: UpsertTaskHierarchy :exec
-INSERT INTO task_hierarchies (child_id, parent_id) VALUES (?, ?)
+INSERT INTO task_hierarchies (child_id, parent_id) VALUES ($1, $2)
 ON CONFLICT (child_id) DO UPDATE SET parent_id = excluded.parent_id;
 
 -- name: DeleteTaskLinks :exec
-DELETE FROM task_links WHERE task_id = ?;
+DELETE FROM task_links WHERE task_id = $1;
 
 -- name: CreateTaskLink :exec
-INSERT INTO task_links (task_id, linked_id) VALUES (?, ?)
+INSERT INTO task_links (task_id, linked_id) VALUES ($1, $2)
 ON CONFLICT (task_id, linked_id) DO NOTHING;
 
 -- name: ListTasks :many
@@ -43,22 +43,25 @@ SELECT * FROM tasks ORDER BY id;
 -- name: CountTodosByTask :many
 SELECT task_todos.task_id,
        COUNT(*) AS todos,
-       CAST(COALESCE(SUM(todos.is_done), 0) AS INTEGER) AS done_todos
+       COUNT(*) FILTER (WHERE todos.is_done) AS done_todos
 FROM task_todos
 JOIN todos ON todos.id = task_todos.todo_id
 GROUP BY task_todos.task_id;
 
 -- name: ListTasksByIDs :many
-SELECT * FROM tasks WHERE id IN (sqlc.slice(ids)) ORDER BY id;
+-- ids is a JSON array of task IDs: an array parameter would need lib/pq.
+SELECT * FROM tasks
+WHERE id IN (SELECT jsonb_array_elements_text(CAST(sqlc.arg(ids)::text AS jsonb)))
+ORDER BY id;
 
 -- name: GetTask :one
 SELECT sqlc.embed(tasks), task_hierarchies.parent_id
 FROM tasks
 LEFT JOIN task_hierarchies ON task_hierarchies.child_id = tasks.id
-WHERE tasks.id = ?;
+WHERE tasks.id = $1;
 
 -- name: ListTaskChildren :many
-SELECT child_id FROM task_hierarchies WHERE parent_id = ? ORDER BY child_id;
+SELECT child_id FROM task_hierarchies WHERE parent_id = $1 ORDER BY child_id;
 
 -- name: ListTaskLinks :many
 SELECT linked_id AS id FROM task_links WHERE task_links.task_id = sqlc.arg(task_id)
@@ -68,21 +71,21 @@ ORDER BY id;
 
 -- name: UpdateLocalTask :execrows
 UPDATE tasks SET
-    title       = ?,
-    description = ?,
-    status      = ?,
-    start_date  = ?,
-    due_date    = ?
-WHERE id = ? AND originated = 'local';
+    title       = $1,
+    description = $2,
+    status      = $3,
+    start_date  = $4,
+    due_date    = $5
+WHERE id = $6 AND originated = 'local';
 
 -- name: UpdateLocalTaskStatus :execrows
-UPDATE tasks SET status = ? WHERE id = ? AND originated = 'local';
+UPDATE tasks SET status = $1 WHERE id = $2 AND originated = 'local';
 
 -- name: UpdateTaskPosition :exec
-UPDATE tasks SET position = ? WHERE id = ?;
+UPDATE tasks SET position = $1 WHERE id = $2;
 
 -- name: DeleteTask :execrows
-DELETE FROM tasks WHERE id = ?;
+DELETE FROM tasks WHERE id = $1;
 
 -- name: DeleteTaskHierarchies :exec
 DELETE FROM task_hierarchies WHERE child_id = sqlc.arg(id) OR parent_id = sqlc.arg(id);
@@ -91,19 +94,20 @@ DELETE FROM task_hierarchies WHERE child_id = sqlc.arg(id) OR parent_id = sqlc.a
 DELETE FROM task_links WHERE task_id = sqlc.arg(id) OR linked_id = sqlc.arg(id);
 
 -- name: DeleteTodosOfTask :exec
-DELETE FROM todos WHERE id IN (SELECT todo_id FROM task_todos WHERE task_id = ?);
+DELETE FROM todos WHERE id IN (SELECT todo_id FROM task_todos WHERE task_id = $1);
 
 -- name: DeleteTodoRemindersOfTask :exec
-DELETE FROM todo_reminders WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = ?);
+DELETE FROM todo_reminders WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = $1);
 
 -- name: DeleteTaskTodosOfTask :exec
-DELETE FROM task_todos WHERE task_id = ?;
+DELETE FROM task_todos WHERE task_id = $1;
 
 -- name: CreateTodo :one
--- Inserts nothing, failing with no rows, when the task is not stored, so the
--- check is a write as the transaction's first statement.
+-- Inserts nothing, failing with no rows, when the task is not stored. The
+-- casts type the parameters, which Postgres cannot infer from a SELECT list.
 INSERT INTO todos (description, note, is_done, completed_at, start_date, end_date)
-SELECT sqlc.arg(description), sqlc.arg(note), sqlc.arg(is_done), sqlc.narg(completed_at), sqlc.narg(start_date), sqlc.narg(end_date)
+SELECT sqlc.arg(description)::text, sqlc.arg(note)::text, sqlc.arg(is_done)::boolean,
+       sqlc.narg(completed_at)::timestamptz, sqlc.narg(start_date)::text, sqlc.narg(end_date)::text
 WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = sqlc.arg(task_id))
 RETURNING id;
 
@@ -119,16 +123,16 @@ UPDATE todos SET
 WHERE id = sqlc.arg(id);
 
 -- name: DeleteTodo :execrows
-DELETE FROM todos WHERE id = ?;
+DELETE FROM todos WHERE id = $1;
 
 -- name: ExistsTask :one
-SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?);
+SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1);
 
 -- name: DeleteTaskTodo :one
-DELETE FROM task_todos WHERE todo_id = ? RETURNING task_id, position;
+DELETE FROM task_todos WHERE todo_id = $1 RETURNING task_id, position;
 
 -- name: CountTaskTodos :one
-SELECT COUNT(*) FROM task_todos WHERE task_id = ?;
+SELECT COUNT(*) FROM task_todos WHERE task_id = $1;
 
 -- name: ShiftTaskTodosDown :exec
 UPDATE task_todos SET position = position + 1
@@ -139,7 +143,7 @@ UPDATE task_todos SET position = position - 1
 WHERE task_id = sqlc.arg(task_id) AND position > sqlc.arg(position);
 
 -- name: CreateTaskTodo :exec
-INSERT INTO task_todos (todo_id, task_id, position) VALUES (?, ?, ?);
+INSERT INTO task_todos (todo_id, task_id, position) VALUES ($1, $2, $3);
 
 -- name: ListTodos :many
 -- A NULL filter is not applied.
@@ -172,29 +176,29 @@ WHERE (task_todos.task_id = sqlc.narg(task_id) OR sqlc.narg(task_id) IS NULL)
 ORDER BY todo_reminders.todo_id, todo_reminders.remind_at;
 
 -- name: CreateTodoReminder :exec
-INSERT INTO todo_reminders (todo_id, remind_at) VALUES (?, ?)
+INSERT INTO todo_reminders (todo_id, remind_at) VALUES ($1, $2)
 ON CONFLICT (todo_id, remind_at) DO NOTHING;
 
 -- name: DeleteTodoReminders :exec
-DELETE FROM todo_reminders WHERE todo_id = ?;
+DELETE FROM todo_reminders WHERE todo_id = $1;
 
 -- name: IncrementCounter :one
-UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value;
+UPDATE counters SET value = value + 1 WHERE name = $1 RETURNING value;
 
 -- name: GetSchemaMigrationChecksum :one
-SELECT checksum FROM schema_migrations WHERE version = ?;
+SELECT checksum FROM schema_migrations WHERE version = $1;
 
 -- name: ListSchemaMigrationVersions :many
 SELECT version FROM schema_migrations ORDER BY version;
 
 -- name: CreateSchemaMigration :exec
-INSERT INTO schema_migrations (version, checksum) VALUES (?, ?);
+INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2);
 
 -- name: UpsertServiceDeskRequest :exec
 INSERT INTO service_desk_requests (
     issue_key, title, status, status_category, created_at, status_at
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    $1, $2, $3, $4, $5, $6
 )
 ON CONFLICT (issue_key) DO UPDATE SET
     title           = excluded.title,
@@ -205,27 +209,27 @@ ON CONFLICT (issue_key) DO UPDATE SET
 
 -- name: CreateTodoServiceDeskRequest :execrows
 -- Inserts nothing when the todo or the request is not stored or the link
--- exists, so the check is a write as the transaction's first statement.
+-- exists. The casts type the parameters, as in CreateTodo.
 INSERT INTO todo_service_desk_requests (todo_id, issue_key)
-SELECT sqlc.arg(todo_id), sqlc.arg(issue_key)
+SELECT sqlc.arg(todo_id)::bigint, sqlc.arg(issue_key)::text
 WHERE EXISTS (SELECT 1 FROM todos WHERE todos.id = sqlc.arg(todo_id))
   AND EXISTS (SELECT 1 FROM service_desk_requests WHERE service_desk_requests.issue_key = sqlc.arg(issue_key))
 ON CONFLICT (todo_id, issue_key) DO NOTHING;
 
 -- name: ExistsTodo :one
-SELECT EXISTS (SELECT 1 FROM todos WHERE id = ?);
+SELECT EXISTS (SELECT 1 FROM todos WHERE id = $1);
 
 -- name: ExistsServiceDeskRequest :one
-SELECT EXISTS (SELECT 1 FROM service_desk_requests WHERE issue_key = ?);
+SELECT EXISTS (SELECT 1 FROM service_desk_requests WHERE issue_key = $1);
 
 -- name: DeleteTodoServiceDeskRequest :execrows
-DELETE FROM todo_service_desk_requests WHERE todo_id = ? AND issue_key = ?;
+DELETE FROM todo_service_desk_requests WHERE todo_id = $1 AND issue_key = $2;
 
 -- name: DeleteTodoServiceDeskRequestsOfTodo :exec
-DELETE FROM todo_service_desk_requests WHERE todo_id = ?;
+DELETE FROM todo_service_desk_requests WHERE todo_id = $1;
 
 -- name: DeleteTodoServiceDeskRequestsOfTask :exec
-DELETE FROM todo_service_desk_requests WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = ?);
+DELETE FROM todo_service_desk_requests WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = $1);
 
 -- name: ListTodoServiceDeskRequests :many
 -- Takes the ListTodos filters, as ListTodoReminders does.
@@ -253,7 +257,7 @@ ORDER BY issue_key;
 INSERT INTO atlassian_syncs (
     synced_at, issues, issue_failures, open_requests, closed_requests, request_failures
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    $1, $2, $3, $4, $5, $6
 );
 
 -- name: GetLastAtlassianSync :one
