@@ -225,6 +225,23 @@ func TestRestartServer(t *testing.T) {
 	require.Equal(t, []string{f.path, other}, f.restarted)
 }
 
+func TestRestartServerRejectsConfigWithoutDBURL(t *testing.T) {
+	f := newSettings(t)
+
+	// The file loads, but the server could not start with it.
+	other := filepath.Join(t.TempDir(), "other.toml")
+	require.NoError(t, os.WriteFile(other, []byte("addr = \":9090\"\n"), 0o600))
+	f.desktop.EXPECT().ChooseTOMLFile(mock.Anything).Return(other, nil).Once()
+
+	_, err := f.settings.ChooseConfigFile(t.Context())
+	require.NoError(t, err)
+
+	err = f.settings.RestartServer(t.Context())
+	require.ErrorIs(t, err, service.ErrInvalidConfigFile)
+	require.ErrorIs(t, err, config.ErrMissingDBURL)
+	require.Empty(t, f.restarted)
+}
+
 func TestRestartServerRejectsInvalidConfig(t *testing.T) {
 	f := newSettings(t)
 

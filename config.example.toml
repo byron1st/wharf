@@ -18,7 +18,7 @@
 #   security add-generic-password -a "$USER" -s wharf-db -w
 # With Supabase, use the Session pooler URL (port 5432) from Connect › Session pooler;
 # the Transaction pooler (port 6543) does not keep the session wharf relies on.
-# Required to start the server; Load accepts a file without it so Settings can still be saved.
+# Required: the server does not start, and Settings will not restart into a file, without it.
 # db_url = "postgresql://postgres.<project-ref>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
 
 # Jira Cloud REST API base URL (https only, no query or fragment).

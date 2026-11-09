@@ -548,7 +548,8 @@ func (m *manager) GetLastAtlassianSync(ctx context.Context) (atlassiansync.Recor
 	}, nil
 }
 
-// inTx runs fn in a transaction and commits it when fn succeeds.
+// inTx runs fn in a transaction, after taking the write lock described at
+// writeLockKey, and commits it when fn succeeds.
 func (m *manager) inTx(ctx context.Context, fn func(*Queries) error) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -557,6 +558,10 @@ func (m *manager) inTx(ctx context.Context, fn func(*Queries) error) error {
 
 	// Rollback after a successful Commit is a no-op returning sql.ErrTxDone.
 	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", writeLockKey); err != nil {
+		return errors.Join(ErrFailedToLockWrites, err)
+	}
 
 	if err := fn(m.queries.WithTx(tx)); err != nil {
 		return err

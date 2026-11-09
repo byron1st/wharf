@@ -58,7 +58,7 @@ func run() (code int, restartWith string) {
 		return 1, ""
 	}
 
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.LoadForServer(cfgPath)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		return 1, ""

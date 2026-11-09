@@ -151,8 +151,8 @@ type CreateTodoParams struct {
 	TaskID      string
 }
 
-// Inserts nothing, failing with no rows, when the task is not stored, so the
-// check is a write as the transaction's first statement.
+// Inserts nothing, failing with no rows, when the task is not stored. The
+// casts type the parameters, which Postgres cannot infer from a SELECT list.
 func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createTodo,
 		arg.Description,
@@ -197,7 +197,7 @@ type CreateTodoServiceDeskRequestParams struct {
 }
 
 // Inserts nothing when the todo or the request is not stored or the link
-// exists, so the check is a write as the transaction's first statement.
+// exists. The casts type the parameters, as in CreateTodo.
 func (q *Queries) CreateTodoServiceDeskRequest(ctx context.Context, arg CreateTodoServiceDeskRequestParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, createTodoServiceDeskRequest, arg.TodoID, arg.IssueKey)
 	if err != nil {

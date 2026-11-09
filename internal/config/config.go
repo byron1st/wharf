@@ -31,6 +31,7 @@ var (
 	ErrUnknownConfigKeys            = errors.New("config: unknown config keys")
 	ErrInvalidDBURL                 = errors.New("config: invalid db url")
 	ErrDBURLHasPassword             = errors.New("config: db url must not contain a password")
+	ErrMissingDBURL                 = errors.New("config: db_url is required to start the server")
 	ErrMissingConfigKey             = errors.New("config: missing required config key")
 	ErrInvalidAtlassianSiteURL      = errors.New("config: invalid atlassian site url")
 	ErrFailedToEncodeConfigValue    = errors.New("config: failed to encode config value")
@@ -138,6 +139,22 @@ func Load(path string) (Config, error) {
 
 	if err := validateDBURL(path, cfg.DBURL); err != nil {
 		return Config{}, err
+	}
+
+	return cfg, nil
+}
+
+// LoadForServer loads path as Load does and also requires db_url, which the
+// server needs to start. Load allows it to be missing so that a file holding
+// only the Atlassian keys still loads.
+func LoadForServer(path string) (Config, error) {
+	cfg, err := Load(path)
+	if err != nil {
+		return Config{}, err
+	}
+
+	if cfg.DBURL == "" {
+		return Config{}, fmt.Errorf("%w: path=%s", ErrMissingDBURL, path)
 	}
 
 	return cfg, nil

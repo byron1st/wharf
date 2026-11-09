@@ -324,6 +324,25 @@ func TestLoadDBURL(t *testing.T) {
 	}
 }
 
+func TestLoadForServer(t *testing.T) {
+	isolateUserConfigDir(t)
+
+	path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "db_url = \"postgres://me@db/wharf\"\n", 0o644)
+
+	cfg, err := config.LoadForServer(path)
+	require.NoError(t, err)
+	require.Equal(t, "postgres://me@db/wharf", cfg.DBURL)
+
+	_, err = config.LoadForServer(writeFile(t, filepath.Join(t.TempDir(), "config.toml"), atlassianKeys, 0o644))
+	require.ErrorIs(t, err, config.ErrMissingDBURL)
+
+	_, err = config.LoadForServer(filepath.Join(t.TempDir(), "missing.toml"))
+	require.ErrorIs(t, err, config.ErrMissingDBURL)
+
+	_, err = config.LoadForServer(writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "adr = 1\n", 0o644))
+	require.ErrorIs(t, err, config.ErrUnknownConfigKeys)
+}
+
 func TestDBTarget(t *testing.T) {
 	require.Empty(t, config.Config{}.DBTarget())
 	require.Equal(t, "db.example.com:5432/postgres",

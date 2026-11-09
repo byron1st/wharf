@@ -40,6 +40,7 @@ var (
 	ErrFailedToParseDBURL               = errors.New("db: failed to parse database url")
 	ErrFailedToGetMigrationConn         = errors.New("db: failed to get connection for migrations")
 	ErrFailedToLockMigrations           = errors.New("db: failed to lock migrations")
+	ErrFailedToLockWrites               = errors.New("db: failed to lock writes")
 )
 
 // migrationFileName is "{4-digit version}_{description}.sql". The fixed-width
@@ -60,6 +61,21 @@ const searchPath = "SET search_path TO wharf"
 // wharf processes starting together on several machines migrate one at a time.
 const migrationLockKey int64 = 0x7768617266 // "wharf"
 
+// writeLockKey names the transaction advisory lock every write transaction
+// takes first. Transactions read before they write (a todo's position comes
+// from counting the others), so wharf processes on several machines write one
+// at a time, as they did when SQLite allowed a single writer.
+const writeLockKey int64 = 0x77686172667772 // "wharfwr"
+
+const (
+	// maxOpenConns stays well under the client limit of the Supabase pooler,
+	// which every device shares.
+	maxOpenConns = 4
+	// defaultConnectTimeout bounds each connection attempt when the URL sets
+	// no connect_timeout, so an unreachable database fails fast.
+	defaultConnectTimeout = 10 * time.Second
+)
+
 // Connect opens the database and verifies the connection. It fails with
 // ErrDBURLNotSet when the URL is empty and with ErrAlreadyConnected while a
 // previous connection is open.
@@ -79,6 +95,9 @@ func (m *manager) Connect(ctx context.Context) error {
 	}
 
 	config.Password = m.password
+	if config.ConnectTimeout == 0 {
+		config.ConnectTimeout = defaultConnectTimeout
+	}
 
 	database := stdlib.OpenDB(*config, stdlib.OptionAfterConnect(func(ctx context.Context, conn *pgx.Conn) error {
 		// Times are read back at UTC, as they are stored, rather than in the
@@ -93,6 +112,7 @@ func (m *manager) Connect(ctx context.Context) error {
 
 		return err
 	}))
+	database.SetMaxOpenConns(maxOpenConns)
 
 	if err := database.PingContext(ctx); err != nil {
 		_ = database.Close()

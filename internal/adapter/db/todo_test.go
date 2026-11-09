@@ -3,6 +3,8 @@ package db_test
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -402,4 +404,42 @@ func TestDeleteTaskDeletesItsTodos(t *testing.T) {
 	require.Equal(t, []string{fmt.Sprint(kept)}, todos)
 	require.Equal(t, []string{fmt.Sprint(kept)}, reminders)
 	require.Equal(t, []string{"J2:0:" + fmt.Sprint(kept)}, placements(t, dsn))
+}
+
+func TestCreateTodoConcurrently(t *testing.T) {
+	first, dsn := newTodoManager(t)
+	second := dbManager(t, dsn, scripts.Migrations())
+
+	// Each create counts the todos of J1 and then inserts at that count, so
+	// without the write lock two of them can take the same position.
+	const each = 10
+
+	var wg sync.WaitGroup
+
+	errs := make(chan error, 2*each)
+
+	for _, manager := range []db.Manager{first, second} {
+		for range each {
+			wg.Go(func() {
+				_, err := manager.CreateTodo(context.Background(), todo.Todo{TaskID: "J1", Description: "d"})
+				errs <- err
+			})
+		}
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	positions := texts(t, dsn, "SELECT position FROM task_todos WHERE task_id = 'J1' ORDER BY position")
+
+	want := make([]string, 2*each)
+	for i := range want {
+		want[i] = strconv.Itoa(i)
+	}
+
+	require.Equal(t, want, positions)
 }

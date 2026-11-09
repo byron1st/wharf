@@ -103,8 +103,8 @@ DELETE FROM todo_reminders WHERE todo_id IN (SELECT todo_id FROM task_todos WHER
 DELETE FROM task_todos WHERE task_id = $1;
 
 -- name: CreateTodo :one
--- Inserts nothing, failing with no rows, when the task is not stored, so the
--- check is a write as the transaction's first statement.
+-- Inserts nothing, failing with no rows, when the task is not stored. The
+-- casts type the parameters, which Postgres cannot infer from a SELECT list.
 INSERT INTO todos (description, note, is_done, completed_at, start_date, end_date)
 SELECT sqlc.arg(description)::text, sqlc.arg(note)::text, sqlc.arg(is_done)::boolean,
        sqlc.narg(completed_at)::timestamptz, sqlc.narg(start_date)::text, sqlc.narg(end_date)::text
@@ -209,7 +209,7 @@ ON CONFLICT (issue_key) DO UPDATE SET
 
 -- name: CreateTodoServiceDeskRequest :execrows
 -- Inserts nothing when the todo or the request is not stored or the link
--- exists, so the check is a write as the transaction's first statement.
+-- exists. The casts type the parameters, as in CreateTodo.
 INSERT INTO todo_service_desk_requests (todo_id, issue_key)
 SELECT sqlc.arg(todo_id)::bigint, sqlc.arg(issue_key)::text
 WHERE EXISTS (SELECT 1 FROM todos WHERE todos.id = sqlc.arg(todo_id))
