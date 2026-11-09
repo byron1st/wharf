@@ -203,14 +203,16 @@ func (m *manager) pendingMigrations(ctx context.Context, migrations []migration)
 }
 
 // backup copies the database to a new file next to it. VACUUM INTO writes a
-// consistent copy through the open connection. An in-memory database has no
+// consistent copy through the open connection. The copy is named after the
+// path without its "file:" prefix and query, and an in-memory database has no
 // file to keep, so it is not copied.
 func (m *manager) backup(ctx context.Context, lastVersion string) error {
-	if m.path == memoryPath {
+	file, _, _ := strings.Cut(strings.TrimPrefix(m.path, "file:"), "?")
+	if strings.HasSuffix(file, memoryPath) {
 		return nil
 	}
 
-	dest := fmt.Sprintf("%s.bak-%s-%s", m.path, lastVersion, time.Now().UTC().Format("20060102T150405.000000000Z"))
+	dest := fmt.Sprintf("%s.bak-%s-%s", file, lastVersion, time.Now().UTC().Format("20060102T150405.000000000Z"))
 
 	if _, err := m.db.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
 		return fmt.Errorf("%w: path=%s", errors.Join(ErrFailedToBackupDatabase, err), dest)

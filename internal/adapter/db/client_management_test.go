@@ -457,3 +457,19 @@ func TestMigrateRejectsDatabaseWithoutChecksums(t *testing.T) {
 	require.ErrorIs(t, err, db.ErrFailedToCheckMigrationApplied)
 	require.ErrorContains(t, err, "file=0001_initial_migration.sql")
 }
+
+func TestMigrateBacksUpToPathWithoutQuery(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+	})
+	manager := fileManager(t, "file:"+path+"?mode=rwc", migrations)
+	require.NoError(t, manager.Migrate(context.Background()))
+
+	migrations["migrations/0002_others.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.Len(t, backups(t, path), 1)
+}

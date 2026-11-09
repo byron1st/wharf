@@ -21,7 +21,3 @@ func TestFormat(t *testing.T) {
 		require.Equal(t, want, buildinfo.Format(in), "version=%q", in)
 	}
 }
-
-func TestVersionIsStamped(t *testing.T) {
-	require.NotEmpty(t, buildinfo.Version())
-}

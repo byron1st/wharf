@@ -8,8 +8,9 @@ import (
 
 // Version returns the module version stamped into the binary in SemVer form
 // without the leading "v": "X.Y.Z" when built at a vX.Y.Z tag, a pre-release
-// such as "X.Y.Z-0.20261109060017-7897bbd61e4c" after it, and "(devel)" when
-// no version is stamped.
+// of the next patch such as "X.Y.(Z+1)-0.20261109060017-7897bbd61e4c" after
+// it, "+dirty" appended for uncommitted changes, and "(devel)" when no version
+// is stamped.
 func Version() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
