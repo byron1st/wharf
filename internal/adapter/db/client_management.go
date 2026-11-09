@@ -4,19 +4,22 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path"
 	"regexp"
-	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 var (
 	ErrAlreadyConnected                 = errors.New("db: already connected")
-	ErrFailedToOpenDatabase             = errors.New("db: failed to open database")
 	ErrFailedToPingDatabase             = errors.New("db: failed to ping database")
 	ErrFailedToCloseDatabase            = errors.New("db: failed to close database")
 	ErrFailedToReadMigrations           = errors.New("db: failed to read migrations")
@@ -33,7 +36,10 @@ var (
 	ErrMigrationChecksumMismatch        = errors.New("db: applied migration file was changed")
 	ErrFailedToListAppliedMigrations    = errors.New("db: failed to list applied migrations")
 	ErrUnknownAppliedMigration          = errors.New("db: database has a migration unknown to this binary")
-	ErrFailedToBackupDatabase           = errors.New("db: failed to back up database")
+	ErrDBURLNotSet                      = errors.New("db: database url is not set")
+	ErrFailedToParseDBURL               = errors.New("db: failed to parse database url")
+	ErrFailedToGetMigrationConn         = errors.New("db: failed to get connection for migrations")
+	ErrFailedToLockMigrations           = errors.New("db: failed to lock migrations")
 )
 
 // migrationFileName is "{4-digit version}_{description}.sql". The fixed-width
@@ -43,37 +49,50 @@ var migrationFileName = regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)
 const (
 	schemaMigrationsFile = "schema_migrations.sql"
 	migrationsDir        = "migrations"
-	memoryPath           = ":memory:"
 )
 
-// busyTimeoutPragma makes a statement wait up to 5s for a lock held by another
-// connection, such as another process, instead of failing with SQLITE_BUSY.
-// It does not help a transaction that reads before it writes: BeginTx starts a
-// DEFERRED transaction, and SQLite fails its upgrade to a write lock with
-// SQLITE_BUSY at once to avoid a deadlock. Transactions here therefore start
-// with a write.
-const busyTimeoutPragma = "_pragma=busy_timeout(5000)"
+// searchPath makes the unqualified tables of the migrations and queries those
+// of the wharf schema. It is set with SET on every new connection rather than
+// as a startup parameter, which a connection pooler may not pass on.
+const searchPath = "SET search_path TO wharf"
+
+// migrationLockKey names the session advisory lock Migrate holds, so that
+// wharf processes starting together on several machines migrate one at a time.
+const migrationLockKey int64 = 0x7768617266 // "wharf"
 
 // Connect opens the database and verifies the connection. It fails with
-// ErrAlreadyConnected while a previous connection is open.
+// ErrDBURLNotSet when the URL is empty and with ErrAlreadyConnected while a
+// previous connection is open.
 func (m *manager) Connect(ctx context.Context) error {
 	if m.db != nil {
 		return ErrAlreadyConnected
 	}
 
-	separator := "?"
-	if strings.Contains(m.path, "?") {
-		separator = "&"
+	if m.url == "" {
+		return ErrDBURLNotSet
 	}
 
-	database, err := sql.Open("sqlite", m.path+separator+busyTimeoutPragma)
+	// pgx redacts the password in parse errors, and the URL carries none.
+	config, err := pgx.ParseConfig(m.url)
 	if err != nil {
-		return errors.Join(ErrFailedToOpenDatabase, err)
+		return errors.Join(ErrFailedToParseDBURL, err)
 	}
 
-	// SQLite allows a single writer; one connection avoids SQLITE_BUSY between
-	// pooled connections and keeps ":memory:" a single database.
-	database.SetMaxOpenConns(1)
+	config.Password = m.password
+
+	database := stdlib.OpenDB(*config, stdlib.OptionAfterConnect(func(ctx context.Context, conn *pgx.Conn) error {
+		// Times are read back at UTC, as they are stored, rather than in the
+		// local zone.
+		conn.TypeMap().RegisterType(&pgtype.Type{
+			Name:  "timestamptz",
+			OID:   pgtype.TimestamptzOID,
+			Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC},
+		})
+
+		_, err := conn.Exec(ctx, searchPath)
+
+		return err
+	}))
 
 	if err := database.PingContext(ctx); err != nil {
 		_ = database.Close()
@@ -103,16 +122,17 @@ func (m *manager) Close() error {
 	return nil
 }
 
-// Migrate creates the schema_migrations table if missing, then applies the
-// migrations not yet applied, in version order. Each migration runs in its own
-// transaction together with its record in schema_migrations, so a failed
-// migration leaves no partial change.
+// Migrate creates the wharf schema and the schema_migrations table if
+// missing, then applies the migrations not yet applied, in version order. Each
+// migration runs in its own transaction together with its record in
+// schema_migrations, so a failed migration leaves no partial change. It holds
+// an advisory lock throughout, so concurrent calls, from this process or
+// another, apply each migration once.
 //
 // Before applying anything it fails with ErrMigrationChecksumMismatch when an
 // applied migration file was edited, and with ErrUnknownAppliedMigration when
 // the database has a migration this binary does not know, such as one applied
-// by a newer version. When a database that already has migrations gets new
-// ones, it is first copied to "<path>.bak-<last applied version>-<UTC time>".
+// by a newer version.
 func (m *manager) Migrate(ctx context.Context) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -128,18 +148,42 @@ func (m *manager) Migrate(ctx context.Context) error {
 		return errors.Join(ErrFailedToReadSchemaMigrationsFile, err)
 	}
 
-	// The file uses CREATE TABLE IF NOT EXISTS, so it is applied on every
-	// call without being recorded as a migration.
-	if _, err := m.db.ExecContext(ctx, string(schema)); err != nil {
+	// A session lock belongs to one connection, so every statement below runs
+	// on conn.
+	conn, err := m.db.Conn(ctx)
+	if err != nil {
+		return errors.Join(ErrFailedToGetMigrationConn, err)
+	}
+
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationLockKey); err != nil {
+		return errors.Join(ErrFailedToLockMigrations, err)
+	}
+
+	// Unlocking runs even when ctx is done; were it to fail, closing conn ends
+	// the session and the lock with it.
+	defer func() {
+		_, err := conn.ExecContext(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", migrationLockKey)
+		if err != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		}
+	}()
+
+	// The file uses IF NOT EXISTS, so it is applied on every call without
+	// being recorded as a migration.
+	if _, err := conn.ExecContext(ctx, string(schema)); err != nil {
 		return errors.Join(ErrFailedToCreateMigrationsTable, err)
 	}
 
-	pending, err := m.pendingMigrations(ctx, migrations)
+	queries := New(conn)
+
+	pending, err := pendingMigrations(ctx, queries, m.migrations, migrations)
 	if err != nil {
 		return err
 	}
 
-	applied, err := m.queries.ListSchemaMigrationVersions(ctx)
+	applied, err := queries.ListSchemaMigrationVersions(ctx)
 	if err != nil {
 		return errors.Join(ErrFailedToListAppliedMigrations, err)
 	}
@@ -155,14 +199,8 @@ func (m *manager) Migrate(ctx context.Context) error {
 		}
 	}
 
-	if len(pending) > 0 && len(applied) > 0 {
-		if err := m.backup(ctx, applied[len(applied)-1]); err != nil {
-			return err
-		}
-	}
-
 	for _, mig := range pending {
-		if err := m.applyMigration(ctx, mig); err != nil {
+		if err := applyMigration(ctx, conn, mig); err != nil {
 			return err
 		}
 	}
@@ -172,11 +210,16 @@ func (m *manager) Migrate(ctx context.Context) error {
 
 // pendingMigrations reads every migration file and returns those not yet
 // applied, checking that the applied ones are unchanged.
-func (m *manager) pendingMigrations(ctx context.Context, migrations []migration) ([]migration, error) {
+func pendingMigrations(
+	ctx context.Context,
+	queries *Queries,
+	fsys fs.FS,
+	migrations []migration,
+) ([]migration, error) {
 	var pending []migration
 
 	for _, mig := range migrations {
-		content, err := fs.ReadFile(m.migrations, path.Join(migrationsDir, mig.name))
+		content, err := fs.ReadFile(fsys, path.Join(migrationsDir, mig.name))
 		if err != nil {
 			return nil, fmt.Errorf("%w: file=%s", errors.Join(ErrFailedToReadMigrationFile, err), mig.name)
 		}
@@ -184,7 +227,7 @@ func (m *manager) pendingMigrations(ctx context.Context, migrations []migration)
 		sum := sha256.Sum256(content)
 		mig.content, mig.checksum = string(content), hex.EncodeToString(sum[:])
 
-		applied, err := m.queries.GetSchemaMigrationChecksum(ctx, mig.version)
+		applied, err := queries.GetSchemaMigrationChecksum(ctx, mig.version)
 		if errors.Is(err, sql.ErrNoRows) {
 			pending = append(pending, mig)
 			continue
@@ -202,27 +245,8 @@ func (m *manager) pendingMigrations(ctx context.Context, migrations []migration)
 	return pending, nil
 }
 
-// backup copies the database to a new file next to it. VACUUM INTO writes a
-// consistent copy through the open connection. The copy is named after the
-// path without its "file:" prefix and query, and an in-memory database has no
-// file to keep, so it is not copied.
-func (m *manager) backup(ctx context.Context, lastVersion string) error {
-	file, _, _ := strings.Cut(strings.TrimPrefix(m.path, "file:"), "?")
-	if strings.HasSuffix(file, memoryPath) {
-		return nil
-	}
-
-	dest := fmt.Sprintf("%s.bak-%s-%s", file, lastVersion, time.Now().UTC().Format("20060102T150405.000000000Z"))
-
-	if _, err := m.db.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
-		return fmt.Errorf("%w: path=%s", errors.Join(ErrFailedToBackupDatabase, err), dest)
-	}
-
-	return nil
-}
-
-func (m *manager) applyMigration(ctx context.Context, mig migration) error {
-	tx, err := m.db.BeginTx(ctx, nil)
+func applyMigration(ctx context.Context, conn *sql.Conn, mig migration) error {
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Join(ErrFailedToBeginMigrationTx, err)
 	}
@@ -233,7 +257,7 @@ func (m *manager) applyMigration(ctx context.Context, mig migration) error {
 		return fmt.Errorf("%w: file=%s", errors.Join(ErrFailedToApplyMigration, err), mig.name)
 	}
 
-	err = m.queries.WithTx(tx).CreateSchemaMigration(ctx, CreateSchemaMigrationParams{
+	err = New(tx).CreateSchemaMigration(ctx, CreateSchemaMigrationParams{
 		Version:  mig.version,
 		Checksum: mig.checksum,
 	})

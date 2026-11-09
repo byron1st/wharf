@@ -106,6 +106,66 @@ func (_c *MockDesktop_ChooseTOMLFile_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
+// DBPassword provides a mock function for the type MockDesktop
+func (_mock *MockDesktop) DBPassword(ctx context.Context) (string, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DBPassword")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (string, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) string); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDesktop_DBPassword_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DBPassword'
+type MockDesktop_DBPassword_Call struct {
+	*mock.Call
+}
+
+// DBPassword is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockDesktop_Expecter) DBPassword(ctx any) *MockDesktop_DBPassword_Call {
+	return &MockDesktop_DBPassword_Call{Call: _e.mock.On("DBPassword", ctx)}
+}
+
+func (_c *MockDesktop_DBPassword_Call) Run(run func(ctx context.Context)) *MockDesktop_DBPassword_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDesktop_DBPassword_Call) Return(s string, err error) *MockDesktop_DBPassword_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockDesktop_DBPassword_Call) RunAndReturn(run func(ctx context.Context) (string, error)) *MockDesktop_DBPassword_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InstallLaunchAgent provides a mock function for the type MockDesktop
 func (_mock *MockDesktop) InstallLaunchAgent(ctx context.Context, configPath string) error {
 	ret := _mock.Called(ctx, configPath)

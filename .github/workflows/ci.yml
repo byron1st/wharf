@@ -37,6 +37,10 @@ jobs:
         run: make check
       - name: Fail if make check changed files
         run: git diff --exit-code
+      # The db tests start Postgres with testcontainers on the runner's
+      # preinstalled Docker; fail here with a clear cause if it is missing.
+      - name: Check Docker
+        run: docker info
       - name: make test
         run: make test
       - name: make build

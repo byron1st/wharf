@@ -8,12 +8,11 @@ package db
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"time"
 )
 
 const countTaskTodos = `-- name: CountTaskTodos :one
-SELECT COUNT(*) FROM task_todos WHERE task_id = ?
+SELECT COUNT(*) FROM task_todos WHERE task_id = $1
 `
 
 func (q *Queries) CountTaskTodos(ctx context.Context, taskID string) (int64, error) {
@@ -26,7 +25,7 @@ func (q *Queries) CountTaskTodos(ctx context.Context, taskID string) (int64, err
 const countTodosByTask = `-- name: CountTodosByTask :many
 SELECT task_todos.task_id,
        COUNT(*) AS todos,
-       CAST(COALESCE(SUM(todos.is_done), 0) AS INTEGER) AS done_todos
+       COUNT(*) FILTER (WHERE todos.is_done) AS done_todos
 FROM task_todos
 JOIN todos ON todos.id = task_todos.todo_id
 GROUP BY task_todos.task_id
@@ -65,7 +64,7 @@ const createAtlassianSync = `-- name: CreateAtlassianSync :exec
 INSERT INTO atlassian_syncs (
     synced_at, issues, issue_failures, open_requests, closed_requests, request_failures
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    $1, $2, $3, $4, $5, $6
 )
 `
 
@@ -91,7 +90,7 @@ func (q *Queries) CreateAtlassianSync(ctx context.Context, arg CreateAtlassianSy
 }
 
 const createSchemaMigration = `-- name: CreateSchemaMigration :exec
-INSERT INTO schema_migrations (version, checksum) VALUES (?, ?)
+INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)
 `
 
 type CreateSchemaMigrationParams struct {
@@ -105,7 +104,7 @@ func (q *Queries) CreateSchemaMigration(ctx context.Context, arg CreateSchemaMig
 }
 
 const createTaskLink = `-- name: CreateTaskLink :exec
-INSERT INTO task_links (task_id, linked_id) VALUES (?, ?)
+INSERT INTO task_links (task_id, linked_id) VALUES ($1, $2)
 ON CONFLICT (task_id, linked_id) DO NOTHING
 `
 
@@ -120,7 +119,7 @@ func (q *Queries) CreateTaskLink(ctx context.Context, arg CreateTaskLinkParams) 
 }
 
 const createTaskTodo = `-- name: CreateTaskTodo :exec
-INSERT INTO task_todos (todo_id, task_id, position) VALUES (?, ?, ?)
+INSERT INTO task_todos (todo_id, task_id, position) VALUES ($1, $2, $3)
 `
 
 type CreateTaskTodoParams struct {
@@ -136,8 +135,9 @@ func (q *Queries) CreateTaskTodo(ctx context.Context, arg CreateTaskTodoParams) 
 
 const createTodo = `-- name: CreateTodo :one
 INSERT INTO todos (description, note, is_done, completed_at, start_date, end_date)
-SELECT ?1, ?2, ?3, ?4, ?5, ?6
-WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = ?7)
+SELECT $1::text, $2::text, $3::boolean,
+       $4::timestamptz, $5::text, $6::text
+WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = $7)
 RETURNING id
 `
 
@@ -169,7 +169,7 @@ func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (int64, 
 }
 
 const createTodoReminder = `-- name: CreateTodoReminder :exec
-INSERT INTO todo_reminders (todo_id, remind_at) VALUES (?, ?)
+INSERT INTO todo_reminders (todo_id, remind_at) VALUES ($1, $2)
 ON CONFLICT (todo_id, remind_at) DO NOTHING
 `
 
@@ -185,9 +185,9 @@ func (q *Queries) CreateTodoReminder(ctx context.Context, arg CreateTodoReminder
 
 const createTodoServiceDeskRequest = `-- name: CreateTodoServiceDeskRequest :execrows
 INSERT INTO todo_service_desk_requests (todo_id, issue_key)
-SELECT ?1, ?2
-WHERE EXISTS (SELECT 1 FROM todos WHERE todos.id = ?1)
-  AND EXISTS (SELECT 1 FROM service_desk_requests WHERE service_desk_requests.issue_key = ?2)
+SELECT $1::bigint, $2::text
+WHERE EXISTS (SELECT 1 FROM todos WHERE todos.id = $1)
+  AND EXISTS (SELECT 1 FROM service_desk_requests WHERE service_desk_requests.issue_key = $2)
 ON CONFLICT (todo_id, issue_key) DO NOTHING
 `
 
@@ -207,7 +207,7 @@ func (q *Queries) CreateTodoServiceDeskRequest(ctx context.Context, arg CreateTo
 }
 
 const deleteTask = `-- name: DeleteTask :execrows
-DELETE FROM tasks WHERE id = ?
+DELETE FROM tasks WHERE id = $1
 `
 
 func (q *Queries) DeleteTask(ctx context.Context, id string) (int64, error) {
@@ -219,7 +219,7 @@ func (q *Queries) DeleteTask(ctx context.Context, id string) (int64, error) {
 }
 
 const deleteTaskChildren = `-- name: DeleteTaskChildren :exec
-DELETE FROM task_hierarchies WHERE parent_id = ?
+DELETE FROM task_hierarchies WHERE parent_id = $1
 `
 
 func (q *Queries) DeleteTaskChildren(ctx context.Context, parentID string) error {
@@ -228,7 +228,7 @@ func (q *Queries) DeleteTaskChildren(ctx context.Context, parentID string) error
 }
 
 const deleteTaskHierarchies = `-- name: DeleteTaskHierarchies :exec
-DELETE FROM task_hierarchies WHERE child_id = ?1 OR parent_id = ?1
+DELETE FROM task_hierarchies WHERE child_id = $1 OR parent_id = $1
 `
 
 func (q *Queries) DeleteTaskHierarchies(ctx context.Context, id string) error {
@@ -237,7 +237,7 @@ func (q *Queries) DeleteTaskHierarchies(ctx context.Context, id string) error {
 }
 
 const deleteTaskLinks = `-- name: DeleteTaskLinks :exec
-DELETE FROM task_links WHERE task_id = ?
+DELETE FROM task_links WHERE task_id = $1
 `
 
 func (q *Queries) DeleteTaskLinks(ctx context.Context, taskID string) error {
@@ -246,7 +246,7 @@ func (q *Queries) DeleteTaskLinks(ctx context.Context, taskID string) error {
 }
 
 const deleteTaskLinksOf = `-- name: DeleteTaskLinksOf :exec
-DELETE FROM task_links WHERE task_id = ?1 OR linked_id = ?1
+DELETE FROM task_links WHERE task_id = $1 OR linked_id = $1
 `
 
 func (q *Queries) DeleteTaskLinksOf(ctx context.Context, id string) error {
@@ -256,7 +256,7 @@ func (q *Queries) DeleteTaskLinksOf(ctx context.Context, id string) error {
 
 const deleteTaskNonLocalParent = `-- name: DeleteTaskNonLocalParent :exec
 DELETE FROM task_hierarchies
-WHERE child_id = ?
+WHERE child_id = $1
   AND parent_id NOT IN (SELECT id FROM tasks WHERE originated = 'local')
 `
 
@@ -269,7 +269,7 @@ func (q *Queries) DeleteTaskNonLocalParent(ctx context.Context, childID string) 
 }
 
 const deleteTaskParent = `-- name: DeleteTaskParent :exec
-DELETE FROM task_hierarchies WHERE child_id = ?
+DELETE FROM task_hierarchies WHERE child_id = $1
 `
 
 func (q *Queries) DeleteTaskParent(ctx context.Context, childID string) error {
@@ -278,7 +278,7 @@ func (q *Queries) DeleteTaskParent(ctx context.Context, childID string) error {
 }
 
 const deleteTaskTodo = `-- name: DeleteTaskTodo :one
-DELETE FROM task_todos WHERE todo_id = ? RETURNING task_id, position
+DELETE FROM task_todos WHERE todo_id = $1 RETURNING task_id, position
 `
 
 type DeleteTaskTodoRow struct {
@@ -294,7 +294,7 @@ func (q *Queries) DeleteTaskTodo(ctx context.Context, todoID int64) (DeleteTaskT
 }
 
 const deleteTaskTodosOfTask = `-- name: DeleteTaskTodosOfTask :exec
-DELETE FROM task_todos WHERE task_id = ?
+DELETE FROM task_todos WHERE task_id = $1
 `
 
 func (q *Queries) DeleteTaskTodosOfTask(ctx context.Context, taskID string) error {
@@ -303,7 +303,7 @@ func (q *Queries) DeleteTaskTodosOfTask(ctx context.Context, taskID string) erro
 }
 
 const deleteTodo = `-- name: DeleteTodo :execrows
-DELETE FROM todos WHERE id = ?
+DELETE FROM todos WHERE id = $1
 `
 
 func (q *Queries) DeleteTodo(ctx context.Context, id int64) (int64, error) {
@@ -315,7 +315,7 @@ func (q *Queries) DeleteTodo(ctx context.Context, id int64) (int64, error) {
 }
 
 const deleteTodoReminders = `-- name: DeleteTodoReminders :exec
-DELETE FROM todo_reminders WHERE todo_id = ?
+DELETE FROM todo_reminders WHERE todo_id = $1
 `
 
 func (q *Queries) DeleteTodoReminders(ctx context.Context, todoID int64) error {
@@ -324,7 +324,7 @@ func (q *Queries) DeleteTodoReminders(ctx context.Context, todoID int64) error {
 }
 
 const deleteTodoRemindersOfTask = `-- name: DeleteTodoRemindersOfTask :exec
-DELETE FROM todo_reminders WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = ?)
+DELETE FROM todo_reminders WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = $1)
 `
 
 func (q *Queries) DeleteTodoRemindersOfTask(ctx context.Context, taskID string) error {
@@ -333,7 +333,7 @@ func (q *Queries) DeleteTodoRemindersOfTask(ctx context.Context, taskID string) 
 }
 
 const deleteTodoServiceDeskRequest = `-- name: DeleteTodoServiceDeskRequest :execrows
-DELETE FROM todo_service_desk_requests WHERE todo_id = ? AND issue_key = ?
+DELETE FROM todo_service_desk_requests WHERE todo_id = $1 AND issue_key = $2
 `
 
 type DeleteTodoServiceDeskRequestParams struct {
@@ -350,7 +350,7 @@ func (q *Queries) DeleteTodoServiceDeskRequest(ctx context.Context, arg DeleteTo
 }
 
 const deleteTodoServiceDeskRequestsOfTask = `-- name: DeleteTodoServiceDeskRequestsOfTask :exec
-DELETE FROM todo_service_desk_requests WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = ?)
+DELETE FROM todo_service_desk_requests WHERE todo_id IN (SELECT todo_id FROM task_todos WHERE task_id = $1)
 `
 
 func (q *Queries) DeleteTodoServiceDeskRequestsOfTask(ctx context.Context, taskID string) error {
@@ -359,7 +359,7 @@ func (q *Queries) DeleteTodoServiceDeskRequestsOfTask(ctx context.Context, taskI
 }
 
 const deleteTodoServiceDeskRequestsOfTodo = `-- name: DeleteTodoServiceDeskRequestsOfTodo :exec
-DELETE FROM todo_service_desk_requests WHERE todo_id = ?
+DELETE FROM todo_service_desk_requests WHERE todo_id = $1
 `
 
 func (q *Queries) DeleteTodoServiceDeskRequestsOfTodo(ctx context.Context, todoID int64) error {
@@ -368,7 +368,7 @@ func (q *Queries) DeleteTodoServiceDeskRequestsOfTodo(ctx context.Context, todoI
 }
 
 const deleteTodosOfTask = `-- name: DeleteTodosOfTask :exec
-DELETE FROM todos WHERE id IN (SELECT todo_id FROM task_todos WHERE task_id = ?)
+DELETE FROM todos WHERE id IN (SELECT todo_id FROM task_todos WHERE task_id = $1)
 `
 
 func (q *Queries) DeleteTodosOfTask(ctx context.Context, taskID string) error {
@@ -377,7 +377,7 @@ func (q *Queries) DeleteTodosOfTask(ctx context.Context, taskID string) error {
 }
 
 const existsServiceDeskRequest = `-- name: ExistsServiceDeskRequest :one
-SELECT EXISTS (SELECT 1 FROM service_desk_requests WHERE issue_key = ?)
+SELECT EXISTS (SELECT 1 FROM service_desk_requests WHERE issue_key = $1)
 `
 
 func (q *Queries) ExistsServiceDeskRequest(ctx context.Context, issueKey string) (bool, error) {
@@ -388,7 +388,7 @@ func (q *Queries) ExistsServiceDeskRequest(ctx context.Context, issueKey string)
 }
 
 const existsTask = `-- name: ExistsTask :one
-SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ?)
+SELECT EXISTS (SELECT 1 FROM tasks WHERE id = $1)
 `
 
 func (q *Queries) ExistsTask(ctx context.Context, id string) (bool, error) {
@@ -399,7 +399,7 @@ func (q *Queries) ExistsTask(ctx context.Context, id string) (bool, error) {
 }
 
 const existsTodo = `-- name: ExistsTodo :one
-SELECT EXISTS (SELECT 1 FROM todos WHERE id = ?)
+SELECT EXISTS (SELECT 1 FROM todos WHERE id = $1)
 `
 
 func (q *Queries) ExistsTodo(ctx context.Context, id int64) (bool, error) {
@@ -429,7 +429,7 @@ func (q *Queries) GetLastAtlassianSync(ctx context.Context) (AtlassianSync, erro
 }
 
 const getSchemaMigrationChecksum = `-- name: GetSchemaMigrationChecksum :one
-SELECT checksum FROM schema_migrations WHERE version = ?
+SELECT checksum FROM schema_migrations WHERE version = $1
 `
 
 func (q *Queries) GetSchemaMigrationChecksum(ctx context.Context, version string) (string, error) {
@@ -443,7 +443,7 @@ const getTask = `-- name: GetTask :one
 SELECT tasks.id, tasks.originated, tasks.title, tasks.description, tasks.status, tasks.start_date, tasks.due_date, tasks.position, task_hierarchies.parent_id
 FROM tasks
 LEFT JOIN task_hierarchies ON task_hierarchies.child_id = tasks.id
-WHERE tasks.id = ?
+WHERE tasks.id = $1
 `
 
 type GetTaskRow struct {
@@ -469,7 +469,7 @@ func (q *Queries) GetTask(ctx context.Context, id string) (GetTaskRow, error) {
 }
 
 const incrementCounter = `-- name: IncrementCounter :one
-UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value
+UPDATE counters SET value = value + 1 WHERE name = $1 RETURNING value
 `
 
 func (q *Queries) IncrementCounter(ctx context.Context, name string) (int64, error) {
@@ -508,7 +508,7 @@ func (q *Queries) ListSchemaMigrationVersions(ctx context.Context) ([]string, er
 
 const listServiceDeskRequests = `-- name: ListServiceDeskRequests :many
 SELECT issue_key, title, status, status_category, created_at, status_at FROM service_desk_requests
-WHERE status_category != 'DONE' OR CAST(?1 AS BOOLEAN)
+WHERE status_category != 'DONE' OR CAST($1 AS BOOLEAN)
 ORDER BY issue_key
 `
 
@@ -544,7 +544,7 @@ func (q *Queries) ListServiceDeskRequests(ctx context.Context, includeClosed boo
 }
 
 const listTaskChildren = `-- name: ListTaskChildren :many
-SELECT child_id FROM task_hierarchies WHERE parent_id = ? ORDER BY child_id
+SELECT child_id FROM task_hierarchies WHERE parent_id = $1 ORDER BY child_id
 `
 
 func (q *Queries) ListTaskChildren(ctx context.Context, parentID string) ([]string, error) {
@@ -571,9 +571,9 @@ func (q *Queries) ListTaskChildren(ctx context.Context, parentID string) ([]stri
 }
 
 const listTaskLinks = `-- name: ListTaskLinks :many
-SELECT linked_id AS id FROM task_links WHERE task_links.task_id = ?1
+SELECT linked_id AS id FROM task_links WHERE task_links.task_id = $1
 UNION
-SELECT task_links.task_id AS id FROM task_links WHERE task_links.linked_id = ?1
+SELECT task_links.task_id AS id FROM task_links WHERE task_links.linked_id = $1
 ORDER BY id
 `
 
@@ -637,21 +637,14 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 }
 
 const listTasksByIDs = `-- name: ListTasksByIDs :many
-SELECT id, originated, title, description, status, start_date, due_date, position FROM tasks WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+SELECT id, originated, title, description, status, start_date, due_date, position FROM tasks
+WHERE id IN (SELECT jsonb_array_elements_text(CAST($1::text AS jsonb)))
+ORDER BY id
 `
 
-func (q *Queries) ListTasksByIDs(ctx context.Context, ids []string) ([]Task, error) {
-	query := listTasksByIDs
-	var queryParams []interface{}
-	if len(ids) > 0 {
-		for _, v := range ids {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+// ids is a JSON array of task IDs: an array parameter would need lib/pq.
+func (q *Queries) ListTasksByIDs(ctx context.Context, ids string) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, listTasksByIDs, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -687,13 +680,13 @@ SELECT todo_reminders.todo_id, todo_reminders.remind_at
 FROM todo_reminders
 JOIN todos ON todos.id = todo_reminders.todo_id
 JOIN task_todos ON task_todos.todo_id = todo_reminders.todo_id
-WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
-  AND (todos.is_done = ?2 OR ?2 IS NULL)
-  AND (todos.completed_at >= ?3 OR ?3 IS NULL)
+WHERE (task_todos.task_id = $1 OR $1 IS NULL)
+  AND (todos.is_done = $2 OR $2 IS NULL)
+  AND (todos.completed_at >= $3 OR $3 IS NULL)
   AND (todos.id IN (
           SELECT linked.todo_id FROM todo_service_desk_requests AS linked
-          WHERE linked.issue_key = ?4
-       ) OR ?4 IS NULL)
+          WHERE linked.issue_key = $4
+       ) OR $4 IS NULL)
 ORDER BY todo_reminders.todo_id, todo_reminders.remind_at
 `
 
@@ -740,13 +733,13 @@ FROM todo_service_desk_requests
 JOIN service_desk_requests ON service_desk_requests.issue_key = todo_service_desk_requests.issue_key
 JOIN todos ON todos.id = todo_service_desk_requests.todo_id
 JOIN task_todos ON task_todos.todo_id = todo_service_desk_requests.todo_id
-WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
-  AND (todos.is_done = ?2 OR ?2 IS NULL)
-  AND (todos.completed_at >= ?3 OR ?3 IS NULL)
+WHERE (task_todos.task_id = $1 OR $1 IS NULL)
+  AND (todos.is_done = $2 OR $2 IS NULL)
+  AND (todos.completed_at >= $3 OR $3 IS NULL)
   AND (todos.id IN (
           SELECT linked.todo_id FROM todo_service_desk_requests AS linked
-          WHERE linked.issue_key = ?4
-       ) OR ?4 IS NULL)
+          WHERE linked.issue_key = $4
+       ) OR $4 IS NULL)
 ORDER BY todo_service_desk_requests.todo_id, service_desk_requests.issue_key
 `
 
@@ -803,13 +796,13 @@ const listTodos = `-- name: ListTodos :many
 SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_at, todos.start_date, todos.end_date, task_todos.task_id, task_todos.position
 FROM todos
 JOIN task_todos ON task_todos.todo_id = todos.id
-WHERE (task_todos.task_id = ?1 OR ?1 IS NULL)
-  AND (todos.is_done = ?2 OR ?2 IS NULL)
-  AND (todos.completed_at >= ?3 OR ?3 IS NULL)
+WHERE (task_todos.task_id = $1 OR $1 IS NULL)
+  AND (todos.is_done = $2 OR $2 IS NULL)
+  AND (todos.completed_at >= $3 OR $3 IS NULL)
   AND (todos.id IN (
           SELECT linked.todo_id FROM todo_service_desk_requests AS linked
-          WHERE linked.issue_key = ?4
-       ) OR ?4 IS NULL)
+          WHERE linked.issue_key = $4
+       ) OR $4 IS NULL)
 ORDER BY task_todos.task_id, task_todos.position
 `
 
@@ -873,7 +866,7 @@ func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]ListTod
 
 const shiftTaskTodosDown = `-- name: ShiftTaskTodosDown :exec
 UPDATE task_todos SET position = position + 1
-WHERE task_id = ?1 AND position >= ?2
+WHERE task_id = $1 AND position >= $2
 `
 
 type ShiftTaskTodosDownParams struct {
@@ -888,7 +881,7 @@ func (q *Queries) ShiftTaskTodosDown(ctx context.Context, arg ShiftTaskTodosDown
 
 const shiftTaskTodosUp = `-- name: ShiftTaskTodosUp :exec
 UPDATE task_todos SET position = position - 1
-WHERE task_id = ?1 AND position > ?2
+WHERE task_id = $1 AND position > $2
 `
 
 type ShiftTaskTodosUpParams struct {
@@ -903,12 +896,12 @@ func (q *Queries) ShiftTaskTodosUp(ctx context.Context, arg ShiftTaskTodosUpPara
 
 const updateLocalTask = `-- name: UpdateLocalTask :execrows
 UPDATE tasks SET
-    title       = ?,
-    description = ?,
-    status      = ?,
-    start_date  = ?,
-    due_date    = ?
-WHERE id = ? AND originated = 'local'
+    title       = $1,
+    description = $2,
+    status      = $3,
+    start_date  = $4,
+    due_date    = $5
+WHERE id = $6 AND originated = 'local'
 `
 
 type UpdateLocalTaskParams struct {
@@ -936,7 +929,7 @@ func (q *Queries) UpdateLocalTask(ctx context.Context, arg UpdateLocalTaskParams
 }
 
 const updateLocalTaskStatus = `-- name: UpdateLocalTaskStatus :execrows
-UPDATE tasks SET status = ? WHERE id = ? AND originated = 'local'
+UPDATE tasks SET status = $1 WHERE id = $2 AND originated = 'local'
 `
 
 type UpdateLocalTaskStatusParams struct {
@@ -953,7 +946,7 @@ func (q *Queries) UpdateLocalTaskStatus(ctx context.Context, arg UpdateLocalTask
 }
 
 const updateTaskPosition = `-- name: UpdateTaskPosition :exec
-UPDATE tasks SET position = ? WHERE id = ?
+UPDATE tasks SET position = $1 WHERE id = $2
 `
 
 type UpdateTaskPositionParams struct {
@@ -968,13 +961,13 @@ func (q *Queries) UpdateTaskPosition(ctx context.Context, arg UpdateTaskPosition
 
 const updateTodo = `-- name: UpdateTodo :execrows
 UPDATE todos SET
-    description  = ?1,
-    note         = ?2,
-    is_done      = ?3,
-    completed_at = CASE WHEN ?3 THEN COALESCE(completed_at, ?4) END,
-    start_date   = ?5,
-    end_date     = ?6
-WHERE id = ?7
+    description  = $1,
+    note         = $2,
+    is_done      = $3,
+    completed_at = CASE WHEN $3 THEN COALESCE(completed_at, $4) END,
+    start_date   = $5,
+    end_date     = $6
+WHERE id = $7
 `
 
 type UpdateTodoParams struct {
@@ -1008,7 +1001,7 @@ const upsertServiceDeskRequest = `-- name: UpsertServiceDeskRequest :exec
 INSERT INTO service_desk_requests (
     issue_key, title, status, status_category, created_at, status_at
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    $1, $2, $3, $4, $5, $6
 )
 ON CONFLICT (issue_key) DO UPDATE SET
     title           = excluded.title,
@@ -1043,7 +1036,7 @@ const upsertTask = `-- name: UpsertTask :exec
 INSERT INTO tasks (
     id, originated, title, description, status, start_date, due_date
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?
+    $1, $2, $3, $4, $5, $6, $7
 )
 ON CONFLICT (id) DO UPDATE SET
     originated  = excluded.originated,
@@ -1078,7 +1071,7 @@ func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) error {
 }
 
 const upsertTaskHierarchy = `-- name: UpsertTaskHierarchy :exec
-INSERT INTO task_hierarchies (child_id, parent_id) VALUES (?, ?)
+INSERT INTO task_hierarchies (child_id, parent_id) VALUES ($1, $2)
 ON CONFLICT (child_id) DO UPDATE SET parent_id = excluded.parent_id
 `
 

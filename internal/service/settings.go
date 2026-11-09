@@ -36,8 +36,10 @@ type AppSettings struct {
 	// restart, or empty when none is chosen.
 	PendingConfigPath string
 	Addr              string
-	DBPath            string
-	Version           string
+	// DBTarget is the host and database the server stores data in, without
+	// credentials.
+	DBTarget string
+	Version  string
 }
 
 type Settings interface {

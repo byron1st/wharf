@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -259,4 +260,50 @@ func TestLaunchAgentRequiresMacOS(t *testing.T) {
 	require.ErrorIs(t, d.InstallLaunchAgent(t.Context(), ""), system.ErrUnsupportedOS)
 	require.ErrorIs(t, d.UninstallLaunchAgent(t.Context()), system.ErrUnsupportedOS)
 	require.Empty(t, *calls)
+}
+
+// exitError runs a shell that exits with code, for an *exec.ExitError that
+// reports it.
+func exitError(t *testing.T, code int) error {
+	t.Helper()
+
+	err := exec.CommandContext(t.Context(), "sh", "-c", "exit "+strconv.Itoa(code)).Run()
+	require.Error(t, err)
+
+	return err
+}
+
+func TestDBPassword(t *testing.T) {
+	calls, run := recorder([]byte("s3cret\n"), nil)
+
+	password, err := system.NewDesktopWith("darwin", run).DBPassword(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "s3cret", password)
+	require.Equal(t, []call{{
+		name: "security",
+		args: []string{"find-generic-password", "-s", system.KeychainDBService, "-w"},
+	}}, *calls)
+}
+
+func TestDBPasswordFailures(t *testing.T) {
+	for name, tc := range map[string]struct {
+		goos string
+		out  []byte
+		err  error
+		want error
+	}{
+		"not macOS":      {goos: "linux", want: system.ErrUnsupportedOS},
+		"item not found": {goos: "darwin", err: exitError(t, 44), want: system.ErrDBPasswordNotFound},
+		"other exit":     {goos: "darwin", err: exitError(t, 51), want: system.ErrFailedToReadDBPassword},
+		"command fails":  {goos: "darwin", err: errors.New("security missing"), want: system.ErrFailedToReadDBPassword},
+		"empty password": {goos: "darwin", out: []byte("\n"), want: system.ErrEmptyDBPassword},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, run := recorder(tc.out, tc.err)
+
+			password, err := system.NewDesktopWith(tc.goos, run).DBPassword(t.Context())
+			require.ErrorIs(t, err, tc.want)
+			require.Empty(t, password)
+		})
+	}
 }

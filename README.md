@@ -7,6 +7,8 @@ Go 백엔드 서버(`github.com/byron1st/wharf`)와 서버에 내장된 웹 앱(
 - Go (`go.mod`의 `go` 버전 이상)
 - Node.js와 npm (웹 앱 빌드용)
 - `make`
+- Postgres 데이터베이스(Supabase). 기기 여러 대가 같은 DB를 쓰며, 테이블은 `wharf` 스키마에 만들어집니다. 기존 SQLite `wharf.db`의 데이터를 옮기는 방법은 [docs/supabase-data-migration.md](docs/supabase-data-migration.md)에 있습니다.
+- 테스트(`make test`, `make race`)를 돌리려면 Docker. DB 테스트가 testcontainers로 Postgres 컨테이너를 띄우며, Docker가 없으면 건너뛰지 않고 실패합니다.
 
 ## 1. 빌드
 
@@ -24,7 +26,7 @@ make build
 
 ## 2. 설정 파일
 
-설정 파일은 TOML이며, 모든 키가 선택 사항입니다. 파일이 없으면 모두 기본값으로 동작합니다. 알 수 없는 키는 거부됩니다.
+설정 파일은 TOML이며, 서버를 띄우려면 `db_url`이 필요합니다. 나머지 키는 선택 사항이고 파일이 없으면 기본값으로 읽히지만, 그 상태로는 DB에 연결할 수 없어 시작하지 않습니다. 알 수 없는 키는 거부됩니다(예전의 `db_path`도 거부됩니다).
 
 기본 위치는 `<os.UserConfigDir()>/wharf/config.toml`입니다.
 
@@ -46,7 +48,7 @@ chmod 600 "$HOME/Library/Application Support/wharf/config.toml"
 | 키 | 기본값 | 설명 |
 | --- | --- | --- |
 | `addr` | `127.0.0.1:8080` | 서버가 listen할 TCP 주소. 요청은 이 머신에서 오고 loopback 호스트(`localhost`, `127.0.0.1`, `[::1]`)를 가리켜야 하며, 그렇지 않으면 403입니다. |
-| `db_path` | `<UserConfigDir>/wharf/wharf.db` | SQLite 파일 경로. 디렉터리가 없으면 만들어집니다. |
+| `db_url` | 없음(필수) | 비밀번호를 뺀 Postgres 연결 URL(`postgres://` 또는 `postgresql://`). Supabase에서는 Connect › Session pooler URL(포트 5432)을 씁니다. Transaction pooler(6543)는 wharf가 쓰는 세션 단위 advisory lock과 맞지 않습니다. 비밀번호가 들어 있으면 시작하지 않습니다. |
 | `atlassian_site_url` | 없음 | Jira Cloud REST API 기본 URL(https만). Scoped API 토큰이면 `https://api.atlassian.com/ex/jira/{cloudId}`. |
 | `atlassian_email` | 없음 | Basic 인증에 쓸 Atlassian 계정 이메일. |
 | `atlassian_api_token` | 없음 | [API 토큰](https://id.atlassian.com/manage-profile/security/api-tokens). 평문으로 저장되므로 파일 권한을 `600`으로 두세요. |
@@ -55,7 +57,15 @@ chmod 600 "$HOME/Library/Application Support/wharf/config.toml"
 
 `atlassian_*` 세 키는 모두 설정하거나 모두 비워 두어야 합니다. 서버를 띄운 뒤 웹 앱의 Settings › Atlassian Cloud에서 저장해도 되며, 이때 해당 세 줄만 다시 쓰이고 주석과 다른 키는 유지됩니다.
 
-테스트 삼아 띄워보는 용도라면 설정 파일 없이도 시작할 수 있습니다.
+### DB 비밀번호 (macOS Keychain)
+
+DB 비밀번호는 설정 파일에 두지 않고, 시작할 때 로그인 키체인에서 서비스 이름이 `wharf-db`인 일반 암호 항목을 읽습니다. 한 번만 등록하면 됩니다. `-w` 뒤에 값을 주지 않으면 프롬프트로 입력받으므로 셸 기록에 남지 않습니다.
+
+```sh
+security add-generic-password -a "$USER" -s wharf-db -w
+```
+
+비밀번호를 바꾸려면 `-U`를 붙여 다시 실행합니다. 항목이 없거나 비어 있으면 서버가 시작하지 않습니다.
 
 ## 3. 실행
 
@@ -81,7 +91,8 @@ WHARF_CONFIG=/path/to/config.toml ./wharf
 
 ### 참고
 
-- 첫 실행 때 DB 마이그레이션이 자동으로 적용됩니다.
+- 시작할 때마다 DB 마이그레이션이 자동으로 적용됩니다.
+- DB가 원격이므로 네트워크 없이는 시작하지 않고 동작하지도 않습니다.
 - 소스에서 바로 실행하려면 `make run`을 쓰세요(`go run ./cmd/wharf`).
 - 프런트엔드를 개발할 때는 `make run`으로 서버를 띄운 상태에서 `make web-dev`로 Vite 개발 서버를 함께 실행하세요.
 
@@ -132,9 +143,10 @@ wharf service uninstall
 시작할 때마다 `scripts/migrations/`의 SQL 파일 중 아직 적용하지 않은 것을 버전 순서대로 적용하고, 각 파일의 SHA-256을 `schema_migrations`에 기록합니다.
 
 - 스키마를 바꿀 때는 기존 파일을 고치지 말고 다음 번호의 파일(예: `0002_add_task_index.sql`)을 추가합니다. 적용된 파일 내용이 바뀌면 서버가 시작을 거부합니다.
-- 이미 데이터가 있는 DB에 새 마이그레이션을 적용하기 전에 `<db_path>.bak-<마지막 적용 버전>-<UTC 시각>` 백업을 만듭니다. 문제가 생기면 서버를 멈추고 백업 파일을 `db_path`로 복사해 되돌립니다. 백업은 자동으로 지워지지 않으니 필요 없어지면 직접 삭제하세요.
-- DB가 이 바이너리보다 새 버전으로 마이그레이션되어 있으면(다운그레이드) 서버가 시작을 거부합니다. 새 버전 바이너리를 쓰거나 백업으로 되돌리세요.
-- 체크섬 기록 이전에 만든 로컬 `wharf.db`에서는 `failed to check migration applied` 오류가 납니다. 파일을 삭제하고 다시 실행하세요.
+- 모든 테이블은 `wharf` 스키마에 있습니다. 스키마가 없으면 만들고, 연결마다 `search_path`를 `wharf`로 맞춥니다.
+- 여러 기기가 동시에 시작해도 advisory lock으로 한 번에 하나씩만 마이그레이션합니다.
+- 마이그레이션 전 자동 백업은 하지 않습니다. Supabase의 백업(대시보드 Database › Backups)이나 `pg_dump`에 맡깁니다.
+- DB가 이 바이너리보다 새 버전으로 마이그레이션되어 있으면(다운그레이드) 서버가 시작을 거부합니다. 모든 기기의 wharf를 같은 버전으로 맞추세요.
 
 ## 버전과 릴리스
 
@@ -161,4 +173,4 @@ wharf service uninstall
 
 ## CI
 
-`main`·`develop`으로의 push와 PR에서 `ci` 워크플로가 `make check`(변경이 생기면 실패), `make test`, `make build`, `make web-check`를 실행합니다.
+`main`·`develop`으로의 push와 PR에서 `ci` 워크플로가 `make check`(변경이 생기면 실패), `make test`, `make build`, `make web-check`를 실행합니다. `make test`의 DB 테스트는 GitHub 호스티드 Ubuntu 러너에 기본 설치된 Docker로 Postgres 컨테이너를 띄우며, 워크플로가 먼저 `docker info`로 Docker가 쓸 수 있는지 확인합니다.

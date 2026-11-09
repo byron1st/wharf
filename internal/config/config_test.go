@@ -64,7 +64,7 @@ const atlassianKeys = "atlassian_site_url = \"https://example.atlassian.net\"\n"
 func TestLoad(t *testing.T) {
 	isolateUserConfigDir(t)
 
-	t.Run("fills defaults, creates db dir, and reads atlassian keys", func(t *testing.T) {
+	t.Run("fills defaults and reads atlassian keys", func(t *testing.T) {
 		dir := isolateUserConfigDir(t)
 		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), atlassianKeys, 0o644)
 
@@ -72,43 +72,26 @@ func TestLoad(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, config.Config{
 			Addr:                "127.0.0.1:8080",
-			DBPath:              filepath.Join(dir, "wharf", "wharf.db"),
 			AtlassianSiteURL:    "https://example.atlassian.net",
 			AtlassianEmail:      "me@example.com",
 			AtlassianAPIToken:   "secret-token",
 			UpdateCheck:         true,
 			UpdateCheckInterval: 24 * time.Hour,
 		}, cfg)
-		require.DirExists(t, filepath.Join(dir, "wharf"))
-	})
-
-	t.Run("does not create default db dir when db_path is set", func(t *testing.T) {
-		dir := isolateUserConfigDir(t)
-		path := writeFile(
-			t,
-			filepath.Join(t.TempDir(), "config.toml"),
-			atlassianKeys+"db_path = \"/data/w.db\"\n",
-			0o644,
-		)
-
-		_, err := config.Load(path)
-		require.NoError(t, err)
 		require.NoDirExists(t, filepath.Join(dir, "wharf"))
 	})
 
-	t.Run("fails when default db dir cannot be created", func(t *testing.T) {
-		dir := isolateUserConfigDir(t)
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-		writeFile(t, filepath.Join(dir, "wharf"), "", 0o644)
-		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), atlassianKeys, 0o644)
+	t.Run("rejects the removed db_path key", func(t *testing.T) {
+		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "db_path = \"/data/w.db\"\n", 0o644)
 
 		_, err := config.Load(path)
-		require.ErrorIs(t, err, config.ErrFailedToCreateDBDir)
+		require.ErrorIs(t, err, config.ErrUnknownConfigKeys)
+		require.ErrorContains(t, err, "db_path")
 	})
 
 	t.Run("uses configured values", func(t *testing.T) {
 		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"),
-			"addr = \"127.0.0.1:9090\"\ndb_path = \"/data/w.db\"\n"+
+			"addr = \"127.0.0.1:9090\"\ndb_url = \"postgresql://me@db.example.com:5432/postgres\"\n"+
 				"atlassian_site_url = \"https://api.atlassian.com/ex/jira/abc-123\"\n"+
 				"atlassian_email = \"me@example.com\"\natlassian_api_token = \"secret-token\"\n", 0o644)
 
@@ -116,7 +99,7 @@ func TestLoad(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, config.Config{
 			Addr:                "127.0.0.1:9090",
-			DBPath:              "/data/w.db",
+			DBURL:               "postgresql://me@db.example.com:5432/postgres",
 			AtlassianSiteURL:    "https://api.atlassian.com/ex/jira/abc-123",
 			AtlassianEmail:      "me@example.com",
 			AtlassianAPIToken:   "secret-token",
@@ -126,26 +109,23 @@ func TestLoad(t *testing.T) {
 	})
 
 	t.Run("uses defaults when file is missing", func(t *testing.T) {
-		dir := isolateUserConfigDir(t)
-
 		cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
 		require.NoError(t, err)
 		require.Equal(t, config.Config{
 			Addr:                "127.0.0.1:8080",
-			DBPath:              filepath.Join(dir, "wharf", "wharf.db"),
 			UpdateCheck:         true,
 			UpdateCheckInterval: 24 * time.Hour,
 		}, cfg)
 	})
 
 	t.Run("allows no atlassian keys", func(t *testing.T) {
-		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "db_path = \"/data/w.db\"\n", 0o644)
+		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "db_url = \"postgres://me@db/wharf\"\n", 0o644)
 
 		cfg, err := config.Load(path)
 		require.NoError(t, err)
 		require.Equal(t, config.Config{
 			Addr:                "127.0.0.1:8080",
-			DBPath:              "/data/w.db",
+			DBURL:               "postgres://me@db/wharf",
 			UpdateCheck:         true,
 			UpdateCheckInterval: 24 * time.Hour,
 		}, cfg)
@@ -310,13 +290,53 @@ func TestLoadInvalidSiteURLVariantsDoNotLeakUserinfo(t *testing.T) {
 	}
 }
 
+func TestLoadDBURL(t *testing.T) {
+	isolateUserConfigDir(t)
+
+	for name, tc := range map[string]struct {
+		url     string
+		wantErr error
+	}{
+		"postgres scheme":   {url: "postgres://me@db.example.com:5432/postgres?sslmode=require"},
+		"postgresql scheme": {url: "postgresql://me@db.example.com/postgres"},
+		"other scheme":      {url: "mysql://me@db.example.com/postgres", wantErr: config.ErrInvalidDBURL},
+		"keyword form":      {url: "host=db.example.com user=me", wantErr: config.ErrInvalidDBURL},
+		"no host":           {url: "postgres:///postgres", wantErr: config.ErrInvalidDBURL},
+		"unparsable":        {url: "postgres://me@db.example.com:bad/postgres", wantErr: config.ErrInvalidDBURL},
+		"password":          {url: "postgres://me:hunter2@db.example.com/postgres", wantErr: config.ErrDBURLHasPassword},
+		"empty password":    {url: "postgres://me:@db.example.com/postgres", wantErr: config.ErrDBURLHasPassword},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"), "db_url = \""+tc.url+"\"\n", 0o644)
+
+			cfg, err := config.Load(path)
+			if tc.wantErr == nil {
+				require.NoError(t, err)
+				require.Equal(t, tc.url, cfg.DBURL)
+
+				return
+			}
+
+			require.ErrorIs(t, err, tc.wantErr)
+			require.NotContains(t, err.Error(), "hunter2")
+			require.NotContains(t, err.Error(), "me@")
+		})
+	}
+}
+
+func TestDBTarget(t *testing.T) {
+	require.Empty(t, config.Config{}.DBTarget())
+	require.Equal(t, "db.example.com:5432/postgres",
+		config.Config{DBURL: "postgresql://me@db.example.com:5432/postgres?sslmode=require"}.DBTarget())
+}
+
 func TestSaveAtlassian(t *testing.T) {
 	isolateUserConfigDir(t)
 
 	t.Run("replaces and appends only the atlassian lines", func(t *testing.T) {
 		path := writeFile(t, filepath.Join(t.TempDir(), "config.toml"),
 			"# my config\naddr = \":9090\"\n# atlassian_email = \"commented@example.com\"\n"+
-				"atlassian_site_url = \"https://old.atlassian.net\" # old site\ndb_path = \"/data/w.db\"", 0o644)
+				"atlassian_site_url = \"https://old.atlassian.net\" # old site\ndb_url = \"postgres://me@db/wharf\"", 0o644)
 
 		require.NoError(t, config.SaveAtlassian(path, "https://new.atlassian.net", "me@example.com", `to"ken`))
 
@@ -324,7 +344,7 @@ func TestSaveAtlassian(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t,
 			"# my config\naddr = \":9090\"\n# atlassian_email = \"commented@example.com\"\n"+
-				"atlassian_site_url = \"https://new.atlassian.net\"\ndb_path = \"/data/w.db\"\n"+
+				"atlassian_site_url = \"https://new.atlassian.net\"\ndb_url = \"postgres://me@db/wharf\"\n"+
 				"atlassian_email = \"me@example.com\"\natlassian_api_token = \"to\\\"ken\"\n",
 			string(data))
 

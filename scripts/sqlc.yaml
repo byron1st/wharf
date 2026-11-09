@@ -1,9 +1,11 @@
 version: "2"
 sql:
-  - engine: "sqlite"
+  - engine: "postgresql"
     schema: ["schema_migrations.sql", "migrations"]
     queries: "queries.sql"
     gen:
       go:
         package: "db"
         out: "../internal/adapter/db"
+        sql_package: "database/sql"
+        sql_driver: "github.com/jackc/pgx/v5"

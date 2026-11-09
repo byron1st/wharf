@@ -15,10 +15,10 @@ import (
 )
 
 // texts returns the rows of query, which selects one text column.
-func texts(t *testing.T, path, query string) []string {
+func texts(t *testing.T, dsn, query string) []string {
 	t.Helper()
 
-	rows, err := open(t, path).QueryContext(context.Background(), query)
+	rows, err := open(t, dsn).QueryContext(context.Background(), query)
 	require.NoError(t, err)
 
 	defer func() { _ = rows.Close() }()
@@ -37,32 +37,32 @@ func texts(t *testing.T, path, query string) []string {
 }
 
 // placements is every task_todos row as "task:position:todo", sorted.
-func placements(t *testing.T, path string) []string {
+func placements(t *testing.T, dsn string) []string {
 	t.Helper()
 
 	return texts(
 		t,
-		path,
+		dsn,
 		"SELECT task_id || ':' || position || ':' || todo_id FROM task_todos ORDER BY task_id, position",
 	)
 }
 
 // stored is the IDs in todos and in todo_reminders, as "todos" and "reminders"
 // lists of "id" strings, sorted.
-func stored(t *testing.T, path string) (todos, reminders []string) {
+func stored(t *testing.T, dsn string) (todos, reminders []string) {
 	t.Helper()
 
-	return texts(t, path, "SELECT id FROM todos ORDER BY id"),
-		texts(t, path, "SELECT todo_id FROM todo_reminders ORDER BY todo_id, remind_at")
+	return texts(t, dsn, "SELECT id FROM todos ORDER BY id"),
+		texts(t, dsn, "SELECT todo_id FROM todo_reminders ORDER BY todo_id, remind_at")
 }
 
 func newTodoManager(t *testing.T) (db.Manager, string) {
 	t.Helper()
 
-	manager, path := newFileManager(t, scripts.Migrations())
+	manager, dsn := newDBManager(t, scripts.Migrations())
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("J1"), newTask("J2")}))
 
-	return manager, path
+	return manager, dsn
 }
 
 func create(t *testing.T, manager db.Manager, td todo.Todo) int64 {
@@ -75,16 +75,12 @@ func create(t *testing.T, manager db.Manager, td todo.Todo) int64 {
 }
 
 func TestTaskTodosIndexColumns(t *testing.T) {
-	_, path := newFileManager(t, scripts.Migrations())
-	require.Equal(
-		t,
-		[]string{"task_id", "position"},
-		texts(t, path, "SELECT name FROM pragma_index_info('task_todos_task_id_position') ORDER BY seqno"),
-	)
+	_, dsn := newDBManager(t, scripts.Migrations())
+	require.Equal(t, "task_id,position", indexColumns(t, open(t, dsn), "task_todos_task_id_position"))
 }
 
 func TestCreateTodo(t *testing.T) {
-	manager, path := newTodoManager(t)
+	manager, dsn := newTodoManager(t)
 
 	localID, err := manager.CreateLocalTask(context.Background(), task.Task{Title: "L", Status: task.StatusTodo})
 	require.NoError(t, err)
@@ -103,14 +99,14 @@ func TestCreateTodo(t *testing.T) {
 		"J1:2:" + fmt.Sprint(b),
 		"J1:3:" + fmt.Sprint(d),
 		localID + ":0:" + fmt.Sprint(e),
-	}, placements(t, path))
+	}, placements(t, dsn))
 
-	_, reminders := stored(t, path)
+	_, reminders := stored(t, dsn)
 	require.Equal(t, []string{fmt.Sprint(a)}, reminders)
 }
 
 func TestCreateTodoRejectsMissingTask(t *testing.T) {
-	manager, path := newTodoManager(t)
+	manager, dsn := newTodoManager(t)
 
 	_, err := manager.CreateTodo(context.Background(), todo.Todo{
 		TaskID: "nope", Description: "x", Reminders: []time.Time{time.Now()},
@@ -118,10 +114,10 @@ func TestCreateTodoRejectsMissingTask(t *testing.T) {
 	require.ErrorIs(t, err, db.ErrTaskOfTodoToCreateNotFound)
 	require.ErrorContains(t, err, "task_id=nope")
 
-	todos, reminders := stored(t, path)
+	todos, reminders := stored(t, dsn)
 	require.Empty(t, todos)
 	require.Empty(t, reminders)
-	require.Empty(t, placements(t, path))
+	require.Empty(t, placements(t, dsn))
 }
 
 func TestListTodos(t *testing.T) {
@@ -181,7 +177,7 @@ func TestListTodos(t *testing.T) {
 }
 
 func TestUpdateTodo(t *testing.T) {
-	manager, path := newTodoManager(t)
+	manager, dsn := newTodoManager(t)
 
 	a := create(t, manager, todo.Todo{TaskID: "J1", Description: "a", Reminders: []time.Time{time.Now()}})
 	b := create(t, manager, todo.Todo{TaskID: "J1", Description: "b"})
@@ -202,7 +198,7 @@ func TestUpdateTodo(t *testing.T) {
 	require.Equal(
 		t,
 		[]string{"J1:0:" + fmt.Sprint(a), "J1:1:" + fmt.Sprint(b), "J1:2:" + fmt.Sprint(c), "J2:0:" + fmt.Sprint(x)},
-		placements(t, path),
+		placements(t, dsn),
 	)
 
 	todos, err := manager.ListTodos(context.Background(), todo.Filter{IsDone: new(true)})
@@ -219,13 +215,13 @@ func TestUpdateTodo(t *testing.T) {
 	require.Equal(
 		t,
 		[]string{"J1:0:" + fmt.Sprint(c), "J1:1:" + fmt.Sprint(a), "J1:2:" + fmt.Sprint(b), "J2:0:" + fmt.Sprint(x)},
-		placements(t, path),
+		placements(t, dsn),
 	)
 	update(todo.Todo{ID: c, TaskID: "J1", Description: "c", Position: new(5)})
 	require.Equal(
 		t,
 		[]string{"J1:0:" + fmt.Sprint(a), "J1:1:" + fmt.Sprint(b), "J1:2:" + fmt.Sprint(c), "J2:0:" + fmt.Sprint(x)},
-		placements(t, path),
+		placements(t, dsn),
 	)
 
 	// Another task without a position appends there and closes the gap.
@@ -233,7 +229,7 @@ func TestUpdateTodo(t *testing.T) {
 	require.Equal(
 		t,
 		[]string{"J1:0:" + fmt.Sprint(b), "J1:1:" + fmt.Sprint(c), "J2:0:" + fmt.Sprint(x), "J2:1:" + fmt.Sprint(a)},
-		placements(t, path),
+		placements(t, dsn),
 	)
 
 	// Another task with a position inserts there.
@@ -241,10 +237,10 @@ func TestUpdateTodo(t *testing.T) {
 	require.Equal(
 		t,
 		[]string{"J1:0:" + fmt.Sprint(b), "J2:0:" + fmt.Sprint(c), "J2:1:" + fmt.Sprint(x), "J2:2:" + fmt.Sprint(a)},
-		placements(t, path),
+		placements(t, dsn),
 	)
 
-	_, reminders := stored(t, path)
+	_, reminders := stored(t, dsn)
 	require.Equal(t, []string{fmt.Sprint(b)}, reminders, "a's reminders were replaced by none")
 }
 
@@ -348,7 +344,7 @@ func TestTodoNoteAndCompletedAt(t *testing.T) {
 }
 
 func TestUpdateTodoRejectsMissingTodoOrTask(t *testing.T) {
-	manager, path := newTodoManager(t)
+	manager, dsn := newTodoManager(t)
 
 	a := create(t, manager, todo.Todo{TaskID: "J1", Description: "a", Reminders: []time.Time{time.Now()}})
 
@@ -364,23 +360,23 @@ func TestUpdateTodoRejectsMissingTodoOrTask(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, todos, 1)
 	require.Equal(t, "a", todos[0].Description)
-	require.Equal(t, []string{"J1:0:" + fmt.Sprint(a)}, placements(t, path))
+	require.Equal(t, []string{"J1:0:" + fmt.Sprint(a)}, placements(t, dsn))
 
-	_, reminders := stored(t, path)
+	_, reminders := stored(t, dsn)
 	require.Equal(t, []string{fmt.Sprint(a)}, reminders)
 }
 
 func TestDeleteTodo(t *testing.T) {
-	manager, path := newTodoManager(t)
+	manager, dsn := newTodoManager(t)
 
 	a := create(t, manager, todo.Todo{TaskID: "J1", Description: "a"})
 	b := create(t, manager, todo.Todo{TaskID: "J1", Description: "b", Reminders: []time.Time{time.Now()}})
 	c := create(t, manager, todo.Todo{TaskID: "J1", Description: "c", Reminders: []time.Time{time.Now()}})
 
 	require.NoError(t, manager.DeleteTodo(context.Background(), b))
-	require.Equal(t, []string{"J1:0:" + fmt.Sprint(a), "J1:1:" + fmt.Sprint(c)}, placements(t, path))
+	require.Equal(t, []string{"J1:0:" + fmt.Sprint(a), "J1:1:" + fmt.Sprint(c)}, placements(t, dsn))
 
-	todos, reminders := stored(t, path)
+	todos, reminders := stored(t, dsn)
 	require.Equal(t, []string{fmt.Sprint(a), fmt.Sprint(c)}, todos)
 	require.Equal(t, []string{fmt.Sprint(c)}, reminders)
 
@@ -390,7 +386,7 @@ func TestDeleteTodo(t *testing.T) {
 }
 
 func TestDeleteTaskDeletesItsTodos(t *testing.T) {
-	manager, path := newTodoManager(t)
+	manager, dsn := newTodoManager(t)
 
 	create(t, manager, todo.Todo{TaskID: "J1", Description: "a", Reminders: []time.Time{time.Now()}})
 	create(t, manager, todo.Todo{TaskID: "J1", Description: "b"})
@@ -398,12 +394,12 @@ func TestDeleteTaskDeletesItsTodos(t *testing.T) {
 
 	// A sync stores the tasks again without touching their todos.
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("J1"), newTask("J2")}))
-	require.Len(t, placements(t, path), 3)
+	require.Len(t, placements(t, dsn), 3)
 
 	require.NoError(t, manager.DeleteTask(context.Background(), "J1"))
 
-	todos, reminders := stored(t, path)
+	todos, reminders := stored(t, dsn)
 	require.Equal(t, []string{fmt.Sprint(kept)}, todos)
 	require.Equal(t, []string{fmt.Sprint(kept)}, reminders)
-	require.Equal(t, []string{"J2:0:" + fmt.Sprint(kept)}, placements(t, path))
+	require.Equal(t, []string{"J2:0:" + fmt.Sprint(kept)}, placements(t, dsn))
 }
