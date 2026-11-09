@@ -106,6 +106,126 @@ func (_c *MockDesktop_ChooseTOMLFile_Call) RunAndReturn(run func(ctx context.Con
 	return _c
 }
 
+// InstallLaunchAgent provides a mock function for the type MockDesktop
+func (_mock *MockDesktop) InstallLaunchAgent(ctx context.Context, configPath string) error {
+	ret := _mock.Called(ctx, configPath)
+
+	if len(ret) == 0 {
+		panic("no return value specified for InstallLaunchAgent")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = returnFunc(ctx, configPath)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockDesktop_InstallLaunchAgent_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InstallLaunchAgent'
+type MockDesktop_InstallLaunchAgent_Call struct {
+	*mock.Call
+}
+
+// InstallLaunchAgent is a helper method to define mock.On call
+//   - ctx context.Context
+//   - configPath string
+func (_e *MockDesktop_Expecter) InstallLaunchAgent(ctx any, configPath any) *MockDesktop_InstallLaunchAgent_Call {
+	return &MockDesktop_InstallLaunchAgent_Call{Call: _e.mock.On("InstallLaunchAgent", ctx, configPath)}
+}
+
+func (_c *MockDesktop_InstallLaunchAgent_Call) Run(run func(ctx context.Context, configPath string)) *MockDesktop_InstallLaunchAgent_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDesktop_InstallLaunchAgent_Call) Return(err error) *MockDesktop_InstallLaunchAgent_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockDesktop_InstallLaunchAgent_Call) RunAndReturn(run func(ctx context.Context, configPath string) error) *MockDesktop_InstallLaunchAgent_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Notify provides a mock function for the type MockDesktop
+func (_mock *MockDesktop) Notify(ctx context.Context, title string, message string) error {
+	ret := _mock.Called(ctx, title, message)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Notify")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, title, message)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockDesktop_Notify_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Notify'
+type MockDesktop_Notify_Call struct {
+	*mock.Call
+}
+
+// Notify is a helper method to define mock.On call
+//   - ctx context.Context
+//   - title string
+//   - message string
+func (_e *MockDesktop_Expecter) Notify(ctx any, title any, message any) *MockDesktop_Notify_Call {
+	return &MockDesktop_Notify_Call{Call: _e.mock.On("Notify", ctx, title, message)}
+}
+
+func (_c *MockDesktop_Notify_Call) Run(run func(ctx context.Context, title string, message string)) *MockDesktop_Notify_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDesktop_Notify_Call) Return(err error) *MockDesktop_Notify_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockDesktop_Notify_Call) RunAndReturn(run func(ctx context.Context, title string, message string) error) *MockDesktop_Notify_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Open provides a mock function for the type MockDesktop
 func (_mock *MockDesktop) Open(ctx context.Context, path string) error {
 	ret := _mock.Called(ctx, path)
@@ -159,6 +279,114 @@ func (_c *MockDesktop_Open_Call) Return(err error) *MockDesktop_Open_Call {
 }
 
 func (_c *MockDesktop_Open_Call) RunAndReturn(run func(ctx context.Context, path string) error) *MockDesktop_Open_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ReplaceExecutable provides a mock function for the type MockDesktop
+func (_mock *MockDesktop) ReplaceExecutable(ctx context.Context, data []byte) error {
+	ret := _mock.Called(ctx, data)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReplaceExecutable")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []byte) error); ok {
+		r0 = returnFunc(ctx, data)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockDesktop_ReplaceExecutable_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReplaceExecutable'
+type MockDesktop_ReplaceExecutable_Call struct {
+	*mock.Call
+}
+
+// ReplaceExecutable is a helper method to define mock.On call
+//   - ctx context.Context
+//   - data []byte
+func (_e *MockDesktop_Expecter) ReplaceExecutable(ctx any, data any) *MockDesktop_ReplaceExecutable_Call {
+	return &MockDesktop_ReplaceExecutable_Call{Call: _e.mock.On("ReplaceExecutable", ctx, data)}
+}
+
+func (_c *MockDesktop_ReplaceExecutable_Call) Run(run func(ctx context.Context, data []byte)) *MockDesktop_ReplaceExecutable_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []byte
+		if args[1] != nil {
+			arg1 = args[1].([]byte)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDesktop_ReplaceExecutable_Call) Return(err error) *MockDesktop_ReplaceExecutable_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockDesktop_ReplaceExecutable_Call) RunAndReturn(run func(ctx context.Context, data []byte) error) *MockDesktop_ReplaceExecutable_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UninstallLaunchAgent provides a mock function for the type MockDesktop
+func (_mock *MockDesktop) UninstallLaunchAgent(ctx context.Context) error {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UninstallLaunchAgent")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockDesktop_UninstallLaunchAgent_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UninstallLaunchAgent'
+type MockDesktop_UninstallLaunchAgent_Call struct {
+	*mock.Call
+}
+
+// UninstallLaunchAgent is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockDesktop_Expecter) UninstallLaunchAgent(ctx any) *MockDesktop_UninstallLaunchAgent_Call {
+	return &MockDesktop_UninstallLaunchAgent_Call{Call: _e.mock.On("UninstallLaunchAgent", ctx)}
+}
+
+func (_c *MockDesktop_UninstallLaunchAgent_Call) Run(run func(ctx context.Context)) *MockDesktop_UninstallLaunchAgent_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDesktop_UninstallLaunchAgent_Call) Return(err error) *MockDesktop_UninstallLaunchAgent_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockDesktop_UninstallLaunchAgent_Call) RunAndReturn(run func(ctx context.Context) error) *MockDesktop_UninstallLaunchAgent_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { UpdateBanner } from '@/components/common/UpdateBanner'
 import { keys, useRequests, useTaskActions, useTasks, useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import type { TaskListItem, TaskStatus, Todo } from '@/lib/api'
@@ -119,6 +120,7 @@ export function TodayPage() {
   return (
     <main className="box-border flex min-h-screen flex-col gap-4 px-8 pt-7 pb-10">
       <Header onCreateTask={createTask} onSettings={() => navigate('/settings/general', { state: { back: location.search } })} />
+      <UpdateBanner />
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
           <TodosCard

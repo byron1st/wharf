@@ -26,10 +26,11 @@ import { keys, useAppSettings, useAtlassianSettings, useLastSync } from '@/hooks
 import { useNow } from '@/hooks/useNow'
 import { useSync } from '@/hooks/useSync'
 import { ApiError, NetworkError, api, type AtlassianSettings } from '@/lib/api'
-import { serverDown } from '@/lib/errors'
+import { serverDown, waitForServer } from '@/lib/errors'
 import { hhmm, ymd } from '@/lib/dates'
 import { notify } from '@/lib/toast'
 import { cn } from '@/lib/utils'
+import { Updates } from './Updates'
 
 type Tab = 'general' | 'atlassian'
 
@@ -77,22 +78,15 @@ function General() {
       return
     }
     // The server answers 202 and then restarts; wait until it answers again.
-    const started = Date.now()
-    const poll = async () => {
-      await new Promise((r) => setTimeout(r, 800))
-      try {
-        await api.healthz()
-        setRestarting(false)
-        notify.success({ id: 'restart', title: 'Server restarted', description: 'It now reads the new config file.' })
-        void qc.invalidateQueries()
-      } catch {
-        if (Date.now() - started < 30_000) return poll()
-        setRestarting(false)
-        notify.dismiss('restart')
-        serverDown()
-      }
+    const back = await waitForServer()
+    setRestarting(false)
+    if (back) {
+      notify.success({ id: 'restart', title: 'Server restarted', description: 'It now reads the new config file.' })
+      void qc.invalidateQueries()
+    } else {
+      notify.dismiss('restart')
+      serverDown()
     }
-    void poll()
   }
 
   if (!app) return null
@@ -148,6 +142,7 @@ function General() {
           <span className="rounded-md bg-[#f4f4f5] px-2 py-0.5 text-[12px]">SQLite</span>
         </div>
       </div>
+      <Updates />
       {pending && (
         <div role="status" className="mt-3 flex items-center gap-3 rounded-lg border border-[#fde68a] bg-[#fffbeb] px-3.5 py-2.5 text-[13px] text-[#92400e]">
           <CircleAlert size={14} className="shrink-0 text-[#d97706]" />

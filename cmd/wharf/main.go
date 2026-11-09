@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
 
 	"github.com/byron1st/wharf/internal/adapter/atlassian"
 	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/adapter/github"
 	"github.com/byron1st/wharf/internal/adapter/system"
 	"github.com/byron1st/wharf/internal/config"
 	"github.com/byron1st/wharf/internal/pkg/buildinfo"
@@ -22,7 +25,17 @@ import (
 	"github.com/byron1st/wharf/web"
 )
 
+// usage lists the subcommands; without one, wharf runs the server.
+const usage = `usage: wharf [service install | service uninstall]
+
+  service install    run wharf in the background at login (macOS LaunchAgent)
+  service uninstall  stop it and remove the LaunchAgent`
+
 func main() {
+	if len(os.Args) > 1 {
+		os.Exit(command(os.Args[1:]))
+	}
+
 	code, restartWith := run()
 	if restartWith != "" {
 		code = restart(restartWith)
@@ -76,10 +89,11 @@ func run() (code int, restartWith string) {
 		cfg.AtlassianEmail,
 		cfg.AtlassianAPIToken,
 	)
+	desktop := system.NewDesktop()
 	svc := service.NewService(atls, dbMng)
 	settings := service.NewSettings(service.SettingsDeps{
 		Jira:   atls,
-		System: system.NewDesktop(),
+		System: desktop,
 		App: service.AppSettings{
 			ConfigPath: cfgPath,
 			Addr:       cfg.Addr,
@@ -97,7 +111,22 @@ func run() (code int, restartWith string) {
 			stop()
 		},
 	})
-	srv := server.New(server.NewHandler(svc, settings, web.Dist(), logger), logger)
+	updater := service.NewUpdater(service.UpdaterDeps{
+		Releases: github.NewClient(),
+		System:   desktop,
+		Version:  buildinfo.Version(),
+		GOOS:     runtime.GOOS,
+		GOARCH:   runtime.GOARCH,
+		Enabled:  cfg.UpdateCheck,
+		Interval: cfg.UpdateCheckInterval,
+		Restart: func() {
+			restartWith = cfgPath
+
+			stop()
+		},
+		Logger: logger,
+	})
+	srv := server.New(server.NewHandler(svc, settings, updater, web.Dist(), logger), logger)
 
 	ln, err := net.Listen("tcp", cfg.Addr)
 	if err != nil {
@@ -107,6 +136,8 @@ func run() (code int, restartWith string) {
 
 	logger.Info("server started", "addr", ln.Addr().String())
 
+	go updater.Run(ctx)
+
 	if err := srv.Run(ctx, ln); err != nil {
 		logger.Error("failed to run server", "error", err)
 		return 1, ""
@@ -115,6 +146,33 @@ func run() (code int, restartWith string) {
 	logger.Info("server stopped")
 
 	return 0, restartWith
+}
+
+// command runs the subcommand in args and returns the exit code.
+func command(args []string) int {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	desktop := system.NewDesktop()
+	ctx := context.Background()
+
+	var err error
+
+	switch strings.Join(args, " ") {
+	case "service install":
+		// The agent keeps the config file this shell would use.
+		err = desktop.InstallLaunchAgent(ctx, os.Getenv(config.PathEnv))
+	case "service uninstall":
+		err = desktop.UninstallLaunchAgent(ctx)
+	default:
+		_, _ = fmt.Fprintln(os.Stderr, usage)
+		return 2
+	}
+
+	if err != nil {
+		logger.Error("failed to run command", "command", strings.Join(args, " "), "error", err)
+		return 1
+	}
+
+	return 0
 }
 
 // restart replaces the process with a new run of the same executable that

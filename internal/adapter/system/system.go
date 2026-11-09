@@ -1,14 +1,21 @@
-// Package system runs the desktop commands the settings screen needs on the
-// machine that runs wharf.
+// Package system runs the desktop commands the settings screen and the updater
+// need on the machine that runs wharf, and manages its own executable and
+// LaunchAgent.
 package system
 
 import (
+	"bytes"
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"text/template"
 )
 
 var (
@@ -17,10 +24,73 @@ var (
 	ErrFileChoiceCanceled  = errors.New("system: file choice was canceled")
 	ErrFailedToOpenFile    = errors.New("system: failed to open file")
 	ErrEmptyChosenFilePath = errors.New("system: chosen file path is empty")
+
+	ErrFailedToNotify                  = errors.New("system: failed to show notification")
+	ErrFailedToFindExecutable          = errors.New("system: failed to find executable")
+	ErrFailedToCreateTempExecutable    = errors.New("system: failed to create temp executable")
+	ErrFailedToWriteTempExecutable     = errors.New("system: failed to write temp executable")
+	ErrFailedToBackUpExecutable        = errors.New("system: failed to back up executable")
+	ErrFailedToReplaceExecutable       = errors.New("system: failed to replace executable")
+	ErrFailedToFindHomeDir             = errors.New("system: failed to find home dir")
+	ErrFailedToResolveConfigPath       = errors.New("system: failed to resolve config path")
+	ErrFailedToCreateLaunchAgentDir    = errors.New("system: failed to create launch agent dir")
+	ErrFailedToCreateLogDir            = errors.New("system: failed to create log dir")
+	ErrFailedToRenderLaunchAgent       = errors.New("system: failed to render launch agent")
+	ErrFailedToWriteLaunchAgent        = errors.New("system: failed to write launch agent")
+	ErrFailedToBootstrapLaunchAgent    = errors.New("system: failed to bootstrap launch agent")
+	ErrFailedToRemoveLaunchAgentConfig = errors.New("system: failed to remove launch agent")
 )
 
 // chooseTOMLScript asks for a .toml file and prints its POSIX path.
 const chooseTOMLScript = `POSIX path of (choose file of type {"toml"} with prompt "Choose a Wharf config file")`
+
+// notifyScript shows a notification whose title and message are its
+// arguments, so they need no AppleScript quoting.
+var notifyScript = []string{
+	"-e", "on run argv",
+	"-e", "display notification (item 2 of argv) with title (item 1 of argv)",
+	"-e", "end run",
+}
+
+// LaunchAgentLabel is the launchd label of the wharf LaunchAgent.
+const LaunchAgentLabel = "com.byron1st.wharf"
+
+// launchAgent keeps wharf running in the user's GUI session, where osascript
+// dialogs and notifications work. KeepAlive restarts it unless it exits 0.
+var launchAgent = template.Must(template.New("plist").Funcs(template.FuncMap{"xml": xmlText}).Parse(
+	`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>{{xml .Label}}</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>{{xml .Executable}}</string>
+	</array>
+{{- if .ConfigPath}}
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>WHARF_CONFIG</key>
+		<string>{{xml .ConfigPath}}</string>
+	</dict>
+{{- end}}
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>StandardOutPath</key>
+	<string>{{xml .LogPath}}</string>
+	<key>StandardErrorPath</key>
+	<string>{{xml .LogPath}}</string>
+</dict>
+</plist>
+`))
 
 // userCanceled is in osascript's stderr when the dialog is canceled: it is
 // AppleScript error -128.
@@ -29,18 +99,32 @@ const userCanceled = "(-128)"
 type Desktop interface {
 	ChooseTOMLFile(ctx context.Context) (string, error)
 	Open(ctx context.Context, path string) error
+	Notify(ctx context.Context, title, message string) error
+	ReplaceExecutable(ctx context.Context, data []byte) error
+	InstallLaunchAgent(ctx context.Context, configPath string) error
+	UninstallLaunchAgent(ctx context.Context) error
 }
 
 type client struct {
-	goos string
-	run  func(ctx context.Context, name string, args ...string) ([]byte, error)
+	goos       string
+	run        func(ctx context.Context, name string, args ...string) ([]byte, error)
+	executable func() (string, error)
+	homeDir    func() (string, error)
+	uid        int
 }
 
-// NewDesktop returns a Desktop that runs osascript and open on macOS.
+// NewDesktop returns a Desktop that runs osascript, open and launchctl on
+// macOS and manages the running executable.
 func NewDesktop() Desktop {
-	return &client{goos: runtime.GOOS, run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-		return exec.CommandContext(ctx, name, args...).Output()
-	}}
+	return &client{
+		goos: runtime.GOOS,
+		run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return exec.CommandContext(ctx, name, args...).Output()
+		},
+		executable: os.Executable,
+		homeDir:    os.UserHomeDir,
+		uid:        os.Getuid(),
+	}
 }
 
 // ChooseTOMLFile shows the macOS file dialog for a .toml file and returns the
@@ -82,4 +166,180 @@ func (c *client) Open(ctx context.Context, path string) error {
 	}
 
 	return nil
+}
+
+// Notify shows a macOS notification. Clicking it does not open wharf.
+func (c *client) Notify(ctx context.Context, title, message string) error {
+	if c.goos != "darwin" {
+		return ErrUnsupportedOS
+	}
+
+	if _, err := c.run(ctx, "osascript", append(notifyScript, title, message)...); err != nil {
+		return errors.Join(ErrFailedToNotify, err)
+	}
+
+	return nil
+}
+
+// ReplaceExecutable makes data the running executable, resolved through
+// symlinks, and keeps the previous one next to it with an ".old" suffix. The
+// new file is written next to the executable and renamed over it, so the swap
+// is atomic and the running process keeps its own file: overwriting it in
+// place would get the process killed by macOS code signing. On failure the
+// executable is left as it was.
+func (c *client) ReplaceExecutable(_ context.Context, data []byte) error {
+	exe, err := c.executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+
+	if err != nil {
+		return errors.Join(ErrFailedToFindExecutable, err)
+	}
+
+	f, err := os.CreateTemp(filepath.Dir(exe), "."+filepath.Base(exe)+"-*")
+	if err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToCreateTempExecutable, exe), err)
+	}
+
+	// Removing after a successful rename fails harmlessly.
+	defer func() { _ = os.Remove(f.Name()) }()
+
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Chmod(0o755)
+	}
+
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+
+	if err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToWriteTempExecutable, exe), err)
+	}
+
+	old := exe + ".old"
+	if err := os.Rename(exe, old); err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToBackUpExecutable, exe), err)
+	}
+
+	if err := os.Rename(f.Name(), exe); err != nil {
+		// Put the previous executable back; if that fails too, it is still at old.
+		_ = os.Rename(old, exe)
+
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReplaceExecutable, exe), err)
+	}
+
+	return nil
+}
+
+// InstallLaunchAgent writes the wharf LaunchAgent for the running executable
+// to ~/Library/LaunchAgents and loads it, replacing a loaded one. configPath,
+// when not empty, becomes its WHARF_CONFIG; output goes to
+// ~/Library/Logs/wharf/wharf.log.
+func (c *client) InstallLaunchAgent(ctx context.Context, configPath string) error {
+	if c.goos != "darwin" {
+		return ErrUnsupportedOS
+	}
+
+	exe, err := c.executable()
+	if err != nil {
+		return errors.Join(ErrFailedToFindExecutable, err)
+	}
+
+	if configPath != "" {
+		// launchd starts the agent in /, so a relative path would not resolve.
+		if configPath, err = filepath.Abs(configPath); err != nil {
+			return errors.Join(ErrFailedToResolveConfigPath, err)
+		}
+	}
+
+	plistPath, err := c.launchAgentPath()
+	if err != nil {
+		return err
+	}
+
+	home := filepath.Dir(filepath.Dir(filepath.Dir(plistPath)))
+	logPath := filepath.Join(home, "Library", "Logs", "wharf", "wharf.log")
+
+	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToCreateLaunchAgentDir, filepath.Dir(plistPath)), err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToCreateLogDir, filepath.Dir(logPath)), err)
+	}
+
+	var plist bytes.Buffer
+	if err := launchAgent.Execute(&plist, map[string]string{
+		"Label":      LaunchAgentLabel,
+		"Executable": exe,
+		"ConfigPath": configPath,
+		"LogPath":    logPath,
+	}); err != nil {
+		return errors.Join(ErrFailedToRenderLaunchAgent, err)
+	}
+
+	if err := os.WriteFile(plistPath, plist.Bytes(), 0o644); err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToWriteLaunchAgent, plistPath), err)
+	}
+
+	// An agent loaded before must be booted out first or bootstrap fails; when
+	// none is loaded, bootout fails harmlessly.
+	_, _ = c.run(ctx, "launchctl", "bootout", c.launchAgentTarget())
+
+	if _, err := c.run(ctx, "launchctl", "bootstrap", c.launchDomain(), plistPath); err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToBootstrapLaunchAgent, plistPath), err)
+	}
+
+	return nil
+}
+
+// UninstallLaunchAgent stops and unloads the wharf LaunchAgent and removes its
+// file. Neither a not-loaded agent nor a missing file is an error.
+func (c *client) UninstallLaunchAgent(ctx context.Context) error {
+	if c.goos != "darwin" {
+		return ErrUnsupportedOS
+	}
+
+	plistPath, err := c.launchAgentPath()
+	if err != nil {
+		return err
+	}
+
+	// bootout fails when the agent is not loaded, which is the wanted state.
+	_, _ = c.run(ctx, "launchctl", "bootout", c.launchAgentTarget())
+
+	if err := os.Remove(plistPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToRemoveLaunchAgentConfig, plistPath), err)
+	}
+
+	return nil
+}
+
+func (c *client) launchAgentPath() (string, error) {
+	home, err := c.homeDir()
+	if err != nil {
+		return "", errors.Join(ErrFailedToFindHomeDir, err)
+	}
+
+	return filepath.Join(home, "Library", "LaunchAgents", LaunchAgentLabel+".plist"), nil
+}
+
+// launchDomain is the user's GUI session domain.
+func (c *client) launchDomain() string {
+	return "gui/" + strconv.Itoa(c.uid)
+}
+
+func (c *client) launchAgentTarget() string {
+	return c.launchDomain() + "/" + LaunchAgentLabel
+}
+
+func xmlText(s string) (string, error) {
+	var b strings.Builder
+	if err := xml.EscapeText(&b, []byte(s)); err != nil {
+		return "", err
+	}
+
+	return b.String(), nil
 }
