@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wharf-server",
+      "runtimeExecutable": "make",
+      "runtimeArgs": [
+        "run"
+      ],
+      "port": 8080
+    },
+    {
+      "name": "wharf-web",
+      "runtimeExecutable": "make",
+      "runtimeArgs": [
+        "web-dev"
+      ],
+      "port": 5173
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "changelog": null,
+  "editmeta": null,
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "fields": {
+    "customfield_10015": null,
+    "description": null,
+    "duedate": "2026-10-01T09:00:00.000+0900",
+    "status": {
+      "description": "",
+      "iconUrl": "https://example.atlassian.net/images/icons/status_generic.gif",
+      "id": "10000",
+      "name": "To Do",
+      "self": "https://example.atlassian.net/rest/api/3/status/10000",
+      "statusCategory": {
+        "colorName": "blue-gray",
+        "id": 2,
+        "key": "new",
+        "name": "To Do",
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2"
+      }
+    },
+    "summary": "Write onboarding guide"
+  },
+  "fieldsToInclude": null,
+  "id": "10101",
+  "key": "WHF-1",
+  "names": null,
+  "operations": null,
+  "properties": null,
+  "renderedFields": null,
+  "schema": null,
+  "self": "https://example.atlassian.net/rest/api/3/issue/10101",
+  "transitions": null,
+  "versionedRepresentations": null
+}

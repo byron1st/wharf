@@ -1,0 +1,30 @@
+# wharf config example.
+# Default location: <os.UserConfigDir()>/wharf/config.toml
+#   (macOS: ~/Library/Application Support/wharf/config.toml, Linux: ~/.config/wharf/config.toml)
+# Override the location with the WHARF_CONFIG environment variable.
+# Every key is optional and a missing file means all defaults. Unknown keys are rejected.
+# The atlassian_* keys go together: set all three or none. Saving Settings › Atlassian Cloud
+# in the web app rewrites only those three lines, keeping comments and other keys.
+
+# TCP address the server listens on. Default: "127.0.0.1:8080" (this machine only)
+# Requests must come from this machine and name a loopback host (localhost, 127.0.0.1,
+# [::1]); others get 403, so listening on other interfaces does not open the API to them.
+# addr = "127.0.0.1:8080"
+
+# SQLite database file path.
+# Default: <os.UserConfigDir()>/wharf/wharf.db (its directory is created when missing)
+# db_path = "/path/to/wharf.db"
+
+# Jira Cloud REST API base URL (https only, no query or fragment).
+# Either your site URL, or for a scoped API token the gateway URL
+# https://api.atlassian.com/ex/jira/{cloudId}
+# The URL path is kept, so the gateway prefix is preserved.
+atlassian_site_url = "https://your-site.atlassian.net"
+
+# Atlassian account email for Basic auth.
+atlassian_email = "you@example.com"
+
+# Atlassian API token for Basic auth. Create one at
+# https://id.atlassian.com/manage-profile/security/api-tokens. Stored in plain text,
+# so keep this file readable only by you (chmod 600).
+atlassian_api_token = "your-api-token"

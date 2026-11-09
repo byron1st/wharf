@@ -1,0 +1,475 @@
+package db_test
+
+import (
+	"context"
+	"database/sql"
+	"io/fs"
+	"path/filepath"
+	"testing"
+	"testing/fstest"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
+	"github.com/byron1st/wharf/internal/pkg/servicedesk"
+	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
+	"github.com/byron1st/wharf/scripts"
+)
+
+// withMigrations returns the project's schema_migrations.sql with files as the
+// migrations directory.
+func withMigrations(t *testing.T, files map[string]string) fstest.MapFS {
+	t.Helper()
+
+	schema, err := fs.ReadFile(scripts.Migrations(), "schema_migrations.sql")
+	require.NoError(t, err)
+
+	fsys := fstest.MapFS{"schema_migrations.sql": {Data: schema}}
+	for name, content := range files {
+		fsys["migrations/"+name] = &fstest.MapFile{Data: []byte(content)}
+	}
+
+	return fsys
+}
+
+func TestConnectFailure(t *testing.T) {
+	manager := db.NewManager(filepath.Join(t.TempDir(), "missing", "wharf.db"), scripts.Migrations())
+
+	require.ErrorIs(t, manager.Connect(context.Background()), db.ErrFailedToPingDatabase)
+	require.NoError(t, manager.Close())
+}
+
+func TestCloseWithoutConnect(t *testing.T) {
+	require.NoError(t, db.NewManager(":memory:", scripts.Migrations()).Close())
+}
+
+func TestMigrateKeepsDataAcrossReconnect(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+
+	first := db.NewManager(path, scripts.Migrations())
+	require.NoError(t, first.Connect(context.Background()))
+	require.NoError(t, first.Migrate(context.Background()))
+	require.NoError(t, first.UpsertTasks(context.Background(), []task.Task{newTask("WHF-1")}))
+	require.NoError(t, first.Close())
+
+	// Re-applying 0001 would fail on the existing tasks table.
+	second := db.NewManager(path, scripts.Migrations())
+	require.NoError(t, second.Connect(context.Background()))
+	t.Cleanup(func() { _ = second.Close() })
+	require.NoError(t, second.Migrate(context.Background()))
+	requireExists(t, path, "WHF-1", true)
+}
+
+func TestMigrateIsIdempotent(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("WHF-1")}))
+	requireExists(t, path, "WHF-1", true)
+}
+
+func TestMigrateAppliesInVersionOrder(t *testing.T) {
+	// 0002 fails unless 0001 has already created the table.
+	manager := connect(t, withMigrations(t, map[string]string{
+		"0002_add_column.sql": "ALTER TABLE items ADD COLUMN name TEXT;",
+		"0001_create.sql":     "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+	}))
+
+	require.NoError(t, manager.Migrate(context.Background()))
+}
+
+func TestMigrateTracksAppliedByVersion(t *testing.T) {
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+	})
+	manager := connect(t, migrations)
+	require.NoError(t, manager.Migrate(context.Background()))
+
+	// Renaming only the description keeps the version, so the file is not
+	// re-applied; re-applying would fail on the existing table.
+	content := migrations["migrations/0001_create.sql"]
+	delete(migrations, "migrations/0001_create.sql")
+	migrations["migrations/0001_create_items.sql"] = content
+
+	require.NoError(t, manager.Migrate(context.Background()))
+}
+
+func TestMigrateRollsBackFailedMigration(t *testing.T) {
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+		"0002_broken.sql": "CREATE TABLE others (id INTEGER PRIMARY KEY); NOT SQL;",
+	})
+	manager := connect(t, migrations)
+
+	err := manager.Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrFailedToApplyMigration)
+	require.ErrorContains(t, err, "file=0002_broken.sql")
+
+	// The partial "others" table was rolled back, so a fixed 0002 applies
+	// cleanly while 0001 is not re-applied.
+	migrations["migrations/0002_broken.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	require.NoError(t, manager.Migrate(context.Background()))
+}
+
+func TestMigrateRejectsInvalidFileName(t *testing.T) {
+	manager := connect(t, withMigrations(t, map[string]string{"initial.sql": "SELECT 1;"}))
+
+	err := manager.Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrInvalidMigrationFileName)
+	require.ErrorContains(t, err, "file=initial.sql")
+}
+
+func TestMigrateRejectsDuplicateVersion(t *testing.T) {
+	manager := connect(t, withMigrations(t, map[string]string{
+		"0001_a.sql": "SELECT 1;",
+		"0001_b.sql": "SELECT 1;",
+	}))
+
+	err := manager.Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrDuplicateMigrationVersion)
+	require.ErrorContains(t, err, "version=0001")
+}
+
+func TestMigrateFailures(t *testing.T) {
+	schema, err := fs.ReadFile(scripts.Migrations(), "schema_migrations.sql")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name       string
+		migrations fstest.MapFS
+		wantErr    error
+		wantFile   string
+	}{
+		{
+			name:       "missing migrations directory",
+			migrations: fstest.MapFS{"schema_migrations.sql": {Data: schema}},
+			wantErr:    db.ErrFailedToReadMigrations,
+		},
+		{
+			name:       "missing schema_migrations.sql",
+			migrations: fstest.MapFS{"migrations/0001_create.sql": {Data: []byte("SELECT 1;")}},
+			wantErr:    db.ErrFailedToReadSchemaMigrationsFile,
+		},
+		{
+			name: "invalid schema_migrations.sql",
+			migrations: fstest.MapFS{
+				"schema_migrations.sql":      {Data: []byte("NOT SQL;")},
+				"migrations/0001_create.sql": {Data: []byte("SELECT 1;")},
+			},
+			wantErr: db.ErrFailedToCreateMigrationsTable,
+		},
+		{
+			name: "schema_migrations without version column",
+			migrations: fstest.MapFS{
+				"schema_migrations.sql":      {Data: []byte("CREATE TABLE schema_migrations (id INTEGER);")},
+				"migrations/0001_create.sql": {Data: []byte("SELECT 1;")},
+			},
+			wantErr:  db.ErrFailedToCheckMigrationApplied,
+			wantFile: "0001_create.sql",
+		},
+		{
+			name: "unreadable migration file",
+			migrations: fstest.MapFS{
+				"schema_migrations.sql":           {Data: schema},
+				"migrations/0001_dir.sql/content": {Data: []byte("SELECT 1;")},
+			},
+			wantErr:  db.ErrFailedToReadMigrationFile,
+			wantFile: "0001_dir.sql",
+		},
+		{
+			name: "migration drops schema_migrations",
+			migrations: fstest.MapFS{
+				"schema_migrations.sql":    {Data: schema},
+				"migrations/0001_drop.sql": {Data: []byte("DROP TABLE schema_migrations;")},
+			},
+			wantErr:  db.ErrFailedToRecordMigration,
+			wantFile: "0001_drop.sql",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := connect(t, tt.migrations).Migrate(context.Background())
+			require.ErrorIs(t, err, tt.wantErr)
+
+			if tt.wantFile != "" {
+				require.ErrorContains(t, err, "file="+tt.wantFile)
+			}
+		})
+	}
+}
+
+func TestConnectWaitsForLockHeldByAnotherConnection(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	other, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = other.Close() })
+
+	conn, err := other.Conn(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	_, err = conn.ExecContext(context.Background(), "BEGIN IMMEDIATE")
+	require.NoError(t, err)
+
+	released := make(chan error, 1)
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+
+		_, err := conn.ExecContext(context.Background(), "COMMIT")
+		released <- err
+	}()
+
+	// Without a busy timeout this fails immediately with SQLITE_BUSY.
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("WHF-1")}))
+	require.NoError(t, <-released)
+	requireExists(t, path, "WHF-1", true)
+}
+
+func TestMethodsRequireConnection(t *testing.T) {
+	notConnected := db.NewManager(":memory:", scripts.Migrations())
+
+	closed := newManager(t)
+	require.NoError(t, closed.Close())
+
+	for name, manager := range map[string]db.Manager{"before connect": notConnected, "after close": closed} {
+		t.Run(name, func(t *testing.T) {
+			require.ErrorIs(
+				t,
+				manager.UpsertTasks(context.Background(), []task.Task{newTask("WHF-1")}),
+				db.ErrNotConnected,
+			)
+
+			_, err := manager.CreateLocalTask(context.Background(), newTask("WHF-1"))
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			_, err = manager.ListTasks(context.Background())
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			_, err = manager.ListTasksByIDs(context.Background(), []string{"WHF-1"})
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			_, err = manager.GetTask(context.Background(), "WHF-1")
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			require.ErrorIs(t, manager.UpdateLocalTask(context.Background(), newTask("WHF-1")), db.ErrNotConnected)
+			require.ErrorIs(t, manager.DeleteTask(context.Background(), "WHF-1"), db.ErrNotConnected)
+
+			_, err = manager.CreateTodo(context.Background(), todo.Todo{TaskID: "WHF-1", Description: "d"})
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			_, err = manager.ListTodos(context.Background(), todo.Filter{})
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			require.ErrorIs(t, manager.UpdateTodo(context.Background(), todo.Todo{ID: 1}), db.ErrNotConnected)
+			require.ErrorIs(t, manager.DeleteTodo(context.Background(), 1), db.ErrNotConnected)
+			require.ErrorIs(
+				t,
+				manager.UpsertServiceDeskRequests(context.Background(), []servicedesk.Request{{Key: "SD-1"}}),
+				db.ErrNotConnected,
+			)
+			require.ErrorIs(
+				t,
+				manager.LinkServiceDeskRequest(context.Background(), 1, "SD-1"),
+				db.ErrNotConnected,
+			)
+			require.ErrorIs(
+				t,
+				manager.UnlinkServiceDeskRequest(context.Background(), 1, "SD-1"),
+				db.ErrNotConnected,
+			)
+
+			_, err = manager.CountTodosByTask(context.Background())
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			_, err = manager.ListServiceDeskRequests(context.Background(), false)
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			require.ErrorIs(
+				t,
+				manager.CreateAtlassianSync(context.Background(), atlassiansync.Record{}),
+				db.ErrNotConnected,
+			)
+
+			_, err = manager.GetLastAtlassianSync(context.Background())
+			require.ErrorIs(t, err, db.ErrNotConnected)
+
+			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
+			require.NoError(t, manager.Close())
+		})
+	}
+}
+
+func TestConnectTwiceKeepsExistingConnection(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+
+	require.ErrorIs(t, manager.Connect(context.Background()), db.ErrAlreadyConnected)
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("WHF-1")}))
+	requireExists(t, path, "WHF-1", true)
+}
+
+func TestConnectAfterClose(t *testing.T) {
+	manager, path := newFileManager(t, scripts.Migrations())
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("WHF-1")}))
+	require.NoError(t, manager.Close())
+
+	require.NoError(t, manager.Connect(context.Background()))
+	requireExists(t, path, "WHF-1", true)
+}
+
+// fileManager connects a manager for migrations to the database file at path.
+func fileManager(t *testing.T, path string, migrations fs.FS) db.Manager {
+	t.Helper()
+
+	manager := db.NewManager(path, migrations)
+	require.NoError(t, manager.Connect(context.Background()))
+	t.Cleanup(func() { _ = manager.Close() })
+
+	return manager
+}
+
+// tableExists reports whether the database file at path has the table name.
+func tableExists(t *testing.T, path, name string) bool {
+	t.Helper()
+
+	var exists bool
+
+	err := open(t, path).QueryRowContext(
+		context.Background(),
+		"SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)", name,
+	).Scan(&exists)
+	require.NoError(t, err)
+
+	return exists
+}
+
+// backups returns the backup files Migrate made for the database at path.
+func backups(t *testing.T, path string) []string {
+	t.Helper()
+
+	files, err := filepath.Glob(path + ".bak-*")
+	require.NoError(t, err)
+
+	return files
+}
+
+func TestMigrateRejectsUnknownAppliedMigration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+		"0002_others.sql": "CREATE TABLE others (id INTEGER PRIMARY KEY);",
+	})
+
+	newer := fileManager(t, path, migrations)
+	require.NoError(t, newer.Migrate(context.Background()))
+	require.NoError(t, newer.Close())
+
+	// An older binary knows 0001 only; its own new 0003 must not be applied.
+	delete(migrations, "migrations/0002_others.sql")
+	migrations["migrations/0003_extra.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE extra (id INTEGER PRIMARY KEY);"),
+	}
+
+	err := fileManager(t, path, migrations).Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrUnknownAppliedMigration)
+	require.ErrorContains(t, err, "version=0002")
+	require.False(t, tableExists(t, path, "extra"))
+	require.Empty(t, backups(t, path))
+}
+
+func TestMigrateRejectsChangedAppliedMigration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+	})
+	manager := fileManager(t, path, migrations)
+	require.NoError(t, manager.Migrate(context.Background()))
+
+	migrations["migrations/0001_create.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);"),
+	}
+	migrations["migrations/0002_others.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	err := manager.Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrMigrationChecksumMismatch)
+	require.ErrorContains(t, err, "file=0001_create.sql")
+	require.False(t, tableExists(t, path, "others"))
+	require.Empty(t, backups(t, path))
+}
+
+func TestMigrateBacksUpBeforeApplyingNewMigrations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY); INSERT INTO items (id) VALUES (7);",
+	})
+	manager := fileManager(t, path, migrations)
+
+	// A new database has nothing to keep.
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.Empty(t, backups(t, path))
+
+	// Nothing pending, nothing copied.
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.Empty(t, backups(t, path))
+
+	migrations["migrations/0002_others.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.True(t, tableExists(t, path, "others"))
+
+	files := backups(t, path)
+	require.Len(t, files, 1)
+	require.Contains(t, filepath.Base(files[0]), "wharf.db.bak-0001-")
+
+	// The copy is the database as it was before 0002.
+	require.False(t, tableExists(t, files[0], "others"))
+
+	var id int
+
+	require.NoError(t, open(t, files[0]).QueryRowContext(context.Background(), "SELECT id FROM items").Scan(&id))
+	require.Equal(t, 7, id)
+}
+
+func TestMigrateRejectsDatabaseWithoutChecksums(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+
+	// A database migrated before checksums were recorded.
+	legacy := open(t, path)
+	_, err := legacy.ExecContext(context.Background(),
+		"CREATE TABLE schema_migrations (version TEXT PRIMARY KEY NOT NULL, "+
+			"applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP); "+
+			"INSERT INTO schema_migrations (version) VALUES ('0001');")
+	require.NoError(t, err)
+
+	err = fileManager(t, path, scripts.Migrations()).Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrFailedToCheckMigrationApplied)
+	require.ErrorContains(t, err, "file=0001_initial_migration.sql")
+}
+
+func TestMigrateBacksUpToPathWithoutQuery(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+	})
+	manager := fileManager(t, "file:"+path+"?mode=rwc", migrations)
+	require.NoError(t, manager.Migrate(context.Background()))
+
+	migrations["migrations/0002_others.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.Len(t, backups(t, path), 1)
+}

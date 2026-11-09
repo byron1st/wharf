@@ -1,0 +1,348 @@
+{
+  "changelog": null,
+  "editmeta": null,
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "fields": {
+    "customfield_10015": "2026-10-01",
+    "description": {
+      "content": [
+        {
+          "attrs": {
+            "level": 2,
+            "localId": "h1"
+          },
+          "content": [
+            {
+              "text": "Goal",
+              "type": "text"
+            }
+          ],
+          "type": "heading"
+        },
+        {
+          "attrs": {
+            "localId": "p1"
+          },
+          "content": [
+            {
+              "text": "Sync tasks from ",
+              "type": "text"
+            },
+            {
+              "text": "wharf",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "code"
+                }
+              ]
+            },
+            {
+              "text": " every ",
+              "type": "text"
+            },
+            {
+              "text": "10 minutes",
+              "type": "text",
+              "marks": [
+                {
+                  "type": "strong"
+                }
+              ]
+            },
+            {
+              "text": ".",
+              "type": "text"
+            }
+          ],
+          "type": "paragraph"
+        },
+        {
+          "attrs": {
+            "localId": "b1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "localId": "li1"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "localId": "p1"
+                  },
+                  "content": [
+                    {
+                      "text": "Search assigned work items",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                }
+              ],
+              "type": "listItem"
+            },
+            {
+              "attrs": {
+                "localId": "li2"
+              },
+              "content": [
+                {
+                  "attrs": {
+                    "localId": "p1"
+                  },
+                  "content": [
+                    {
+                      "text": "View each work item",
+                      "type": "text"
+                    }
+                  ],
+                  "type": "paragraph"
+                }
+              ],
+              "type": "listItem"
+            }
+          ],
+          "type": "bulletList"
+        },
+        {
+          "attrs": {
+            "localId": "tl1"
+          },
+          "content": [
+            {
+              "attrs": {
+                "localId": "ti1",
+                "state": "DONE"
+              },
+              "content": [
+                {
+                  "text": "Parse ADF description",
+                  "type": "text"
+                }
+              ],
+              "type": "taskItem"
+            },
+            {
+              "attrs": {
+                "localId": "ti2",
+                "state": "TODO"
+              },
+              "content": [
+                {
+                  "text": "Map statuses",
+                  "type": "text"
+                }
+              ],
+              "type": "taskItem"
+            }
+          ],
+          "type": "taskList"
+        },
+        {
+          "attrs": {
+            "localId": "p1"
+          },
+          "content": [
+            {
+              "text": "Owner: ",
+              "type": "text"
+            },
+            {
+              "attrs": {
+                "accessLevel": "",
+                "id": "712020:00000000-0000-0000-0000-000000000000",
+                "localId": "m1",
+                "text": "@Jane Doe"
+              },
+              "type": "mention"
+            },
+            {
+              "text": " see ",
+              "type": "text"
+            },
+            {
+              "attrs": {
+                "url": "https://example.atlassian.net/browse/WHF-1"
+              },
+              "type": "inlineCard"
+            }
+          ],
+          "type": "paragraph"
+        },
+        {
+          "attrs": {
+            "localId": "p1"
+          },
+          "content": [
+            {
+              "text": "line one",
+              "type": "text"
+            },
+            {
+              "type": "hardBreak"
+            },
+            {
+              "text": "line two",
+              "type": "text"
+            }
+          ],
+          "type": "paragraph"
+        },
+        {
+          "attrs": {
+            "localId": "c1"
+          },
+          "content": [
+            {
+              "text": "wharf jira workitem search \\\n  --json",
+              "type": "text"
+            }
+          ],
+          "type": "codeBlock"
+        },
+        {
+          "type": "rule"
+        },
+        {
+          "attrs": {
+            "layout": "align-start"
+          },
+          "content": [
+            {
+              "attrs": {
+                "alt": "diagram.png",
+                "collection": "",
+                "height": 100,
+                "id": "00000000-0000-0000-0000-000000000001",
+                "type": "file",
+                "width": 200
+              },
+              "type": "media"
+            }
+          ],
+          "type": "mediaSingle"
+        },
+        {
+          "attrs": {
+            "localId": "e1"
+          },
+          "type": "paragraph"
+        }
+      ],
+      "type": "doc",
+      "version": 1
+    },
+    "duedate": "2026-10-31",
+    "issuelinks": [
+      {
+        "id": "20001",
+        "inwardIssue": {
+          "fields": {
+            "summary": "Write onboarding guide"
+          },
+          "id": "10101",
+          "key": "WHF-1",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10101"
+        },
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20001",
+        "type": {
+          "id": "10000",
+          "inward": "is blocked by",
+          "name": "Blocks",
+          "outward": "blocks",
+          "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10000"
+        }
+      },
+      {
+        "id": "20002",
+        "outwardIssue": {
+          "fields": {
+            "summary": "Fix flaky login test"
+          },
+          "id": "10103",
+          "key": "WHF-3",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10103"
+        },
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20002",
+        "type": {
+          "id": "10003",
+          "inward": "relates to",
+          "name": "Relates",
+          "outward": "relates to",
+          "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10003"
+        }
+      }
+    ],
+    "parent": {
+      "fields": {
+        "issuetype": {
+          "hierarchyLevel": 1,
+          "id": "10000",
+          "name": "Epic",
+          "subtask": false
+        },
+        "summary": "Task sync"
+      },
+      "id": "10100",
+      "key": "WHF-10",
+      "self": "https://example.atlassian.net/rest/api/3/issue/10100"
+    },
+    "status": {
+      "description": "",
+      "iconUrl": "https://example.atlassian.net/images/icons/status_generic.gif",
+      "id": "3",
+      "name": "In Progress",
+      "self": "https://example.atlassian.net/rest/api/3/status/3",
+      "statusCategory": {
+        "colorName": "yellow",
+        "id": 4,
+        "key": "indeterminate",
+        "name": "In Progress",
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4"
+      }
+    },
+    "subtasks": [
+      {
+        "fields": {
+          "issuetype": {
+            "hierarchyLevel": -1,
+            "id": "10086",
+            "name": "Sub-task",
+            "subtask": true
+          },
+          "summary": "Add sync scheduler"
+        },
+        "id": "10105",
+        "key": "WHF-5",
+        "self": "https://example.atlassian.net/rest/api/3/issue/10105"
+      },
+      {
+        "fields": {
+          "issuetype": {
+            "hierarchyLevel": -1,
+            "id": "10086",
+            "name": "Sub-task",
+            "subtask": true
+          },
+          "summary": "Store synced tasks"
+        },
+        "id": "10106",
+        "key": "WHF-6",
+        "self": "https://example.atlassian.net/rest/api/3/issue/10106"
+      }
+    ],
+    "summary": "Implement Jira sync"
+  },
+  "fieldsToInclude": null,
+  "id": "10102",
+  "key": "WHF-2",
+  "names": null,
+  "operations": null,
+  "properties": null,
+  "renderedFields": null,
+  "schema": null,
+  "self": "https://example.atlassian.net/rest/api/3/issue/10102",
+  "transitions": null,
+  "versionedRepresentations": null
+}
