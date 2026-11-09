@@ -38,10 +38,17 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated da
 - `internal/pkg/<topic>/`: Module-private shared code. `internal/pkg/mocks/` holds generated mocks.
 - `pkg/<topic>/`: Public, importable contracts (only when something must be shared outside the module).
 - `scripts/`: Tooling config such as `sqlc.yaml`, SQL schema, and queries. Its Go package (`scripts.Migrations()`) embeds `schema_migrations.sql` and `migrations/` for `db.NewManager`, since `go:embed` cannot reach files outside the package directory.
-- `scripts/migrations/`: SQL migrations named `{4-digit version}_{snake_case description}.sql` (e.g. `0002_add_task_index.sql`); `db.Manager.Migrate` applies them in version order and never re-applies one, so never edit or renumber an applied migration — add a new one. Exception until the first deployment: every schema change goes directly into `0001_initial_migration.sql` (owner decision), and a local `wharf.db` that already applied 0001 must be deleted and recreated. Each file runs inside a transaction, so it must not contain `BEGIN`/`COMMIT`, `VACUUM`, or `PRAGMA foreign_keys` (silently ignored inside a transaction).
+- `scripts/migrations/`: SQL migrations named `{4-digit version}_{snake_case description}.sql` (e.g. `0002_add_task_index.sql`); `db.Manager.Migrate` applies them in version order and never re-applies one, so never edit or renumber an applied migration — add a new one. `schema_migrations` records each file's SHA-256, so `Migrate` refuses to start when an applied file was edited (`ErrMigrationChecksumMismatch`) or the database has a version the binary does not know, i.e. a downgrade (`ErrUnknownAppliedMigration`); before applying new migrations to a database that has some, it copies it to `<db_path>.bak-<last version>-<UTC time>` with `VACUUM INTO`. Each file runs inside a transaction, so it must not contain `BEGIN`/`COMMIT`, `VACUUM`, or `PRAGMA foreign_keys` (silently ignored inside a transaction).
+- `.github/workflows/`: `ci.yml` runs `make check` (failing on any change it makes), `make test`, `make build` and `make web-check` on pushes and PRs to `main`/`develop`; `release.yml` builds the darwin/arm64 binary for a `vX.Y.Z` tag and attaches it to a GitHub Release.
 - `docs/`: Project documentation.
 - `tests/e2e/`: End-to-end tests against a running server.
 - `web/`: The web app (Vite, React, TypeScript, Tailwind, shadcn-style components on Radix). Its Go package (`web.Dist()`) embeds the build in `web/dist`, which `server.NewHandler` serves on every non-`/api` GET path with an `index.html` fallback for client-side routes. Only `web/dist/.gitkeep` is committed, so Go builds and tests pass before a web build. Design sources are in `docs/design/`.
+
+## Versioning
+
+- SemVer `X.Y.Z`. The only source of the version is a `vX.Y.Z` git tag on `main`: `go build`/`go install` stamp it into the binary, and `internal/pkg/buildinfo.Version()` shows it without the `v` in the settings panel. Never add a VERSION file, `-ldflags` version, or version constant.
+- A build after a tag shows a pseudo-version (`X.Y.(Z+1)-0.<time>-<commit>`) and an uncommitted tree adds `+dirty`.
+- Bump MAJOR for incompatible changes (including a config key removed or a migration that drops data), MINOR for features (including any new migration), PATCH for fixes.
 
 ## Code Conventions
 

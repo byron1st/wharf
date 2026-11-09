@@ -82,4 +82,39 @@ WHARF_CONFIG=/path/to/config.toml ./wharf
 - 첫 실행 때 DB 마이그레이션이 자동으로 적용됩니다.
 - 소스에서 바로 실행하려면 `make run`을 쓰세요(`go run ./cmd/wharf`).
 - 프런트엔드를 개발할 때는 `make run`으로 서버를 띄운 상태에서 `make web-dev`로 Vite 개발 서버를 함께 실행하세요.
-- 아직 첫 배포 전이라 스키마 변경이 `0001_initial_migration.sql`에 직접 반영됩니다. 이전 버전으로 만든 로컬 `wharf.db`에서 오류가 나면 파일을 삭제하고 다시 실행하세요.
+
+## DB 마이그레이션
+
+시작할 때마다 `scripts/migrations/`의 SQL 파일 중 아직 적용하지 않은 것을 버전 순서대로 적용하고, 각 파일의 SHA-256을 `schema_migrations`에 기록합니다.
+
+- 스키마를 바꿀 때는 기존 파일을 고치지 말고 다음 번호의 파일(예: `0002_add_task_index.sql`)을 추가합니다. 적용된 파일 내용이 바뀌면 서버가 시작을 거부합니다.
+- 이미 데이터가 있는 DB에 새 마이그레이션을 적용하기 전에 `<db_path>.bak-<마지막 적용 버전>-<UTC 시각>` 백업을 만듭니다. 문제가 생기면 서버를 멈추고 백업 파일을 `db_path`로 복사해 되돌립니다. 백업은 자동으로 지워지지 않으니 필요 없어지면 직접 삭제하세요.
+- DB가 이 바이너리보다 새 버전으로 마이그레이션되어 있으면(다운그레이드) 서버가 시작을 거부합니다. 새 버전 바이너리를 쓰거나 백업으로 되돌리세요.
+- 체크섬 기록 이전에 만든 로컬 `wharf.db`에서는 `failed to check migration applied` 오류가 납니다. 파일을 삭제하고 다시 실행하세요.
+
+## 버전과 릴리스
+
+버전은 [Semantic Versioning](https://semver.org) `X.Y.Z`이며, `main`의 git 태그 `vX.Y.Z`가 유일한 원천입니다. `make build`/`make install`(`go build`/`go install`)이 태그를 바이너리에 기록하고, 웹 앱 Settings 하단에 `Wharf · X.Y.Z`로 표시됩니다. 태그 이후 커밋에서 빌드하면 `X.Y.(Z+1)-0.<시각>-<커밋>`, 커밋하지 않은 변경이 있으면 `+dirty`가 붙습니다.
+
+- MAJOR: 호환되지 않는 변경(설정 키 제거, 데이터를 버리는 마이그레이션 등)
+- MINOR: 기능 추가(새 마이그레이션 포함)
+- PATCH: 버그 수정
+
+릴리스 절차:
+
+1. `develop`을 `main`으로 PR 병합합니다.
+2. `main`에서 태그를 만들어 push합니다.
+
+   ```sh
+   git switch main && git pull
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+3. `release` 워크플로가 macOS(arm64) 바이너리를 빌드해 `wharf_0.1.0_darwin_arm64.tar.gz`를 GitHub Release에 첨부합니다.
+
+`go install github.com/byron1st/wharf/cmd/wharf@vX.Y.Z`로 설치하면 웹 앱이 포함되지 않으므로, 릴리스 파일이나 `make install`을 사용하세요.
+
+## CI
+
+`main`·`develop`으로의 push와 PR에서 `ci` 워크플로가 `make check`(변경이 생기면 실패), `make test`, `make build`, `make web-check`를 실행합니다.

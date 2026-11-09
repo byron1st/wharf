@@ -1,0 +1,46 @@
+name: release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+
+jobs:
+  darwin-arm64:
+    runs-on: macos-latest
+    steps:
+      # Full history and tags so go build stamps the tag as the module version.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: make build
+        run: make build
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+      - name: Check the stamped version
+        run: |
+          stamped=$(go version -m wharf | awk '$1 == "mod" { print $3 }')
+          if [ "$stamped" != "$GITHUB_REF_NAME" ]; then
+            echo "binary version $stamped does not match tag $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+      - name: Package
+        run: |
+          archive="wharf_${GITHUB_REF_NAME#v}_darwin_arm64.tar.gz"
+          tar -czf "$archive" wharf README.md config.example.toml
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Create GitHub Release
+        run: gh release create "$GITHUB_REF_NAME" "$ARCHIVE" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
