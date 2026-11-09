@@ -181,11 +181,13 @@ func (m *manager) Migrate(ctx context.Context) error {
 		return errors.Join(ErrFailedToLockMigrations, err)
 	}
 
-	// Unlocking runs even when ctx is done; were it to fail, closing conn ends
-	// the session and the lock with it.
+	// Unlocking runs even when ctx is done, but not for long: were it to fail,
+	// discarding conn ends the session and the lock with it.
 	defer func() {
-		_, err := conn.ExecContext(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", migrationLockKey)
-		if err != nil {
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultConnectTimeout)
+		defer cancel()
+
+		if _, err := conn.ExecContext(unlockCtx, "SELECT pg_advisory_unlock($1)", migrationLockKey); err != nil {
 			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		}
 	}()

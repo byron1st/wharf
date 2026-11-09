@@ -137,7 +137,7 @@ function General() {
         <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-[13px]">
           <span className="text-[#71717a]">Database</span>
           <span className="truncate font-mono" title={app.db_target}>
-            {app.db_target || 'Not configured'}
+            {app.db_target}
           </span>
           <span className="rounded-md bg-[#f4f4f5] px-2 py-0.5 text-[12px]">Postgres</span>
         </div>
