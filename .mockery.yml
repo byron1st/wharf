@@ -10,6 +10,9 @@ packages:
   github.com/byron1st/wharf/internal/pkg/httputil:
     interfaces:
       HTTPClient:
+  github.com/byron1st/wharf/internal/adapter/github:
+    interfaces:
+      Releases:
   github.com/byron1st/wharf/internal/adapter/atlassian:
     interfaces:
       Client:
@@ -17,6 +20,7 @@ packages:
     interfaces:
       Service:
       Settings:
+      Updater:
   github.com/byron1st/wharf/internal/adapter/system:
     interfaces:
       Desktop:

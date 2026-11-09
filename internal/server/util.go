@@ -66,6 +66,16 @@ var errorStatuses = []struct {
 	{err: service.ErrTaskOfUpdatedTodoNotFound, status: http.StatusBadRequest},
 	{err: service.ErrTodoToUpdateNotFound, status: http.StatusNotFound},
 	{err: service.ErrTodoToDeleteNotFound, status: http.StatusNotFound},
+	{err: service.ErrUpdateNotSupported, status: http.StatusConflict, code: "update_not_supported"},
+	{err: service.ErrNoUpdateAvailable, status: http.StatusConflict, code: "no_update_available"},
+	{err: service.ErrUpdateInProgress, status: http.StatusConflict, code: "update_in_progress"},
+	{err: service.ErrReleaseChecksumNotFound, status: http.StatusBadGateway, code: "invalid_release"},
+	{err: service.ErrReleaseChecksumMismatch, status: http.StatusBadGateway, code: "invalid_release"},
+	{err: service.ErrFailedToOpenArchive, status: http.StatusBadGateway, code: "invalid_release"},
+	{err: service.ErrFailedToReadArchive, status: http.StatusBadGateway, code: "invalid_release"},
+	{err: service.ErrBinaryNotInArchive, status: http.StatusBadGateway, code: "invalid_release"},
+	{err: service.ErrBinaryTooLarge, status: http.StatusBadGateway, code: "invalid_release"},
+	{err: service.ErrFailedToReadBinary, status: http.StatusBadGateway, code: "invalid_release"},
 }
 
 // writeError logs err with msg and writes it with the status errorStatuses

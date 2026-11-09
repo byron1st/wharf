@@ -50,6 +50,8 @@ chmod 600 "$HOME/Library/Application Support/wharf/config.toml"
 | `atlassian_site_url` | 없음 | Jira Cloud REST API 기본 URL(https만). Scoped API 토큰이면 `https://api.atlassian.com/ex/jira/{cloudId}`. |
 | `atlassian_email` | 없음 | Basic 인증에 쓸 Atlassian 계정 이메일. |
 | `atlassian_api_token` | 없음 | [API 토큰](https://id.atlassian.com/manage-profile/security/api-tokens). 평문으로 저장되므로 파일 권한을 `600`으로 두세요. |
+| `update_check` | `true` | GitHub Releases에서 새 버전을 확인할지 여부. 릴리스 빌드(`X.Y.Z`)를 macOS(arm64)에서 실행할 때만 확인합니다. |
+| `update_check_interval` | `"24h"` | 확인 주기(`"6h"`, `"48h"` 같은 Go duration). `"1h"`보다 짧으면 시작하지 않습니다. |
 
 `atlassian_*` 세 키는 모두 설정하거나 모두 비워 두어야 합니다. 서버를 띄운 뒤 웹 앱의 Settings › Atlassian Cloud에서 저장해도 되며, 이때 해당 세 줄만 다시 쓰이고 주석과 다른 키는 유지됩니다.
 
@@ -83,6 +85,48 @@ WHARF_CONFIG=/path/to/config.toml ./wharf
 - 소스에서 바로 실행하려면 `make run`을 쓰세요(`go run ./cmd/wharf`).
 - 프런트엔드를 개발할 때는 `make run`으로 서버를 띄운 상태에서 `make web-dev`로 Vite 개발 서버를 함께 실행하세요.
 
+## 4. 백그라운드 실행 (macOS)
+
+터미널을 닫아도 계속 돌도록 launchd LaunchAgent로 등록합니다. 실행할 바이너리 자체로 명령을 실행하세요.
+
+```sh
+wharf service install
+```
+
+- `~/Library/LaunchAgents/com.byron1st.wharf.plist`를 쓰고 바로 실행합니다. 로그인할 때 자동으로 시작되고, 비정상 종료하면 launchd가 다시 띄웁니다.
+- plist에는 명령을 실행한 바이너리의 절대 경로가 들어갑니다. 바이너리를 옮겼다면 다시 실행하세요. 이미 등록돼 있으면 다시 읽어 들입니다.
+- `WHARF_CONFIG`가 설정된 셸에서 실행하면 그 경로(절대 경로로 바꿔서)를 plist에 넣습니다. 설정하지 않았으면 기본 위치를 씁니다.
+- 로그(JSON)는 `~/Library/Logs/wharf/wharf.log`에 쌓입니다. 자동으로 정리되지 않습니다.
+
+해제:
+
+```sh
+wharf service uninstall
+```
+
+주의:
+
+- LaunchAgent가 떠 있는 동안 터미널에서 `./wharf`를 또 실행하면 같은 포트를 쓰므로 `failed to listen` 오류로 종료됩니다. 반대로 수동 실행 중에 등록하면 LaunchAgent 쪽이 포트를 얻지 못해 10초 간격으로 재시작을 반복하니, 먼저 수동 실행을 끄세요.
+- Settings에서 다른 설정 파일을 골라 재시작하면 그 경로는 지금 프로세스에만 적용됩니다. 재부팅하거나 launchd가 다시 띄우면 plist의 경로로 돌아가므로, 계속 쓰려면 `WHARF_CONFIG=<경로> wharf service install`로 다시 등록하세요.
+
+## 자동 업데이트
+
+릴리스 빌드를 macOS(arm64)에서 실행하면, 서버가 시작할 때와 `update_check_interval`마다 GitHub의 최신 릴리스(`/releases/latest`, draft와 pre-release 제외)를 확인합니다.
+
+- 새 버전을 처음 발견하면 macOS 알림을 한 번 띄우고, 웹 앱 상단에 배너가 나타납니다. Settings › General에서 현재 버전과 마지막 확인 시각을 볼 수 있습니다.
+- 배너의 **Upgrade**를 누르면 서버가 릴리스 archive와 `checksums.txt`를 받아 SHA-256을 검증한 뒤, archive 안의 `wharf`로 실행 중인 바이너리를 교체하고 재시작합니다. 웹 앱은 서버가 돌아오면 새로고침됩니다.
+- 교체는 같은 디렉터리 안에서 rename으로 하므로, 바이너리가 있는 디렉터리에 쓰기 권한이 있어야 합니다(`~/.local/bin` 등). 검증이나 교체가 실패하면 바이너리는 그대로입니다.
+- 이전 바이너리는 `wharf.old`로 남습니다. 새 버전에 문제가 있으면 서버를 멈추고 되돌립니다. 새 버전이 DB 마이그레이션을 적용했다면 `DB 마이그레이션`의 백업 파일도 함께 되돌려야 이전 버전이 시작됩니다.
+
+  ```sh
+  wharf service uninstall
+  mv /path/to/wharf.old /path/to/wharf
+  wharf service install
+  ```
+
+- `make build`/`make install`로 만든 개발 빌드(`(devel)`, pseudo-version, `+dirty`)는 확인하지 않습니다. `update_check = false`로 끌 수도 있습니다.
+- v0.1.0에는 업데이트 기능이 없으므로, 이 기능이 들어간 첫 버전은 직접 설치해야 합니다.
+
 ## DB 마이그레이션
 
 시작할 때마다 `scripts/migrations/`의 SQL 파일 중 아직 적용하지 않은 것을 버전 순서대로 적용하고, 각 파일의 SHA-256을 `schema_migrations`에 기록합니다.
@@ -111,7 +155,7 @@ WHARF_CONFIG=/path/to/config.toml ./wharf
    git push origin v0.1.0
    ```
 
-3. `release` 워크플로가 macOS(arm64) 바이너리를 빌드해 `wharf_0.1.0_darwin_arm64.tar.gz`를 GitHub Release에 첨부합니다.
+3. `release` 워크플로가 macOS(arm64) 바이너리를 빌드해 `wharf_0.1.0_darwin_arm64.tar.gz`와 그 SHA-256을 담은 `checksums.txt`를 GitHub Release에 첨부합니다. 이미 설치된 Wharf는 이 두 파일로 업데이트합니다.
 
 `go install github.com/byron1st/wharf/cmd/wharf@vX.Y.Z`로 설치하면 웹 앱이 포함되지 않으므로, 릴리스 파일이나 `make install`을 사용하세요.
 

@@ -23,6 +23,7 @@ export const keys = {
   lastSync: ['lastSync'] as const,
   atlassian: ['settings', 'atlassian'] as const,
   app: ['settings', 'app'] as const,
+  update: ['update'] as const,
 }
 
 export const useTasks = () => useQuery({ queryKey: keys.tasks, queryFn: api.listTasks })
@@ -40,6 +41,10 @@ export const useLastSync = () => useQuery({ queryKey: keys.lastSync, queryFn: ap
 export const useAtlassianSettings = () => useQuery({ queryKey: keys.atlassian, queryFn: api.atlassianSettings })
 
 export const useAppSettings = () => useQuery({ queryKey: keys.app, queryFn: api.appSettings })
+
+/** useUpdateStatus re-reads the server's update check hourly; the server itself checks far less often. */
+export const useUpdateStatus = () =>
+  useQuery({ queryKey: keys.update, queryFn: api.updateStatus, refetchInterval: 60 * 60 * 1000 })
 
 /**
  * queued runs saves of one item one after another, so a full-object PUT can

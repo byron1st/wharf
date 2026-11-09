@@ -40,7 +40,10 @@ jobs:
           archive="wharf_${GITHUB_REF_NAME#v}_darwin_arm64.tar.gz"
           tar -czf "$archive" wharf README.md config.example.toml
           echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+      # The updater of earlier releases verifies the archive against this file.
+      - name: Checksums
+        run: shasum -a 256 "$ARCHIVE" > checksums.txt
       - name: Create GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" "$ARCHIVE" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" "$ARCHIVE" checksums.txt --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
         env:
           GH_TOKEN: ${{ github.token }}
