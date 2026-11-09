@@ -324,3 +324,136 @@ func TestConnectAfterClose(t *testing.T) {
 	require.NoError(t, manager.Connect(context.Background()))
 	requireExists(t, path, "WHF-1", true)
 }
+
+// fileManager connects a manager for migrations to the database file at path.
+func fileManager(t *testing.T, path string, migrations fs.FS) db.Manager {
+	t.Helper()
+
+	manager := db.NewManager(path, migrations)
+	require.NoError(t, manager.Connect(context.Background()))
+	t.Cleanup(func() { _ = manager.Close() })
+
+	return manager
+}
+
+// tableExists reports whether the database file at path has the table name.
+func tableExists(t *testing.T, path, name string) bool {
+	t.Helper()
+
+	var exists bool
+
+	err := open(t, path).QueryRowContext(
+		context.Background(),
+		"SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)", name,
+	).Scan(&exists)
+	require.NoError(t, err)
+
+	return exists
+}
+
+// backups returns the backup files Migrate made for the database at path.
+func backups(t *testing.T, path string) []string {
+	t.Helper()
+
+	files, err := filepath.Glob(path + ".bak-*")
+	require.NoError(t, err)
+
+	return files
+}
+
+func TestMigrateRejectsUnknownAppliedMigration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+		"0002_others.sql": "CREATE TABLE others (id INTEGER PRIMARY KEY);",
+	})
+
+	newer := fileManager(t, path, migrations)
+	require.NoError(t, newer.Migrate(context.Background()))
+	require.NoError(t, newer.Close())
+
+	// An older binary knows 0001 only; its own new 0003 must not be applied.
+	delete(migrations, "migrations/0002_others.sql")
+	migrations["migrations/0003_extra.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE extra (id INTEGER PRIMARY KEY);"),
+	}
+
+	err := fileManager(t, path, migrations).Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrUnknownAppliedMigration)
+	require.ErrorContains(t, err, "version=0002")
+	require.False(t, tableExists(t, path, "extra"))
+	require.Empty(t, backups(t, path))
+}
+
+func TestMigrateRejectsChangedAppliedMigration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+	})
+	manager := fileManager(t, path, migrations)
+	require.NoError(t, manager.Migrate(context.Background()))
+
+	migrations["migrations/0001_create.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);"),
+	}
+	migrations["migrations/0002_others.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	err := manager.Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrMigrationChecksumMismatch)
+	require.ErrorContains(t, err, "file=0001_create.sql")
+	require.False(t, tableExists(t, path, "others"))
+	require.Empty(t, backups(t, path))
+}
+
+func TestMigrateBacksUpBeforeApplyingNewMigrations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY); INSERT INTO items (id) VALUES (7);",
+	})
+	manager := fileManager(t, path, migrations)
+
+	// A new database has nothing to keep.
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.Empty(t, backups(t, path))
+
+	// Nothing pending, nothing copied.
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.Empty(t, backups(t, path))
+
+	migrations["migrations/0002_others.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.True(t, tableExists(t, path, "others"))
+
+	files := backups(t, path)
+	require.Len(t, files, 1)
+	require.Contains(t, filepath.Base(files[0]), "wharf.db.bak-0001-")
+
+	// The copy is the database as it was before 0002.
+	require.False(t, tableExists(t, files[0], "others"))
+
+	var id int
+
+	require.NoError(t, open(t, files[0]).QueryRowContext(context.Background(), "SELECT id FROM items").Scan(&id))
+	require.Equal(t, 7, id)
+}
+
+func TestMigrateRejectsDatabaseWithoutChecksums(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wharf.db")
+
+	// A database migrated before checksums were recorded.
+	legacy := open(t, path)
+	_, err := legacy.ExecContext(context.Background(),
+		"CREATE TABLE schema_migrations (version TEXT PRIMARY KEY NOT NULL, "+
+			"applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP); "+
+			"INSERT INTO schema_migrations (version) VALUES ('0001');")
+	require.NoError(t, err)
+
+	err = fileManager(t, path, scripts.Migrations()).Migrate(context.Background())
+	require.ErrorIs(t, err, db.ErrFailedToCheckMigrationApplied)
+	require.ErrorContains(t, err, "file=0001_initial_migration.sql")
+}

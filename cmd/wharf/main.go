@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"slices"
 	"strings"
 	"syscall"
@@ -15,6 +14,7 @@ import (
 	"github.com/byron1st/wharf/internal/adapter/db"
 	"github.com/byron1st/wharf/internal/adapter/system"
 	"github.com/byron1st/wharf/internal/config"
+	"github.com/byron1st/wharf/internal/pkg/buildinfo"
 	"github.com/byron1st/wharf/internal/pkg/httputil"
 	"github.com/byron1st/wharf/internal/server"
 	"github.com/byron1st/wharf/internal/service"
@@ -84,7 +84,7 @@ func run() (code int, restartWith string) {
 			ConfigPath: cfgPath,
 			Addr:       cfg.Addr,
 			DBPath:     cfg.DBPath,
-			Version:    version(),
+			Version:    buildinfo.Version(),
 		},
 		Atlassian: service.AtlassianSettings{
 			SiteURL:  cfg.AtlassianSiteURL,
@@ -137,13 +137,4 @@ func restart(configPath string) int {
 	logger.Error("failed to restart server", "error", err)
 
 	return 1
-}
-
-// version is the module version of the binary, "(devel)" for a local build.
-func version() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
-		return info.Main.Version
-	}
-
-	return "(devel)"
 }

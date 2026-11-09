@@ -26,6 +26,7 @@ type Counter struct {
 
 type SchemaMigration struct {
 	Version   string
+	Checksum  string
 	AppliedAt time.Time
 }
 

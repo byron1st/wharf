@@ -91,11 +91,16 @@ func (q *Queries) CreateAtlassianSync(ctx context.Context, arg CreateAtlassianSy
 }
 
 const createSchemaMigration = `-- name: CreateSchemaMigration :exec
-INSERT INTO schema_migrations (version) VALUES (?)
+INSERT INTO schema_migrations (version, checksum) VALUES (?, ?)
 `
 
-func (q *Queries) CreateSchemaMigration(ctx context.Context, version string) error {
-	_, err := q.db.ExecContext(ctx, createSchemaMigration, version)
+type CreateSchemaMigrationParams struct {
+	Version  string
+	Checksum string
+}
+
+func (q *Queries) CreateSchemaMigration(ctx context.Context, arg CreateSchemaMigrationParams) error {
+	_, err := q.db.ExecContext(ctx, createSchemaMigration, arg.Version, arg.Checksum)
 	return err
 }
 
@@ -371,17 +376,6 @@ func (q *Queries) DeleteTodosOfTask(ctx context.Context, taskID string) error {
 	return err
 }
 
-const existsSchemaMigration = `-- name: ExistsSchemaMigration :one
-SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = ?)
-`
-
-func (q *Queries) ExistsSchemaMigration(ctx context.Context, version string) (bool, error) {
-	row := q.db.QueryRowContext(ctx, existsSchemaMigration, version)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const existsServiceDeskRequest = `-- name: ExistsServiceDeskRequest :one
 SELECT EXISTS (SELECT 1 FROM service_desk_requests WHERE issue_key = ?)
 `
@@ -434,6 +428,17 @@ func (q *Queries) GetLastAtlassianSync(ctx context.Context) (AtlassianSync, erro
 	return i, err
 }
 
+const getSchemaMigrationChecksum = `-- name: GetSchemaMigrationChecksum :one
+SELECT checksum FROM schema_migrations WHERE version = ?
+`
+
+func (q *Queries) GetSchemaMigrationChecksum(ctx context.Context, version string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getSchemaMigrationChecksum, version)
+	var checksum string
+	err := row.Scan(&checksum)
+	return checksum, err
+}
+
 const getTask = `-- name: GetTask :one
 SELECT tasks.id, tasks.originated, tasks.title, tasks.description, tasks.status, tasks.start_date, tasks.due_date, tasks.position, task_hierarchies.parent_id
 FROM tasks
@@ -472,6 +477,33 @@ func (q *Queries) IncrementCounter(ctx context.Context, name string) (int64, err
 	var value int64
 	err := row.Scan(&value)
 	return value, err
+}
+
+const listSchemaMigrationVersions = `-- name: ListSchemaMigrationVersions :many
+SELECT version FROM schema_migrations ORDER BY version
+`
+
+func (q *Queries) ListSchemaMigrationVersions(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listSchemaMigrationVersions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+		items = append(items, version)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listServiceDeskRequests = `-- name: ListServiceDeskRequests :many

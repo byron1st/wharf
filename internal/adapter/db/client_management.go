@@ -2,13 +2,16 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var (
@@ -27,6 +30,10 @@ var (
 	ErrFailedToApplyMigration           = errors.New("db: failed to apply migration")
 	ErrFailedToRecordMigration          = errors.New("db: failed to record migration")
 	ErrFailedToCommitMigrationTx        = errors.New("db: failed to commit migration transaction")
+	ErrMigrationChecksumMismatch        = errors.New("db: applied migration file was changed")
+	ErrFailedToListAppliedMigrations    = errors.New("db: failed to list applied migrations")
+	ErrUnknownAppliedMigration          = errors.New("db: database has a migration unknown to this binary")
+	ErrFailedToBackupDatabase           = errors.New("db: failed to back up database")
 )
 
 // migrationFileName is "{4-digit version}_{description}.sql". The fixed-width
@@ -36,6 +43,7 @@ var migrationFileName = regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)
 const (
 	schemaMigrationsFile = "schema_migrations.sql"
 	migrationsDir        = "migrations"
+	memoryPath           = ":memory:"
 )
 
 // busyTimeoutPragma makes a statement wait up to 5s for a lock held by another
@@ -99,6 +107,12 @@ func (m *manager) Close() error {
 // migrations not yet applied, in version order. Each migration runs in its own
 // transaction together with its record in schema_migrations, so a failed
 // migration leaves no partial change.
+//
+// Before applying anything it fails with ErrMigrationChecksumMismatch when an
+// applied migration file was edited, and with ErrUnknownAppliedMigration when
+// the database has a migration this binary does not know, such as one applied
+// by a newer version. When a database that already has migrations gets new
+// ones, it is first copied to "<path>.bak-<last applied version>-<UTC time>".
 func (m *manager) Migrate(ctx context.Context) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -120,16 +134,34 @@ func (m *manager) Migrate(ctx context.Context) error {
 		return errors.Join(ErrFailedToCreateMigrationsTable, err)
 	}
 
+	pending, err := m.pendingMigrations(ctx, migrations)
+	if err != nil {
+		return err
+	}
+
+	applied, err := m.queries.ListSchemaMigrationVersions(ctx)
+	if err != nil {
+		return errors.Join(ErrFailedToListAppliedMigrations, err)
+	}
+
+	known := make(map[string]bool, len(migrations))
 	for _, mig := range migrations {
-		applied, err := m.queries.ExistsSchemaMigration(ctx, mig.version)
-		if err != nil {
-			return fmt.Errorf("%w: file=%s", errors.Join(ErrFailedToCheckMigrationApplied, err), mig.name)
-		}
+		known[mig.version] = true
+	}
 
-		if applied {
-			continue
+	for _, version := range applied {
+		if !known[version] {
+			return fmt.Errorf("%w: version=%s", ErrUnknownAppliedMigration, version)
 		}
+	}
 
+	if len(pending) > 0 && len(applied) > 0 {
+		if err := m.backup(ctx, applied[len(applied)-1]); err != nil {
+			return err
+		}
+	}
+
+	for _, mig := range pending {
 		if err := m.applyMigration(ctx, mig); err != nil {
 			return err
 		}
@@ -138,12 +170,56 @@ func (m *manager) Migrate(ctx context.Context) error {
 	return nil
 }
 
-func (m *manager) applyMigration(ctx context.Context, mig migration) error {
-	content, err := fs.ReadFile(m.migrations, path.Join(migrationsDir, mig.name))
-	if err != nil {
-		return fmt.Errorf("%w: file=%s", errors.Join(ErrFailedToReadMigrationFile, err), mig.name)
+// pendingMigrations reads every migration file and returns those not yet
+// applied, checking that the applied ones are unchanged.
+func (m *manager) pendingMigrations(ctx context.Context, migrations []migration) ([]migration, error) {
+	var pending []migration
+
+	for _, mig := range migrations {
+		content, err := fs.ReadFile(m.migrations, path.Join(migrationsDir, mig.name))
+		if err != nil {
+			return nil, fmt.Errorf("%w: file=%s", errors.Join(ErrFailedToReadMigrationFile, err), mig.name)
+		}
+
+		sum := sha256.Sum256(content)
+		mig.content, mig.checksum = string(content), hex.EncodeToString(sum[:])
+
+		applied, err := m.queries.GetSchemaMigrationChecksum(ctx, mig.version)
+		if errors.Is(err, sql.ErrNoRows) {
+			pending = append(pending, mig)
+			continue
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("%w: file=%s", errors.Join(ErrFailedToCheckMigrationApplied, err), mig.name)
+		}
+
+		if applied != mig.checksum {
+			return nil, fmt.Errorf("%w: file=%s", ErrMigrationChecksumMismatch, mig.name)
+		}
 	}
 
+	return pending, nil
+}
+
+// backup copies the database to a new file next to it. VACUUM INTO writes a
+// consistent copy through the open connection. An in-memory database has no
+// file to keep, so it is not copied.
+func (m *manager) backup(ctx context.Context, lastVersion string) error {
+	if m.path == memoryPath {
+		return nil
+	}
+
+	dest := fmt.Sprintf("%s.bak-%s-%s", m.path, lastVersion, time.Now().UTC().Format("20060102T150405.000000000Z"))
+
+	if _, err := m.db.ExecContext(ctx, "VACUUM INTO ?", dest); err != nil {
+		return fmt.Errorf("%w: path=%s", errors.Join(ErrFailedToBackupDatabase, err), dest)
+	}
+
+	return nil
+}
+
+func (m *manager) applyMigration(ctx context.Context, mig migration) error {
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Join(ErrFailedToBeginMigrationTx, err)
@@ -151,11 +227,15 @@ func (m *manager) applyMigration(ctx context.Context, mig migration) error {
 
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, string(content)); err != nil {
+	if _, err := tx.ExecContext(ctx, mig.content); err != nil {
 		return fmt.Errorf("%w: file=%s", errors.Join(ErrFailedToApplyMigration, err), mig.name)
 	}
 
-	if err := m.queries.WithTx(tx).CreateSchemaMigration(ctx, mig.version); err != nil {
+	err = m.queries.WithTx(tx).CreateSchemaMigration(ctx, CreateSchemaMigrationParams{
+		Version:  mig.version,
+		Checksum: mig.checksum,
+	})
+	if err != nil {
 		return fmt.Errorf("%w: file=%s", errors.Join(ErrFailedToRecordMigration, err), mig.name)
 	}
 
@@ -167,8 +247,10 @@ func (m *manager) applyMigration(ctx context.Context, mig migration) error {
 }
 
 type migration struct {
-	version string
-	name    string
+	version  string
+	name     string
+	content  string
+	checksum string
 }
 
 // readMigrations relies on fs.ReadDir returning entries sorted by file name,

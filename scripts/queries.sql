@@ -181,11 +181,14 @@ DELETE FROM todo_reminders WHERE todo_id = ?;
 -- name: IncrementCounter :one
 UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value;
 
--- name: ExistsSchemaMigration :one
-SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = ?);
+-- name: GetSchemaMigrationChecksum :one
+SELECT checksum FROM schema_migrations WHERE version = ?;
+
+-- name: ListSchemaMigrationVersions :many
+SELECT version FROM schema_migrations ORDER BY version;
 
 -- name: CreateSchemaMigration :exec
-INSERT INTO schema_migrations (version) VALUES (?);
+INSERT INTO schema_migrations (version, checksum) VALUES (?, ?);
 
 -- name: UpsertServiceDeskRequest :exec
 INSERT INTO service_desk_requests (
