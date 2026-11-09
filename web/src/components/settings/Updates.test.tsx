@@ -52,7 +52,7 @@ describe('Updates', () => {
     renderUpdates(status({ supported: false, current: '(devel)', latest: null, checked_at: null }))
 
     expect(await screen.findByText('(devel)')).toBeInTheDocument()
-    expect(screen.getByText(/Update checks are off for this build\./)).toBeInTheDocument()
+    expect(screen.getByText(/Update checks are off: .* update_check = false\./)).toBeInTheDocument()
   })
 
   it('says when the first check has not run yet', async () => {

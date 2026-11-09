@@ -175,9 +175,20 @@ func TestReplaceExecutable(t *testing.T) {
 		// A directory cannot be hard-linked, so the backup fails first.
 		require.NoError(t, os.MkdirAll(filepath.Join(exe, "keep"), 0o755))
 
+		// The backup of an earlier update survives the failed one.
+		require.NoError(t, os.WriteFile(exe+".old", []byte("older"), 0o755))
+
 		err := system.NewDesktopFor("darwin", nil, exe, dir, 501).ReplaceExecutable(t.Context(), []byte("new"))
 		require.ErrorIs(t, err, system.ErrFailedToBackUpExecutable)
 		require.DirExists(t, filepath.Join(exe, "keep"))
+
+		old, err := os.ReadFile(exe + ".old")
+		require.NoError(t, err)
+		require.Equal(t, "older", string(old))
+
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		require.Len(t, entries, 2)
 	})
 }
 

@@ -31,6 +31,7 @@ var (
 	ErrFailedToCreateTempExecutable    = errors.New("system: failed to create temp executable")
 	ErrFailedToWriteTempExecutable     = errors.New("system: failed to write temp executable")
 	ErrFailedToBackUpExecutable        = errors.New("system: failed to back up executable")
+	ErrFailedToReplaceBackup           = errors.New("system: failed to replace executable backup")
 	ErrFailedToReplaceExecutable       = errors.New("system: failed to replace executable")
 	ErrFailedToFindHomeDir             = errors.New("system: failed to find home dir")
 	ErrFailedToResolveConfigPath       = errors.New("system: failed to resolve config path")
@@ -219,13 +220,17 @@ func (c *client) ReplaceExecutable(_ context.Context, data []byte) error {
 		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToWriteTempExecutable, exe), err)
 	}
 
-	// A stale backup must go first since Link does not replace; a missing one
-	// is fine, and any other failure surfaces in Link.
-	old := exe + ".old"
-	_ = os.Remove(old)
+	// Link does not replace an existing file, so the backup is linked under the
+	// temp name and renamed over the previous one, which stays until then.
+	backup := f.Name() + ".old"
+	defer func() { _ = os.Remove(backup) }()
 
-	if err := os.Link(exe, old); err != nil {
+	if err := os.Link(exe, backup); err != nil {
 		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToBackUpExecutable, exe), err)
+	}
+
+	if err := os.Rename(backup, exe+".old"); err != nil {
+		return errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReplaceBackup, exe), err)
 	}
 
 	if err := os.Rename(f.Name(), exe); err != nil {

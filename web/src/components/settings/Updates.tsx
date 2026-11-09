@@ -10,7 +10,7 @@ export function Updates() {
 
   const checked = update.checked_at ? new Date(update.checked_at) : null
   const state = !update.supported
-    ? 'Update checks are off for this build.'
+    ? 'Update checks are off: a development build, not macOS on Apple silicon, or update_check = false.'
     : !checked
       ? 'Not checked yet.'
       : update.available
