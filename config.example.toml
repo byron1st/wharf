@@ -28,3 +28,10 @@ atlassian_email = "you@example.com"
 # https://id.atlassian.com/manage-profile/security/api-tokens. Stored in plain text,
 # so keep this file readable only by you (chmod 600).
 atlassian_api_token = "your-api-token"
+
+# Check GitHub Releases for a newer wharf and offer it in the web app (and as a macOS
+# notification). Only release builds on macOS (arm64) check. Default: true
+# update_check = true
+
+# How often to check, as a duration such as "6h" or "48h"; at least "1h". Default: "24h"
+# update_check_interval = "24h"

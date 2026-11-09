@@ -31,6 +31,24 @@ export function serverDown() {
   }, 3000)
 }
 
+/**
+ * waitForServer polls /api/healthz after the server answered a request that
+ * restarts it, and resolves true once it answers again or false after 30 s.
+ */
+export async function waitForServer(): Promise<boolean> {
+  const started = Date.now()
+  while (Date.now() - started < 30_000) {
+    await new Promise((r) => setTimeout(r, 800))
+    try {
+      await api.healthz()
+      return true
+    } catch {
+      // Still restarting.
+    }
+  }
+  return false
+}
+
 function serverBack() {
   clearInterval(polling)
   polling = undefined

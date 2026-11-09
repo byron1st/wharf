@@ -82,6 +82,7 @@ func TestWebAppNotBuilt(t *testing.T) {
 	handler := server.NewHandler(
 		mocks.NewMockService(t),
 		mocks.NewMockSettings(t),
+		mocks.NewMockUpdater(t),
 		unbuilt,
 		slog.New(slog.NewJSONHandler(&logs, nil)),
 	)

@@ -113,6 +113,18 @@ export interface AppSettings {
   version: string
 }
 
+/** UpdateStatus is what the server knows about a newer Wharf release. */
+export interface UpdateStatus {
+  /** supported is false for builds that never check: not a release, not macOS arm64, or update_check is off. */
+  supported: boolean
+  current: string
+  latest: string | null
+  available: boolean
+  checked_at: string | null
+  release_url: string | null
+  notes: string
+}
+
 /** ApiError is a response with an error status; code tells apart errors that share one. */
 export class ApiError extends Error {
   readonly status: number
@@ -209,6 +221,9 @@ export const api = {
   clearPendingConfig: () => request<void>('DELETE', '/api/settings/app/config/pending'),
   openConfig: () => request<void>('POST', '/api/settings/app/config/open'),
   restart: () => request<void>('POST', '/api/settings/app/restart'),
+
+  updateStatus: () => request<UpdateStatus>('GET', '/api/update'),
+  applyUpdate: () => request<void>('POST', '/api/update/apply'),
 }
 
 /** todoInput turns a stored todo into the full body PUT /api/todos/{id} expects, keeping its place. */

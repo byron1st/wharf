@@ -47,7 +47,7 @@ func serveBody(
 	req.Header.Set("X-Request-ID", "req-1")
 
 	rec := httptest.NewRecorder()
-	server.NewHandler(svc, mocks.NewMockSettings(t), webApp, slog.New(slog.NewJSONHandler(&logs, nil))).
+	server.NewHandler(svc, mocks.NewMockSettings(t), mocks.NewMockUpdater(t), webApp, slog.New(slog.NewJSONHandler(&logs, nil))).
 		ServeHTTP(rec, req)
 
 	return rec, logs.String()

@@ -164,6 +164,16 @@ type appSettingsResponse struct {
 	Version           string  `json:"version"`
 }
 
+type updateStatusResponse struct {
+	Supported  bool       `json:"supported"`
+	Current    string     `json:"current"`
+	Latest     *string    `json:"latest"`
+	Available  bool       `json:"available"`
+	CheckedAt  *time.Time `json:"checked_at"`
+	ReleaseURL *string    `json:"release_url"`
+	Notes      string     `json:"notes"`
+}
+
 type chosenConfigResponse struct {
 	PendingConfigPath *string `json:"pending_config_path"`
 }

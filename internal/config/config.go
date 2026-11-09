@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -16,8 +17,12 @@ import (
 const PathEnv = "WHARF_CONFIG"
 
 const (
-	defaultAddr       = "127.0.0.1:8080"
-	defaultDBFileName = "wharf.db"
+	defaultAddr                = "127.0.0.1:8080"
+	defaultDBFileName          = "wharf.db"
+	defaultUpdateCheckInterval = 24 * time.Hour
+	// minUpdateCheckInterval keeps the unauthenticated GitHub API rate limit
+	// (60 requests an hour) far away.
+	minUpdateCheckInterval = time.Hour
 )
 
 var (
@@ -35,6 +40,7 @@ var (
 	ErrFailedToCreateTempConfigFile = errors.New("config: failed to create temp config file")
 	ErrFailedToWriteTempConfigFile  = errors.New("config: failed to write temp config file")
 	ErrFailedToReplaceConfigFile    = errors.New("config: failed to replace config file")
+	ErrUpdateCheckIntervalTooShort  = errors.New("config: update check interval is too short")
 )
 
 // atlassianKeys are the keys SaveAtlassian writes, in file order.
@@ -55,6 +61,20 @@ type Config struct {
 	AtlassianEmail string `toml:"atlassian_email"`
 	// AtlassianAPIToken is the Atlassian API token used for Basic auth.
 	AtlassianAPIToken string `toml:"atlassian_api_token"`
+	// UpdateCheck turns on the periodic check for a newer GitHub release. It
+	// is the update_check key, true when unset.
+	UpdateCheck bool `toml:"-"`
+	// UpdateCheckInterval is how often the update check runs, a duration
+	// string such as "12h" in the file, 24h when unset and at least 1h.
+	UpdateCheckInterval time.Duration `toml:"update_check_interval"`
+}
+
+// file is the config file as decoded: update_check needs a pointer to tell
+// unset from false.
+type file struct {
+	Config
+
+	UpdateCheck *bool `toml:"update_check"`
 }
 
 // Path returns the config file path: the value of PathEnv when set, otherwise
@@ -87,9 +107,9 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToReadConfigFile, path), err)
 	}
 
-	var cfg Config
+	var f file
 
-	md, err := toml.Decode(string(data), &cfg)
+	md, err := toml.Decode(string(data), &f)
 	if err != nil {
 		return Config{}, errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToParseConfigFile, path), err)
 	}
@@ -98,11 +118,21 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("%w: path=%s, keys=%v", ErrUnknownConfigKeys, path, keys)
 	}
 
+	cfg := f.Config
 	if err := validateAtlassian(path, cfg.AtlassianSiteURL, cfg.AtlassianEmail, cfg.AtlassianAPIToken); err != nil {
 		return Config{}, err
 	}
 
 	cfg.Addr = cmp.Or(cfg.Addr, defaultAddr)
+	cfg.UpdateCheck = f.UpdateCheck == nil || *f.UpdateCheck
+
+	cfg.UpdateCheckInterval = cmp.Or(cfg.UpdateCheckInterval, defaultUpdateCheckInterval)
+	if cfg.UpdateCheckInterval < minUpdateCheckInterval {
+		return Config{}, fmt.Errorf(
+			"%w: path=%s, update_check_interval=%s, min=%s",
+			ErrUpdateCheckIntervalTooShort, path, cfg.UpdateCheckInterval, minUpdateCheckInterval,
+		)
+	}
 
 	if cfg.DBPath == "" {
 		if cfg.DBPath, err = defaultFilePath(defaultDBFileName); err != nil {

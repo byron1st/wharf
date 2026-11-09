@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -70,11 +71,13 @@ func TestLoad(t *testing.T) {
 		cfg, err := config.Load(path)
 		require.NoError(t, err)
 		require.Equal(t, config.Config{
-			Addr:              "127.0.0.1:8080",
-			DBPath:            filepath.Join(dir, "wharf", "wharf.db"),
-			AtlassianSiteURL:  "https://example.atlassian.net",
-			AtlassianEmail:    "me@example.com",
-			AtlassianAPIToken: "secret-token",
+			Addr:                "127.0.0.1:8080",
+			DBPath:              filepath.Join(dir, "wharf", "wharf.db"),
+			AtlassianSiteURL:    "https://example.atlassian.net",
+			AtlassianEmail:      "me@example.com",
+			AtlassianAPIToken:   "secret-token",
+			UpdateCheck:         true,
+			UpdateCheckInterval: 24 * time.Hour,
 		}, cfg)
 		require.DirExists(t, filepath.Join(dir, "wharf"))
 	})
@@ -112,11 +115,13 @@ func TestLoad(t *testing.T) {
 		cfg, err := config.Load(path)
 		require.NoError(t, err)
 		require.Equal(t, config.Config{
-			Addr:              "127.0.0.1:9090",
-			DBPath:            "/data/w.db",
-			AtlassianSiteURL:  "https://api.atlassian.com/ex/jira/abc-123",
-			AtlassianEmail:    "me@example.com",
-			AtlassianAPIToken: "secret-token",
+			Addr:                "127.0.0.1:9090",
+			DBPath:              "/data/w.db",
+			AtlassianSiteURL:    "https://api.atlassian.com/ex/jira/abc-123",
+			AtlassianEmail:      "me@example.com",
+			AtlassianAPIToken:   "secret-token",
+			UpdateCheck:         true,
+			UpdateCheckInterval: 24 * time.Hour,
 		}, cfg)
 	})
 
@@ -125,7 +130,12 @@ func TestLoad(t *testing.T) {
 
 		cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
 		require.NoError(t, err)
-		require.Equal(t, config.Config{Addr: "127.0.0.1:8080", DBPath: filepath.Join(dir, "wharf", "wharf.db")}, cfg)
+		require.Equal(t, config.Config{
+			Addr:                "127.0.0.1:8080",
+			DBPath:              filepath.Join(dir, "wharf", "wharf.db"),
+			UpdateCheck:         true,
+			UpdateCheckInterval: 24 * time.Hour,
+		}, cfg)
 	})
 
 	t.Run("allows no atlassian keys", func(t *testing.T) {
@@ -133,7 +143,12 @@ func TestLoad(t *testing.T) {
 
 		cfg, err := config.Load(path)
 		require.NoError(t, err)
-		require.Equal(t, config.Config{Addr: "127.0.0.1:8080", DBPath: "/data/w.db"}, cfg)
+		require.Equal(t, config.Config{
+			Addr:                "127.0.0.1:8080",
+			DBPath:              "/data/w.db",
+			UpdateCheck:         true,
+			UpdateCheckInterval: 24 * time.Hour,
+		}, cfg)
 	})
 
 	t.Run("fails when file cannot be read", func(t *testing.T) {
@@ -204,6 +219,48 @@ func TestLoad(t *testing.T) {
 			require.NotContains(t, err.Error(), "secret-token")
 		})
 	}
+}
+
+func TestLoadUpdateCheck(t *testing.T) {
+	isolateUserConfigDir(t)
+
+	load := func(t *testing.T, content string) (config.Config, error) {
+		t.Helper()
+
+		return config.Load(writeFile(t, filepath.Join(t.TempDir(), "config.toml"), content, 0o644))
+	}
+
+	t.Run("reads update_check and update_check_interval", func(t *testing.T) {
+		cfg, err := load(t, "update_check = false\nupdate_check_interval = \"12h\"\n")
+		require.NoError(t, err)
+		require.False(t, cfg.UpdateCheck)
+		require.Equal(t, 12*time.Hour, cfg.UpdateCheckInterval)
+	})
+
+	t.Run("keeps update_check true when set", func(t *testing.T) {
+		cfg, err := load(t, "update_check = true\n")
+		require.NoError(t, err)
+		require.True(t, cfg.UpdateCheck)
+		require.Equal(t, 24*time.Hour, cfg.UpdateCheckInterval)
+	})
+
+	t.Run("accepts exactly one hour", func(t *testing.T) {
+		cfg, err := load(t, "update_check_interval = \"1h\"\n")
+		require.NoError(t, err)
+		require.Equal(t, time.Hour, cfg.UpdateCheckInterval)
+	})
+
+	for _, interval := range []string{"59m", "-1h"} {
+		t.Run("rejects interval "+interval, func(t *testing.T) {
+			_, err := load(t, "update_check_interval = \""+interval+"\"\n")
+			require.ErrorIs(t, err, config.ErrUpdateCheckIntervalTooShort)
+		})
+	}
+
+	t.Run("rejects an interval that is not a duration", func(t *testing.T) {
+		_, err := load(t, "update_check_interval = \"daily\"\n")
+		require.ErrorIs(t, err, config.ErrFailedToParseConfigFile)
+	})
 }
 
 func TestLoadInvalidSiteURLDoesNotLeakUserinfo(t *testing.T) {
