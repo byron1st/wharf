@@ -64,7 +64,7 @@ const migrationLockKey int64 = 0x7768617266 // "wharf"
 // writeLockKey names the transaction advisory lock every write transaction
 // takes first. Transactions read before they write (a todo's position comes
 // from counting the others), so wharf processes on several machines write one
-// at a time, as they did when SQLite allowed a single writer.
+// at a time, as they did when the local database allowed a single writer.
 const writeLockKey int64 = 0x77686172667772 // "wharfwr"
 
 const (

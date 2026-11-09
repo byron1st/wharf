@@ -280,7 +280,7 @@ func TestDBPassword(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "s3cret", password)
 	require.Equal(t, []call{{
-		name: "security",
+		name: "/usr/bin/security",
 		args: []string{"find-generic-password", "-s", system.KeychainDBService, "-w"},
 	}}, *calls)
 }

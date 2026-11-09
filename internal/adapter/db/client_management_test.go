@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -249,6 +250,33 @@ func TestMigrateConcurrently(t *testing.T) {
 	requireExists(t, dsn, "WHF-1", true)
 }
 
+func TestConnectWaitsForLockHeldByAnotherConnection(t *testing.T) {
+	manager, dsn := newDBManager(t, scripts.Migrations())
+
+	conn, err := open(t, dsn).Conn(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	// Another session, such as another device, holds a lock that blocks every
+	// write to tasks.
+	_, err = conn.ExecContext(context.Background(), "BEGIN; LOCK TABLE tasks IN EXCLUSIVE MODE")
+	require.NoError(t, err)
+
+	released := make(chan error, 1)
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+
+		_, err := conn.ExecContext(context.Background(), "COMMIT")
+		released <- err
+	}()
+
+	// The write waits for the lock instead of failing.
+	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("WHF-1")}))
+	require.NoError(t, <-released)
+	requireExists(t, dsn, "WHF-1", true)
+}
+
 func TestMethodsRequireConnection(t *testing.T) {
 	notConnected := db.NewManager("", "", scripts.Migrations())
 
@@ -424,4 +452,45 @@ func TestMigrateRejectsDatabaseWithoutChecksums(t *testing.T) {
 	err = dbManager(t, dsn, scripts.Migrations()).Migrate(context.Background())
 	require.ErrorIs(t, err, db.ErrFailedToCheckMigrationApplied)
 	require.ErrorContains(t, err, "file=0001_initial_migration.sql")
+}
+
+func TestMigrateKeepsDataWhenApplyingNewMigrations(t *testing.T) {
+	dsn := newDatabase(t)
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY); INSERT INTO items (id) VALUES (7);",
+	})
+	manager := dbManager(t, dsn, migrations)
+	require.NoError(t, manager.Migrate(context.Background()))
+
+	// Nothing pending, nothing changed.
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.False(t, tableExists(t, dsn, "others"))
+
+	migrations["migrations/0002_others.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.True(t, tableExists(t, dsn, "others"))
+
+	var id int
+
+	require.NoError(t, open(t, dsn).QueryRowContext(context.Background(), "SELECT id FROM items").Scan(&id))
+	require.Equal(t, 7, id)
+}
+
+func TestMigrateWithURLQuery(t *testing.T) {
+	dsn := newDatabase(t) + "&application_name=wharf"
+	migrations := withMigrations(t, map[string]string{
+		"0001_create.sql": "CREATE TABLE items (id INTEGER PRIMARY KEY);",
+	})
+	manager := dbManager(t, dsn, migrations)
+	require.NoError(t, manager.Migrate(context.Background()))
+
+	migrations["migrations/0002_others.sql"] = &fstest.MapFile{
+		Data: []byte("CREATE TABLE others (id INTEGER PRIMARY KEY);"),
+	}
+
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.True(t, tableExists(t, dsn, "others"))
 }

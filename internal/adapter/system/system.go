@@ -97,6 +97,10 @@ var launchAgent = template.Must(template.New("plist").Funcs(template.FuncMap{"xm
 </plist>
 `))
 
+// securityPath is the macOS keychain command, by absolute path so that no
+// other "security" earlier on PATH is handed the request.
+const securityPath = "/usr/bin/security"
+
 // KeychainDBService is the service name of the generic password item in the
 // login keychain that holds the database password.
 const KeychainDBService = "wharf-db"
@@ -204,7 +208,7 @@ func (c *client) DBPassword(ctx context.Context) (string, error) {
 		return "", ErrUnsupportedOS
 	}
 
-	out, err := c.run(ctx, "security", "find-generic-password", "-s", KeychainDBService, "-w")
+	out, err := c.run(ctx, securityPath, "find-generic-password", "-s", KeychainDBService, "-w")
 	if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) && exitErr.ExitCode() == itemNotFoundExitCode {
 		return "", fmt.Errorf("%w: service=%s", ErrDBPasswordNotFound, KeychainDBService)
 	}
