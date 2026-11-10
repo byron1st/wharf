@@ -7,7 +7,7 @@ import { Markdown } from './Markdown'
 /** MdIcon is the small "M↓" mark next to Description labels. */
 export function MdIcon() {
   return (
-    <svg width="16" height="10" viewBox="0 0 16 10" aria-hidden className="inline shrink-0 text-[#a1a1aa]">
+    <svg width="16" height="10" viewBox="0 0 16 10" aria-hidden className="inline shrink-0 text-ink-faint">
       <rect x="0.5" y="0.5" width="15" height="9" rx="1.5" fill="none" stroke="currentColor" />
       <path d="M3 7.5v-5l2 2.5 2-2.5v5M11 2.5v5m-1.6-1.7L11 7.5l1.6-1.7" fill="none" stroke="currentColor" strokeWidth="1" />
     </svg>
@@ -16,7 +16,7 @@ export function MdIcon() {
 
 export function ModeTabs({ mode, onMode }: { mode: 'preview' | 'write'; onMode: (m: 'preview' | 'write') => void }) {
   return (
-    <div role="tablist" className="flex rounded-md bg-[#f4f4f5] p-[3px]">
+    <div role="tablist" className="flex rounded-md bg-bg-muted p-[3px]">
       {(['preview', 'write'] as const).map((m) => (
         <button
           key={m}
@@ -26,7 +26,7 @@ export function ModeTabs({ mode, onMode }: { mode: 'preview' | 'write'; onMode: 
           onClick={() => onMode(m)}
           className={cn(
             'h-6 rounded px-2.5 text-[12px] font-medium capitalize',
-            mode === m ? 'bg-white text-[#09090b] shadow-[0_1px_2px_rgba(0,0,0,0.08)]' : 'text-[#71717a]',
+            mode === m ? 'bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]' : 'text-ink-muted',
           )}
         >
           {m}
@@ -88,14 +88,14 @@ export function MarkdownEditor({
 
   if (mode === 'preview') {
     return draft.trim() ? (
-      <div className="rounded-lg border border-[#f4f4f5] bg-[#fafafa] p-3">
+      <div className="rounded-lg border border-border-subtle bg-bg-subtle p-3">
         <Markdown source={draft} />
       </div>
     ) : (
       <button
         type="button"
         onClick={() => onMode('write')}
-        className="min-h-[40px] rounded-lg border border-[#f4f4f5] bg-[#fafafa] p-3 text-left text-[13px] text-[#a1a1aa]"
+        className="min-h-[40px] rounded-lg border border-border-subtle bg-bg-subtle p-3 text-left text-[13px] text-ink-faint"
       >
         {emptyText}
       </button>
@@ -103,18 +103,18 @@ export function MarkdownEditor({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[#e4e4e7] bg-white shadow-card focus-within:border-primary">
-      <div role="toolbar" aria-label="Markdown formatting" className="flex flex-wrap items-center gap-px border-b border-[#f4f4f5] bg-[#fafafa] px-1.5 py-1">
+    <div className="overflow-hidden rounded-lg border border-border bg-white shadow-xs focus-within:border-accent">
+      <div role="toolbar" aria-label="Markdown formatting" className="flex flex-wrap items-center gap-px border-b border-border-subtle bg-bg-subtle px-1.5 py-1">
         {TOOLS.map((t, i) => (
           <span key={t.label} className="flex items-center">
-            {(i === 5 || i === 7) && <span className="mx-1 h-4 w-px bg-[#e4e4e7]" />}
+            {(i === 5 || i === 7) && <span className="mx-1 h-4 w-px bg-bg-pressed" />}
             <button
               type="button"
               aria-label={t.label}
               title={t.label}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => apply(t)}
-              className="flex size-7 items-center justify-center rounded text-[#52525b] hover:bg-[#f4f4f5] hover:text-[#09090b]"
+              className="flex size-7 items-center justify-center rounded text-ink-secondary hover:bg-bg-muted hover:text-ink"
             >
               <t.Icon size={14} />
             </button>
@@ -130,10 +130,10 @@ export function MarkdownEditor({
         onBlur={onBlur}
         className="block w-full resize-y border-none px-3 py-2.5 font-mono text-[12.5px] leading-[1.7] outline-none"
       />
-      <div className="flex items-center gap-2 border-t border-[#f4f4f5] px-3 py-1.5 text-[11px] text-[#71717a]">
+      <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5 text-[11px] text-ink-muted">
         <MdIcon />
         <span className="font-mono">Markdown **bold** · `code` · - [ ] task · ``` block</span>
-        <span className={cn('ml-auto flex items-center gap-1', saving || dirty ? 'text-[#a1a1aa]' : 'text-[#16a34a]')}>
+        <span className={cn('ml-auto flex items-center gap-1', saving || dirty ? 'text-ink-muted' : 'text-success')}>
           {saving || dirty ? (
             'Saving…'
           ) : (

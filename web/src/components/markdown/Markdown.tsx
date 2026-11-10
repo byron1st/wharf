@@ -19,7 +19,7 @@ export function Markdown({ source, className }: { source: string; className?: st
               aria-disabled
               className={cn(
                 'mr-2 inline-flex size-[14px] translate-y-[2px] items-center justify-center rounded-[3px] border',
-                checked ? 'border-primary bg-primary text-white' : 'border-[#a1a1aa] bg-white',
+                checked ? 'border-accent bg-accent text-white' : 'border-border-control bg-white',
               )}
             >
               {checked && <Check size={10} strokeWidth={3.5} />}
@@ -29,7 +29,7 @@ export function Markdown({ source, className }: { source: string; className?: st
             const task = cls?.includes('task-list-item')
             const done = task && Array.isArray(children) && children.some((c) => (c as { props?: { node?: { properties?: { checked?: boolean } } } })?.props?.node?.properties?.checked)
             return (
-              <li {...props} className={cn(cls, done && 'text-[#71717a] line-through')}>
+              <li {...props} className={cn(cls, done && 'text-ink-muted line-through')}>
                 {children}
               </li>
             )

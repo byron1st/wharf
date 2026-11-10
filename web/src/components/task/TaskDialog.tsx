@@ -20,7 +20,7 @@ import { TaskTodos } from './TaskTodos'
 
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-[#e4e4e7] bg-white p-4 shadow-card">
+    <section className="flex flex-col gap-4 rounded-xl border border-border bg-white p-4 shadow-xs">
       <h2 className="m-0 text-[14px] font-semibold">{title}</h2>
       {children}
     </section>
@@ -30,7 +30,7 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid min-h-8 grid-cols-[100px_minmax(0,1fr)] items-center text-[13px]">
-      <span className="text-[#71717a]">{label}</span>
+      <span className="text-ink-muted">{label}</span>
       <div className="min-w-0">{children}</div>
     </div>
   )
@@ -120,15 +120,15 @@ function Body({
             <span className="[&>span]:h-[22px] [&>span]:px-2 [&>span]:text-[12px]">
               <OriginBadge origin={local ? 'local' : 'jira'} icon />
             </span>
-            <span className="font-mono text-[13px] text-[#52525b]">{taskKey(task.id)}</span>
+            <span className="font-mono text-[13px] text-ink-secondary">{taskKey(task.id)}</span>
             {editing && (
-              <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-[#fed7aa] bg-[#fff7ed] px-2 text-[12px] font-medium text-[#9a3412]">
+              <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-[#fed7aa] bg-today-tint px-2 text-[12px] font-medium text-[#9a3412]">
                 <Pencil size={11} />
                 Editing
               </span>
             )}
             {!local && (
-              <span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-[#f4f4f5] px-2 text-[12px] font-medium text-[#52525b]">
+              <span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-bg-muted px-2 text-[12px] font-medium text-ink-secondary">
                 <Lock size={11} />
                 Read-only
               </span>
@@ -142,7 +142,7 @@ function Body({
                   void navigator.clipboard?.writeText(task.id)
                   notify.success({ title: 'Copied', description: task.id })
                 }}
-                className="flex size-[26px] items-center justify-center rounded-md text-[#71717a] hover:bg-[#f4f4f5]"
+                className="flex size-[26px] items-center justify-center rounded-md text-ink-muted hover:bg-bg-muted"
               >
                 <Copy size={13} />
               </button>
@@ -154,10 +154,10 @@ function Body({
               autoFocus
               value={view.title}
               onChange={(e) => set({ title: e.target.value })}
-              className="h-11 min-w-[min(520px,100%)] rounded-lg border border-primary px-3 text-[22px] font-semibold tracking-[-0.01em] shadow-[0_0_0_3px_rgba(15,118,110,0.12)] outline-none"
+              className="h-11 min-w-[min(520px,100%)] rounded-lg border border-accent px-3 text-[22px] font-semibold tracking-[-0.01em] shadow-[0_0_0_3px_rgba(15,118,110,0.12)] outline-none"
             />
           ) : (
-            <D.Title className="m-0 text-[26px] leading-[1.25] font-semibold tracking-[-0.02em]">{task.title}</D.Title>
+            <D.Title className="m-0 text-[28px] leading-[34px] font-semibold tracking-[-0.02em]">{task.title}</D.Title>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -196,7 +196,7 @@ function Body({
                 <DropdownMenuContent className="w-[290px]">
                   {local ? (
                     <DropdownMenuItem
-                      className="text-[#dc2626]"
+                      className="text-danger"
                       onSelect={() => {
                         onClose()
                         void remove(task.id)
@@ -211,9 +211,9 @@ function Body({
                         <ExternalLink size={15} className="mt-0.5" />
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="flex items-center">
-                            Open in Jira<span className="ml-auto text-[11px] text-[#a1a1aa]">Browser</span>
+                            Open in Jira<span className="ml-auto text-[11px] text-ink-muted">Browser</span>
                           </span>
-                          <span className="font-mono text-[11px] text-[#71717a]">
+                          <span className="font-mono text-[11px] text-ink-muted">
                             {link ? `…/browse/${taskKey(task.id)}` : 'Set the site URL in Settings'}
                           </span>
                         </span>
@@ -222,7 +222,7 @@ function Body({
                         <RefreshCw size={15} className="mt-0.5" />
                         <span className="flex flex-col">
                           Sync from Jira
-                          <span className="text-[12px] text-[#71717a]">
+                          <span className="text-[12px] text-ink-muted">
                             Pull the latest title, status, dates and description for this issue.
                           </span>
                         </span>
@@ -233,13 +233,13 @@ function Body({
               </DropdownMenu>
             </>
           )}
-          <span aria-hidden className="mx-0.5 h-6 w-px bg-[#e4e4e7]" />
+          <span aria-hidden className="mx-0.5 h-6 w-px bg-bg-pressed" />
           <button
             type="button"
             aria-label="Close task detail"
             title="Close (Esc)"
             onClick={onClose}
-            className="flex size-9 items-center justify-center rounded-md text-[#52525b] hover:bg-[#f4f4f5]"
+            className="flex size-8 items-center justify-center rounded-md text-ink-secondary hover:bg-bg-muted"
           >
             <X size={18} />
           </button>
@@ -249,7 +249,7 @@ function Body({
       <div className="flex flex-wrap items-start gap-6">
         <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-5">
           {!local && (
-            <div role="note" className="flex gap-3 rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3 text-[13px] text-[#1e40af]">
+            <div role="note" className="flex gap-3 rounded-lg border border-[#bfdbfe] bg-tag-blue-bg px-4 py-3 text-[13px] text-[#1e40af]">
               <Lock size={16} className="mt-0.5 shrink-0" />
               <div>
                 <p className="m-0 font-semibold">Managed in Jira</p>
@@ -262,9 +262,9 @@ function Body({
           )}
           <section aria-label="Description" className="flex flex-col gap-2.5">
             <div className="flex items-center gap-2">
-              <h2 className="m-0 text-[13px] font-semibold text-[#52525b]">Description</h2>
+              <h2 className="m-0 text-[13px] font-semibold text-ink-secondary">Description</h2>
               <MdIcon />
-              {!local && <span className="text-[12px] text-[#a1a1aa]">Markdown from Jira</span>}
+              {!local && <span className="text-[12px] text-ink-muted">Markdown from Jira</span>}
               {editing && (
                 <span className="ml-auto">
                   <ModeTabs mode={mode} onMode={setMode} />
@@ -283,7 +283,7 @@ function Body({
             ) : task.description.trim() ? (
               <Markdown source={task.description} />
             ) : (
-              <span className="text-[13px] text-[#a1a1aa]">No description</span>
+              <span className="text-[13px] text-ink-faint">No description</span>
             )}
           </section>
           <TaskTodos taskID={task.id} jira={!local} />
@@ -317,7 +317,7 @@ function Body({
                 ) : start ? (
                   <span className="tabular-nums">{longDate(start)}</span>
                 ) : (
-                  <span className="text-[#a1a1aa]">Not set</span>
+                  <span className="text-ink-faint">Not set</span>
                 )}
               </Detail>
               <Detail label="Due">
@@ -337,15 +337,15 @@ function Body({
                   <span
                     className={cn(
                       'tabular-nums',
-                      dueTone(due, today, task.status) === 'over' && 'text-[#b91c1c]',
+                      dueTone(due, today, task.status) === 'over' && 'text-danger-ink',
                       dueTone(due, today, task.status) === 'today' && 'text-[#9a3412]',
                     )}
                   >
                     {longDate(due)}
-                    <span className="text-[#71717a]"> · {relDays(due, today)}</span>
+                    <span className="text-ink-muted"> · {relDays(due, today)}</span>
                   </span>
                 ) : (
-                  <span className="text-[#a1a1aa]">Not set</span>
+                  <span className="text-ink-faint">Not set</span>
                 )}
               </Detail>
               <Detail label="ID">
@@ -362,7 +362,7 @@ function Body({
               emptyChildren={local ? 'None' : 'No child tasks'}
             />
             {!local && (
-              <p className="m-0 text-[12px] leading-normal text-[#71717a]">
+              <p className="m-0 text-[12px] leading-normal text-ink-muted">
                 To group this issue with your own work, add it to a local task’s children or links.
               </p>
             )}
@@ -383,7 +383,7 @@ export function TaskDialog({ id, onClose, onOpen }: { id: string; onClose: () =>
   return (
     <D.Root open onOpenChange={(o) => !o && onClose()}>
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[rgba(9,9,11,0.48)] px-6 py-10">
+        <D.Overlay className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-[rgba(9,9,11,0.4)] px-6 py-10">
           <D.Content
             aria-describedby={undefined}
             onOpenAutoFocus={(e) => e.preventDefault()}
@@ -392,20 +392,20 @@ export function TaskDialog({ id, onClose, onOpen }: { id: string; onClose: () =>
               e.preventDefault()
               cancelEdit.current()
             }}
-            className="flex max-h-[calc(100vh-80px)] w-full max-w-[960px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-[#e4e4e7] bg-white px-7 pt-6 pb-7 shadow-dialog outline-none"
+            className="flex max-h-[calc(100vh-80px)] w-full max-w-[960px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-border bg-white px-7 pt-6 pb-7 shadow-xl outline-none"
           >
             {task ? (
               <Body key={task.id} task={task} onClose={onClose} onOpen={onOpen} onEditing={onEditing} />
             ) : (
               <div className="flex items-center justify-between">
-                <D.Title className="m-0 text-[15px] font-medium text-[#71717a]">
+                <D.Title className="m-0 text-[15px] font-medium text-ink-muted">
                   {isError ? 'That task no longer exists.' : 'Loading…'}
                 </D.Title>
                 <button
                   type="button"
                   aria-label="Close task detail"
                   onClick={onClose}
-                  className="flex size-9 items-center justify-center rounded-md text-[#52525b] hover:bg-[#f4f4f5]"
+                  className="flex size-8 items-center justify-center rounded-md text-ink-secondary hover:bg-bg-muted"
                 >
                   <X size={18} />
                 </button>

@@ -68,7 +68,7 @@ function NewTodoRow({ task, onDone }: { task: TaskListItem; onDone: () => void }
     }).catch(() => setText(d))
   }
   return (
-    <div className="grid min-h-[46px] grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#ccfbf1] bg-primary-subtle pr-3 pl-4">
+    <div className="grid min-h-[46px] grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 border-b border-tag-teal-line bg-accent-tint pr-3 pl-4">
       <span className="flex justify-center">
         <span className="size-[18px] rounded-[5px] border-[1.5px] border-dashed border-[#2dd4bf]" />
       </span>
@@ -82,9 +82,9 @@ function NewTodoRow({ task, onDone }: { task: TaskListItem; onDone: () => void }
           if (e.key === 'Enter' && !e.nativeEvent.isComposing) add()
           if (e.key === 'Escape') onDone()
         }}
-        className="h-8 min-w-0 bg-transparent text-[14px] outline-none placeholder:text-[#71717a]"
+        className="h-8 min-w-0 bg-transparent text-[14px] outline-none placeholder:text-ink-muted"
       />
-      <span className="flex items-center gap-2 text-[12px] text-[#71717a]">
+      <span className="flex items-center gap-2 text-[12px] text-ink-muted">
         <span className="flex items-center gap-1">
           <Kbd accent>Enter</Kbd>add
         </span>
@@ -95,7 +95,7 @@ function NewTodoRow({ task, onDone }: { task: TaskListItem; onDone: () => void }
           type="button"
           aria-label="Cancel"
           onClick={onDone}
-          className="flex size-[26px] items-center justify-center rounded-md text-[#71717a] hover:bg-black/5"
+          className="flex size-[26px] items-center justify-center rounded-md text-ink-muted hover:bg-black/5"
         >
           <X size={13} strokeWidth={2.2} />
         </button>
@@ -124,7 +124,7 @@ function TodoRow({
   const reqs = todo.service_desk_requests
   return (
     <div
-      className={cn(ROW, 'min-h-11 border-b border-[#f4f4f5]', selected ? 'bg-primary-subtle shadow-[inset_0_0_0_1px_#99f6e4]' : 'bg-white')}
+      className={cn(ROW, 'min-h-11 border-b border-border-subtle', selected ? 'bg-accent-tint shadow-[inset_0_0_0_1px_var(--color-accent-line)]' : 'bg-white')}
     >
       <span className="flex justify-center">
         <Checkbox checked={done} label={todo.description} onChange={(v) => onToggleDone(todo, v)} />
@@ -136,15 +136,15 @@ function TodoRow({
         className={cn(
           'flex h-[42px] min-w-0 items-center gap-2 text-left text-[14px]',
           selected && 'font-semibold',
-          done && 'text-[#71717a]',
+          done && 'text-ink-muted',
         )}
       >
         <span className={cn('truncate', done && 'line-through')}>{todo.description}</span>
-        {todo.note.trim() && <FileText size={14} className="shrink-0 text-[#71717a]" aria-label="Has a note" />}
+        {todo.note.trim() && <FileText size={14} className="shrink-0 text-ink-muted" aria-label="Has a note" />}
         {reqs.length > 0 && (
           <span
             title={reqs.map((r) => `${r.key} ${r.title}`).join('\n')}
-            className="inline-flex h-5 shrink-0 items-center gap-[3px] rounded-full bg-[#eef2ff] px-1.5 text-[11px] font-medium text-[#4338ca]"
+            className="inline-flex h-5 shrink-0 items-center gap-[3px] rounded-full bg-tag-indigo-bg px-1.5 text-[11px] font-medium text-tag-indigo-ink"
           >
             <Ticket size={11} strokeWidth={2.4} />
             {reqs.length}
@@ -153,7 +153,7 @@ function TodoRow({
       </button>
       <span
         title={rem && rem.sent ? `${rem.sent} sent` : undefined}
-        className={cn('text-[12px] tabular-nums', rem?.upcoming ? 'text-[#6d28d9]' : 'text-[#a1a1aa]')}
+        className={cn('text-[12px] tabular-nums', rem?.upcoming ? 'text-[#6d28d9]' : 'text-ink-muted')}
       >
         {rem?.label}
       </span>
@@ -167,7 +167,7 @@ function TodoRow({
           <span
             className={cn(
               'rounded-md px-2 py-0.5 text-[12px] font-medium whitespace-nowrap tabular-nums',
-              finished.today ? 'bg-[#f5f3ff] text-[#6d28d9]' : 'bg-[#f4f4f5] text-[#71717a]',
+              finished.today ? 'bg-tag-violet-bg text-[#6d28d9]' : 'bg-bg-muted text-ink-muted',
             )}
           >
             {finished.label}
@@ -230,7 +230,7 @@ function TaskStatusButton({ task, onSetStatus }: { task: TaskListItem; onSetStat
           onPointerDown={(e) => e.stopPropagation()}
           className={cn(
             'flex size-[26px] shrink-0 items-center justify-center rounded-md border',
-            open ? 'border-primary bg-primary-subtle' : 'border-transparent hover:bg-black/5',
+            open ? 'border-accent bg-accent-tint' : 'border-transparent hover:bg-black/5',
           )}
         >
           <StatusIcon status={task.status} size={16} />
@@ -241,11 +241,11 @@ function TaskStatusButton({ task, onSetStatus }: { task: TaskListItem; onSetStat
           <DropdownMenuItem
             key={s}
             onSelect={() => s !== task.status && onSetStatus(s)}
-            className={cn('items-center gap-2 px-2 py-0 h-8', s === task.status && 'bg-[#f4f4f5]')}
+            className={cn('items-center gap-2 px-2 py-0 h-8', s === task.status && 'bg-bg-muted')}
           >
             <StatusIcon status={s} />
             <span className="flex-1">{STATUS_LABEL[s]}</span>
-            {s === task.status && <Check size={12} strokeWidth={3} className="text-primary" aria-label="Current" />}
+            {s === task.status && <Check size={12} strokeWidth={3} className="text-accent" aria-label="Current" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -309,7 +309,7 @@ function TaskGroup({
   const pct = task.todo_count ? Math.round((task.done_todo_count / task.todo_count) * 100) : 0
   const key = taskKey(task.id)
   const ndone = task.done_todo_count
-  const rings = [dropHere && 'inset 0 2px 0 #0f766e', isSel && 'inset 0 0 0 1px #99f6e4'].filter(Boolean)
+  const rings = [dropHere && 'inset 0 2px 0 var(--color-accent)', isSel && 'inset 0 0 0 1px var(--color-accent-line)'].filter(Boolean)
   return (
     <div ref={dropRef} className={cn(dragging && 'opacity-45')}>
       <div
@@ -317,8 +317,8 @@ function TaskGroup({
         {...listeners}
         style={{ boxShadow: rings.join(', ') || undefined }}
         className={cn(
-          'relative grid min-h-11 grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#f4f4f5] px-4',
-          isSel ? 'bg-primary-subtle' : 'bg-[#fafafa]',
+          'relative grid min-h-11 grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 border-b border-border-subtle px-4',
+          isSel ? 'bg-accent-tint' : 'bg-bg-subtle',
         )}
       >
         <button
@@ -331,7 +331,7 @@ function TaskGroup({
             e.preventDefault()
             onMoveBy(e.key === 'ArrowUp' ? -1 : 1)
           }}
-          className="absolute top-1/2 left-[3px] flex size-3 -translate-y-1/2 cursor-grab text-[#c4c4cc] focus-visible:text-primary"
+          className="absolute top-1/2 left-[3px] flex size-3 -translate-y-1/2 cursor-grab text-ink-faint focus-visible:text-accent"
         >
           <GripIcon />
         </button>
@@ -340,7 +340,7 @@ function TaskGroup({
           aria-expanded={open}
           aria-label={`Collapse or expand ${key}`}
           onClick={onCollapse}
-          className="flex size-7 items-center justify-center rounded-md text-[#71717a] hover:bg-black/5"
+          className="flex size-7 items-center justify-center rounded-md text-ink-muted hover:bg-black/5"
         >
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
@@ -354,11 +354,11 @@ function TaskGroup({
             className="flex h-[42px] min-w-0 flex-1 items-center gap-2 text-left"
           >
             <OriginDot origin={task.originated} className="size-2" />
-            <span className="shrink-0 font-mono text-[12px] text-[#52525b]">{key}</span>
+            <span className="shrink-0 font-mono text-[12px] text-ink-secondary">{key}</span>
             <span
               className={cn(
                 'min-w-0 truncate text-[14px] font-semibold underline-offset-[3px]',
-                closed && 'text-[#71717a]',
+                closed && 'text-ink-muted',
                 isSel && 'underline',
               )}
             >
@@ -369,9 +369,9 @@ function TaskGroup({
             </span>
           </button>
         </div>
-        <span className="flex items-center gap-2 text-[12px] text-[#71717a] tabular-nums">
-          <span className="flex h-[5px] w-10 overflow-hidden rounded-full bg-[#e4e4e7]">
-            <span className="bg-[#7c3aed]" style={{ width: `${pct}%` }} />
+        <span className="flex items-center gap-2 text-[12px] text-ink-muted tabular-nums">
+          <span className="flex h-[5px] w-10 overflow-hidden rounded-full bg-bg-pressed">
+            <span className="bg-tag-violet-solid" style={{ width: `${pct}%` }} />
           </span>
           <button
             type="button"
@@ -382,9 +382,9 @@ function TaskGroup({
             className={cn(
               'flex h-6 items-center rounded-md border px-1.5',
               doneOpen
-                ? 'border-[#ddd6fe] bg-[#f5f3ff] text-[#5b21b6]'
+                ? 'border-[#ddd6fe] bg-tag-violet-bg text-tag-violet-ink'
                 : ndone
-                  ? 'border-[#e4e4e7] bg-white hover:bg-[#fafafa]'
+                  ? 'border-border bg-white hover:bg-bg-subtle'
                   : 'border-transparent',
             )}
           >
@@ -398,8 +398,8 @@ function TaskGroup({
             className={cn(
               'flex size-7 items-center justify-center rounded-md border',
               adding === task.id
-                ? 'border-primary bg-primary text-white'
-                : 'border-[#e4e4e7] bg-white text-[#52525b] hover:bg-[#fafafa]',
+                ? 'border-accent bg-accent text-white'
+                : 'border-border bg-white text-ink-secondary hover:bg-bg-subtle',
             )}
           >
             <Plus size={14} strokeWidth={2.2} />
@@ -433,8 +433,8 @@ function EndZone() {
     <div
       ref={setNodeRef}
       className={cn(
-        'mx-4 my-1.5 flex h-9 items-center justify-center rounded-lg border border-dashed text-[12px] text-[#71717a]',
-        isOver ? 'border-primary bg-primary-subtle' : 'border-[#d4d4d8] bg-[#fafafa]',
+        'mx-4 my-1.5 flex h-9 items-center justify-center rounded-lg border border-dashed text-[12px] text-ink-muted',
+        isOver ? 'border-accent bg-accent-tint' : 'border-border-strong bg-bg-subtle',
       )}
     >
       Drop here to move to the end
@@ -485,9 +485,9 @@ export function TodosCard({
   }
 
   return (
-    <section aria-label="Todos" className="min-w-0 overflow-x-auto rounded-xl border border-[#e4e4e7] bg-white shadow-card">
+    <section aria-label="Todos" className="min-w-0 overflow-x-auto rounded-xl border border-border bg-white shadow-xs">
       <div className="min-w-[520px]">
-        <div className={cn(ROW, 'h-9 border-b border-[#e4e4e7] text-[12px] font-medium text-[#71717a]')}>
+        <div className={cn(ROW, 'h-9 border-b border-border text-[12px] font-medium text-ink-muted')}>
           <span />
           <span>Todo</span>
           <span>Reminder</span>
@@ -534,10 +534,10 @@ export function TodosCard({
           {active && <EndZone />}
           <DragOverlay dropAnimation={null}>
             {dragged && (
-              <div className="flex h-11 max-w-[420px] cursor-grabbing items-center gap-2 rounded-lg border border-[#e4e4e7] bg-white px-3 shadow-popover">
+              <div className="flex h-11 max-w-[420px] cursor-grabbing items-center gap-2 rounded-lg border border-border bg-white px-3 shadow-lg">
                 <StatusIcon status={dragged.status} size={16} />
                 <OriginDot origin={dragged.originated} className="size-2" />
-                <span className="shrink-0 font-mono text-[12px] text-[#52525b]">{taskKey(dragged.id)}</span>
+                <span className="shrink-0 font-mono text-[12px] text-ink-secondary">{taskKey(dragged.id)}</span>
                 <span className="min-w-0 truncate text-[14px] font-semibold">{dragged.title}</span>
               </div>
             )}
@@ -545,8 +545,8 @@ export function TodosCard({
         </DndContext>
 
         {groups.length === 0 && (
-          <p className="m-0 px-4 py-10 text-center text-[14px] text-[#71717a]">
-            Nothing to do today. Add a task with <span className="font-medium text-[#3f3f46]">New task</span>, or sync
+          <p className="m-0 px-4 py-10 text-center text-[14px] text-ink-muted">
+            Nothing to do today. Add a task with <span className="font-medium text-ink-secondary">New task</span>, or sync
             Atlassian Cloud.
           </p>
         )}

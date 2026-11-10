@@ -1,21 +1,84 @@
 @import 'tailwindcss';
 
-/* Design tokens from docs/design/tokens.css (light theme only). */
-@theme {
-  --font-sans: 'Geist', 'Noto Sans KR', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Geist Mono', ui-monospace, monospace;
+/* Workbench design system, teal accent preset (light theme only). */
+@theme static {
+  --font-sans:
+    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-primary: #0f766e;
-  --color-primary-hover: #115e59;
-  --color-primary-subtle: #f0fdfa;
-  --color-primary-tint: #e3f4f1;
-  --color-primary-band: #e6f4f1;
+  --color-bg-canvas: #f4f4f5;
+  --color-bg-surface: #ffffff;
+  --color-bg-subtle: #fafafa;
+  --color-bg-muted: #f4f4f5;
+  --color-bg-pressed: #e4e4e7;
+  --color-bg-skeleton: #ececee;
+  --color-bg-inverse: #18181b;
+  --color-border: #e4e4e7;
+  --color-border-subtle: #f4f4f5;
+  --color-border-strong: #d4d4d8;
+  --color-border-control: #8a8a93;
+  --color-ink: #09090b;
+  --color-ink-secondary: #3f3f46;
+  --color-ink-muted: #6b6b74;
+  --color-ink-faint: #a1a1aa;
+  --color-on-inverse: #fafafa;
 
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
-  --shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-toast: 0 10px 28px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
-  --shadow-ring: 0 0 0 3px rgba(15, 118, 110, 0.15);
+  --color-accent: #0f766e;
+  --color-accent-hover: #115e59;
+  --color-accent-tint: #f0fdfa;
+  --color-accent-line: #99f6e4;
+  --color-accent-ink: #115e59;
+  --color-accent-halo: rgba(15, 118, 110, 0.15);
+  --color-on-accent: #ffffff;
+
+  --color-success: #16a34a;
+  --color-success-ink: #15803d;
+  --color-success-tint: #f0fdf4;
+  --color-success-line: #bbf7d0;
+  --color-warning: #d97706;
+  --color-warning-ink: #92400e;
+  --color-warning-tint: #fffbeb;
+  --color-warning-line: #fde68a;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-danger-ink: #b91c1c;
+  --color-danger-tint: #fef2f2;
+  --color-danger-line: #fecaca;
+  --color-today: #ea580c;
+  --color-today-ink: #c2410c;
+  --color-today-tint: #fff7ed;
+  --color-today-line: #fdba74;
+
+  --color-tag-blue-ink: #1d4ed8;
+  --color-tag-blue-bg: #eff6ff;
+  --color-tag-blue-line: #dbeafe;
+  --color-tag-blue-solid: #2563eb;
+  --color-tag-indigo-ink: #4338ca;
+  --color-tag-indigo-bg: #eef2ff;
+  --color-tag-indigo-line: #e0e7ff;
+  --color-tag-indigo-solid: #6366f1;
+  --color-tag-teal-ink: #0f766e;
+  --color-tag-teal-bg: #f0fdfa;
+  --color-tag-teal-line: #ccfbf1;
+  --color-tag-teal-solid: #14b8a6;
+  --color-tag-violet-ink: #5b21b6;
+  --color-tag-violet-bg: #f5f3ff;
+  --color-tag-violet-line: #ede9fe;
+  --color-tag-violet-solid: #7c3aed;
+  --color-tag-amber-ink: #92400e;
+  --color-tag-amber-bg: #fffbeb;
+  --color-tag-amber-line: #fde68a;
+  --color-tag-amber-solid: #f59e0b;
+  --color-tag-gray-ink: #3f3f46;
+  --color-tag-gray-bg: #f4f4f5;
+  --color-tag-gray-line: #e4e4e7;
+  --color-tag-gray-solid: #a1a1aa;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-ring: 0 0 0 3px var(--color-accent-halo);
   --shadow-ring-violet: 0 0 0 3px rgba(124, 58, 237, 0.14);
   --shadow-ring-red: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
@@ -24,8 +87,8 @@
   html,
   body {
     margin: 0;
-    background: #ffffff;
-    color: #09090b;
+    background: var(--color-bg-surface);
+    color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
@@ -36,7 +99,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid #0f766e;
+    outline: 2px solid var(--color-accent);
     outline-offset: 1px;
   }
 }
@@ -46,7 +109,7 @@
   .md {
     font-size: 14px;
     line-height: 1.6;
-    color: #09090b;
+    color: var(--color-ink);
     overflow-wrap: anywhere;
   }
   .md > * + * {
@@ -86,7 +149,7 @@
     width: 4px;
     height: 4px;
     border-radius: 9999px;
-    background: #a1a1aa;
+    background: var(--color-ink-faint);
   }
   .md ul > li.task-list-item {
     padding-left: 0;
@@ -105,12 +168,12 @@
     font-size: 12px;
     padding: 1px 5px;
     border-radius: 4px;
-    background: #f4f4f5;
-    border: 1px solid #e4e4e7;
+    background: var(--color-bg-muted);
+    border: 1px solid var(--color-border);
   }
   .md pre {
-    background: #18181b;
-    color: #fafafa;
+    background: var(--color-bg-inverse);
+    color: var(--color-on-inverse);
     border-radius: 8px;
     padding: 10px 12px;
     overflow-x: auto;
@@ -125,13 +188,13 @@
   .md blockquote {
     margin: 0;
     padding: 8px 12px;
-    border: 1px solid #e4e4e7;
+    border: 1px solid var(--color-border);
     border-radius: 8px;
-    background: #fafafa;
-    color: #3f3f46;
+    background: var(--color-bg-subtle);
+    color: var(--color-ink-secondary);
   }
   .md a {
-    color: #0f766e;
+    color: var(--color-accent);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
@@ -141,12 +204,12 @@
   }
   .md th,
   .md td {
-    border: 1px solid #e4e4e7;
+    border: 1px solid var(--color-border);
     padding: 4px 8px;
   }
   .md hr {
     border: none;
-    border-top: 1px solid #e4e4e7;
+    border-top: 1px solid var(--color-border);
   }
 }
 

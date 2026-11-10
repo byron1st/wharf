@@ -68,7 +68,7 @@ function ReminderForm({ mode, at, end, onSubmit, onDelete, onCancel }: FormProps
 
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-[12px] font-medium text-[#71717a]">{mode === 'new' ? 'New reminder' : 'Edit reminder'}</span>
+      <span className="text-[12px] font-medium text-ink-muted">{mode === 'new' ? 'New reminder' : 'Edit reminder'}</span>
       {mode === 'new' && (
         <>
           <div className="-mx-1 -mt-1 flex flex-col">
@@ -77,21 +77,21 @@ function ReminderForm({ mode, at, end, onSubmit, onDelete, onCancel }: FormProps
                 key={p.title}
                 type="button"
                 onClick={() => onSubmit(p.at.toISOString())}
-                className="flex h-[35px] items-center gap-2.5 rounded-md px-2 text-left text-[13px] hover:bg-[#f4f4f5]"
+                className="flex h-[35px] items-center gap-2.5 rounded-md px-2 text-left text-[13px] hover:bg-bg-muted"
               >
-                <Bell size={14} className="text-[#7c3aed]" />
+                <Bell size={14} className="text-tag-violet-solid" />
                 <span className="flex-1">{p.title}</span>
-                <span className="text-[12px] text-[#71717a] tabular-nums">{p.when}</span>
+                <span className="text-[12px] text-ink-muted tabular-nums">{p.when}</span>
               </button>
             ))}
           </div>
-          <div className="border-t border-[#f4f4f5] pt-3 text-[12px] font-medium text-[#71717a]">Pick a time</div>
+          <div className="border-t border-border-subtle pt-3 text-[12px] font-medium text-ink-muted">Pick a time</div>
         </>
       )}
       <Calendar today={today} month={day} selected={day} lo={today} tone="violet" onPick={setDay} />
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <label htmlFor="reminder-time" className="text-[13px] text-[#3f3f46]">
+          <label htmlFor="reminder-time" className="text-[13px] text-ink-secondary">
             Time
           </label>
           <input
@@ -104,27 +104,27 @@ function ReminderForm({ mode, at, end, onSubmit, onDelete, onCancel }: FormProps
             onKeyDown={(e) => e.key === 'Enter' && submit()}
             className={cn(
               'h-8 w-[72px] rounded-md border px-2 font-mono text-[13px] outline-none',
-              invalid ? 'border-[#dc2626] shadow-ring-red' : 'border-[#e4e4e7] focus:border-[#7c3aed]',
+              invalid ? 'border-danger shadow-ring-red' : 'border-border focus:border-tag-violet-solid',
             )}
           />
-          <span className="ml-auto text-[12px] text-[#71717a] tabular-nums">
+          <span className="ml-auto text-[12px] text-ink-muted tabular-nums">
             {dayLabel(day)}
             {isTime(time) ? ` · ${time}` : ''}
           </span>
         </div>
         {invalid && (
-          <p role="alert" className="m-0 flex items-center gap-1.5 text-[12px] text-[#b91c1c]">
+          <p role="alert" className="m-0 flex items-center gap-1.5 text-[12px] text-danger-ink">
             {bad ? 'Use 24-hour time, like 09:30.' : `That time has already passed. It's ${hhmm(now)} now.`}
           </p>
         )}
       </div>
-      <div className="flex items-center gap-2 border-t border-[#f4f4f5] pt-3">
+      <div className="flex items-center gap-2 border-t border-border-subtle pt-3">
         {mode === 'edit' && (
           <>
             <button
               type="button"
               onClick={onDelete}
-              className="h-8 rounded-md px-2.5 text-[13px] font-medium text-[#dc2626] hover:bg-[#fef2f2]"
+              className="h-8 rounded-md px-2.5 text-[13px] font-medium text-danger hover:bg-danger-tint"
             >
               Delete
             </button>
@@ -184,8 +184,8 @@ export function Reminders({ reminders, end, onChange, layout }: RemindersProps) 
             className={cn(
               'flex h-8 items-center rounded-md border text-[13px]',
               stack && 'w-full',
-              sent ? 'border-[#e4e4e7] bg-[#fafafa] text-[#a1a1aa]' : 'border-[#ede9fe] bg-[#faf8ff] text-[#5b21b6]',
-              editing && 'border-[#7c3aed] shadow-ring-violet',
+              sent ? 'border-border bg-bg-subtle text-ink-muted' : 'border-tag-violet-line bg-[#faf8ff] text-tag-violet-ink',
+              editing && 'border-tag-violet-solid shadow-ring-violet',
             )}
           >
             {sent ? (
@@ -206,7 +206,7 @@ export function Reminders({ reminders, end, onChange, layout }: RemindersProps) 
                   aria-label={`Edit reminder ${reminderLabel(r)}`}
                   className="flex h-full flex-1 items-center gap-1.5 pr-1.5 pl-2.5 text-left tabular-nums"
                 >
-                  <Bell size={13} className="text-[#7c3aed]" />
+                  <Bell size={13} className="text-tag-violet-solid" />
                   <span className="flex-1">{reminderLabel(r)}</span>
                 </button>,
                 <ReminderForm
@@ -225,7 +225,7 @@ export function Reminders({ reminders, end, onChange, layout }: RemindersProps) 
               onClick={() => replace(r, null)}
               className={cn(
                 'mr-1.5 flex size-5 items-center justify-center rounded hover:bg-black/5',
-                sent ? 'text-[#a1a1aa]' : 'text-[#7c3aed]',
+                sent ? 'text-ink-faint' : 'text-tag-violet-solid',
               )}
             >
               <X size={13} />
@@ -242,8 +242,8 @@ export function Reminders({ reminders, end, onChange, layout }: RemindersProps) 
             'flex h-8 items-center justify-center gap-1.5 rounded-md border px-2.5 text-[13px] font-medium',
             stack ? 'w-full' : '',
             open === 'new'
-              ? 'border-solid border-[#7c3aed] text-[#5b21b6] shadow-ring-violet'
-              : 'border-dashed border-[#d4d4d8] text-[#3f3f46] hover:bg-[#fafafa]',
+              ? 'border-solid border-tag-violet-solid text-tag-violet-ink shadow-ring-violet'
+              : 'border-dashed border-border-strong text-ink-secondary hover:bg-bg-subtle',
           )}
         >
           <Plus size={14} />
