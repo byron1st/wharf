@@ -54,13 +54,13 @@ db_url = "postgresql://postgres.<project-ref>@aws-0-<region>.pooler.supabase.com
 
 ## 4. SQLite에서 CSV로 내보내기
 
-테이블마다 열 순서를 명시해 CSV로 내보냅니다. `counters`와 `schema_migrations`는 내보내지 않습니다. `counters`는 5단계에서 값만 옮기고, `schema_migrations`는 3단계에서 새로 기록됐습니다.
+테이블마다 열 순서를 명시해 CSV로 내보냅니다. 헤더 줄은 넣지 않습니다. macOS에 기본 설치된 `sqlite3`는 `-header`를 줘도 헤더를 쓰지 않는 경우가 있어서, 가져올 때 첫 데이터 행이 헤더로 오인되어 빠질 수 있기 때문입니다. 열 순서는 아래 `SELECT`가 정하고, 5단계의 `\copy`가 같은 순서로 읽습니다. `counters`와 `schema_migrations`는 내보내지 않습니다. `counters`는 5단계에서 값만 옮기고, `schema_migrations`는 3단계에서 새로 기록됐습니다.
 
 이전 wharf는 시각을 Go의 `time.Time.String()` 형식(`2026-10-01 00:30:00 +0000 UTC`)으로 저장했습니다. Postgres는 끝의 존 이름(`UTC`, `KST` 등)을 읽지 못하므로, `ts`가 오프셋까지만 남기고 잘라냅니다. 그 형식이 아닌 값은 그대로 둡니다.
 
 ```sh
 cd "$WORK"
-export_table() { sqlite3 -header -csv wharf.db "SELECT $2 FROM $1" > "$1.csv"; }
+export_table() { sqlite3 -noheader -csv wharf.db "SELECT $2 FROM $1" > "$1.csv"; }
 ts() {
   echo "CASE WHEN instr($1, ' +') > 0 THEN substr($1, 1, instr($1, ' +') + 5)" \
        "WHEN instr($1, ' -') > 0 THEN substr($1, 1, instr($1, ' -') + 5) ELSE $1 END AS $1"
@@ -97,15 +97,15 @@ sqlite3 wharf.db "SELECT value FROM counters WHERE name = 'local_task'" > local_
 TRUNCATE wharf.tasks, wharf.task_hierarchies, wharf.task_links, wharf.todos, wharf.task_todos,
     wharf.todo_reminders, wharf.service_desk_requests, wharf.todo_service_desk_requests, wharf.atlassian_syncs;
 
-\copy wharf.tasks FROM 'tasks.csv' WITH (FORMAT csv, HEADER true, FORCE_NOT_NULL (description))
-\copy wharf.task_hierarchies FROM 'task_hierarchies.csv' WITH (FORMAT csv, HEADER true)
-\copy wharf.task_links FROM 'task_links.csv' WITH (FORMAT csv, HEADER true)
-\copy wharf.todos FROM 'todos.csv' WITH (FORMAT csv, HEADER true, FORCE_NOT_NULL (description, note))
-\copy wharf.task_todos FROM 'task_todos.csv' WITH (FORMAT csv, HEADER true)
-\copy wharf.todo_reminders FROM 'todo_reminders.csv' WITH (FORMAT csv, HEADER true)
-\copy wharf.service_desk_requests FROM 'service_desk_requests.csv' WITH (FORMAT csv, HEADER true)
-\copy wharf.todo_service_desk_requests FROM 'todo_service_desk_requests.csv' WITH (FORMAT csv, HEADER true)
-\copy wharf.atlassian_syncs FROM 'atlassian_syncs.csv' WITH (FORMAT csv, HEADER true)
+\copy wharf.tasks FROM 'tasks.csv' WITH (FORMAT csv, HEADER false, FORCE_NOT_NULL (description))
+\copy wharf.task_hierarchies FROM 'task_hierarchies.csv' WITH (FORMAT csv, HEADER false)
+\copy wharf.task_links FROM 'task_links.csv' WITH (FORMAT csv, HEADER false)
+\copy wharf.todos FROM 'todos.csv' WITH (FORMAT csv, HEADER false, FORCE_NOT_NULL (description, note))
+\copy wharf.task_todos FROM 'task_todos.csv' WITH (FORMAT csv, HEADER false)
+\copy wharf.todo_reminders FROM 'todo_reminders.csv' WITH (FORMAT csv, HEADER false)
+\copy wharf.service_desk_requests FROM 'service_desk_requests.csv' WITH (FORMAT csv, HEADER false)
+\copy wharf.todo_service_desk_requests FROM 'todo_service_desk_requests.csv' WITH (FORMAT csv, HEADER false)
+\copy wharf.atlassian_syncs FROM 'atlassian_syncs.csv' WITH (FORMAT csv, HEADER false)
 
 SELECT setval(pg_get_serial_sequence('wharf.todos', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM wharf.todos;
 SELECT setval(pg_get_serial_sequence('wharf.atlassian_syncs', 'id'), COALESCE(MAX(id), 0) + 1, false)
