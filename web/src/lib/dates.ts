@@ -96,9 +96,9 @@ export function ageText(s: string, today: string): string {
 export type Tone = 'over' | 'today' | 'plain'
 
 export const toneClass: Record<Tone, string> = {
-  over: 'text-[#b91c1c] bg-[#fef2f2]',
-  today: 'text-[#9a3412] bg-[#fff7ed]',
-  plain: 'text-[#52525b] bg-[#f4f4f5]',
+  over: 'text-danger-ink bg-danger-tint',
+  today: 'text-[#9a3412] bg-today-tint',
+  plain: 'text-ink-secondary bg-bg-muted',
 }
 
 /** whenPill is the When column of a todo row, from its end date or else its start date. */

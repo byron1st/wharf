@@ -42,7 +42,7 @@ Go backend server (`github.com/byron1st/wharf`). HTTP API with sqlc-generated ac
 - `.github/workflows/`: `ci.yml` checks Docker with `docker info`, then runs `make check` (failing on any change it makes), `make test`, `make build` and `make web-check` on pushes and PRs to `main`/`develop`; `release.yml` builds the darwin/arm64 binary for a `vX.Y.Z` tag and attaches it and `checksums.txt` to a GitHub Release.
 - `docs/`: Project documentation.
 - `tests/e2e/`: End-to-end tests against a running server.
-- `web/`: The web app (Vite, React, TypeScript, Tailwind, shadcn-style components on Radix). Its Go package (`web.Dist()`) embeds the build in `web/dist`, which `server.NewHandler` serves on every non-`/api` GET path with an `index.html` fallback for client-side routes. Only `web/dist/.gitkeep` is committed, so Go builds and tests pass before a web build. Design sources are in `docs/design/`.
+- `web/`: The web app (Vite, React, TypeScript, Tailwind, shadcn-style components on Radix). Its Go package (`web.Dist()`) embeds the build in `web/dist`, which `server.NewHandler` serves on every non-`/api` GET path with an `index.html` fallback for client-side routes. Only `web/dist/.gitkeep` is committed, so Go builds and tests pass before a web build. Colors, fonts and shadows are Workbench design-system tokens in the `@theme` block of `web/src/index.css`; use their utilities (`text-ink-muted`, `bg-accent-tint`) instead of hex literals. Designs are shared as claude.ai Design links, not kept in the repo.
 
 ## Versioning
 

@@ -3,8 +3,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { addDays, dayLabel, MONTHS, parseYmd, ymd } from '@/lib/dates'
 
 const TONES = {
-  teal: { sel: '#0f766e', band: '#e6f4f1', mid: '#115e59' },
-  violet: { sel: '#7c3aed', band: '#f5f3ff', mid: '#5b21b6' },
+  teal: { sel: 'var(--color-accent)', band: 'var(--color-accent-tint)', mid: 'var(--color-accent-ink)' },
+  violet: { sel: 'var(--color-tag-violet-solid)', band: 'var(--color-tag-violet-bg)', mid: 'var(--color-tag-violet-ink)' },
 }
 
 export interface CalendarProps {
@@ -79,7 +79,7 @@ export function Calendar({ today, month, selected, other, lo, hi, tone = 'teal',
             type="button"
             aria-label={label}
             onClick={() => nav(dl)}
-            className="flex size-7 items-center justify-center rounded-md border border-[#e4e4e7] bg-white text-[#52525b] hover:bg-[#fafafa]"
+            className="flex size-7 items-center justify-center rounded-md border border-border bg-white text-ink-secondary hover:bg-bg-subtle"
           >
             <Icon size={14} />
           </button>
@@ -87,7 +87,7 @@ export function Calendar({ today, month, selected, other, lo, hi, tone = 'teal',
       </div>
       <div ref={grid} role="grid" className="grid grid-cols-7 gap-y-[3px]">
         {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
-          <span key={d} className="h-[22px] text-center text-[11px] leading-[22px] text-[#a1a1aa]">
+          <span key={d} className="h-[22px] text-center text-[11px] leading-[22px] text-ink-muted">
             {d}
           </span>
         ))}
@@ -123,15 +123,15 @@ export function Calendar({ today, month, selected, other, lo, hi, tone = 'teal',
                 aria-pressed={isSel}
                 onClick={() => onPick(day)}
                 onKeyDown={(e) => onKey(e, day)}
-                className="h-8 w-[34px] rounded-md text-[13px] tabular-nums enabled:hover:bg-[#f4f4f5]"
+                className="h-8 w-[34px] rounded-md text-[13px] tabular-nums enabled:hover:bg-bg-muted"
                 style={{
                   border: isOther
                     ? `1px solid ${C.sel}`
                     : isToday && !isSel
-                      ? '1px solid #fdba74'
+                      ? '1px solid var(--color-today-line)'
                       : '1px solid transparent',
                   background: isSel ? C.sel : undefined,
-                  color: isSel ? '#fff' : disabled ? '#d4d4d8' : isToday ? '#c2410c' : isOther || inBand ? C.mid : '#09090b',
+                  color: isSel ? '#fff' : disabled ? 'var(--color-border-strong)' : isToday ? 'var(--color-today-ink)' : isOther || inBand ? C.mid : 'var(--color-ink)',
                   fontWeight: isSel || isOther || isToday ? 600 : 400,
                 }}
               >

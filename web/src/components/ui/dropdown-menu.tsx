@@ -12,7 +12,7 @@ export function DropdownMenuContent({ className, sideOffset = 6, align = 'end', 
         sideOffset={sideOffset}
         align={align}
         className={cn(
-          'z-50 min-w-[220px] rounded-[10px] border border-[#e4e4e7] bg-white p-1 shadow-popover outline-none',
+          'z-50 min-w-[220px] rounded-xl border border-border bg-white p-1 shadow-lg outline-none',
           className,
         )}
         {...props}
@@ -25,7 +25,7 @@ export function DropdownMenuItem({ className, ...props }: ComponentProps<typeof 
   return (
     <M.Item
       className={cn(
-        'flex cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-[13px] outline-none select-none data-[highlighted]:bg-[#f4f4f5] data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        'flex cursor-pointer gap-2.5 rounded-md px-2.5 py-2 text-[13px] outline-none select-none data-[highlighted]:bg-bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         className,
       )}
       {...props}

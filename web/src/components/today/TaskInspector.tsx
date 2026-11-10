@@ -62,7 +62,7 @@ function ReadField({ children, className }: { children: ReactNode; className?: s
   return (
     <span
       className={cn(
-        'flex h-[34px] min-w-0 items-center gap-1.5 truncate rounded-md border border-[#f4f4f5] bg-[#fafafa] px-2 text-[13px]',
+        'flex h-8 min-w-0 items-center gap-1.5 truncate rounded-md border border-border-subtle bg-bg-subtle px-2 text-[13px]',
         className,
       )}
     >
@@ -79,14 +79,14 @@ function LocalFields({ task }: { task: TaskDetail }) {
   const due = fromTaskDate(task.due_date)
   return (
     <>
-      <label className="flex flex-col gap-1.5 text-[12px] font-medium text-[#3f3f46]">
+      <label className="flex flex-col gap-1.5 text-[12px] font-medium text-ink-secondary">
         Title
         <input
           value={title.value}
           onChange={(e) => title.onChange(e.target.value)}
           onBlur={title.onBlur}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-          className="h-9 rounded-md border border-[#e4e4e7] px-2.5 text-[14px] font-semibold text-[#09090b] shadow-card outline-none focus:border-primary focus:shadow-ring"
+          className="h-8 rounded-md border border-border px-2.5 text-[13px] font-semibold text-ink shadow-xs outline-none focus:border-accent focus:shadow-ring"
         />
       </label>
       <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
@@ -95,7 +95,7 @@ function LocalFields({ task }: { task: TaskDetail }) {
           <StatusSelect
             value={task.status}
             onChange={(status) => update(task, { status })}
-            className="h-[34px] px-2"
+            className="h-8 px-2"
             hideIcon
           />
         </div>
@@ -111,7 +111,7 @@ function LocalFields({ task }: { task: TaskDetail }) {
             format={monthDay}
             align="end"
             onChange={(v) => update(task, { start_date: toTaskDate(v) })}
-            className="h-[34px] px-2"
+            className="h-8 px-2"
           />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -127,7 +127,7 @@ function LocalFields({ task }: { task: TaskDetail }) {
             format={monthDay}
             align="end"
             onChange={(v) => update(task, { due_date: toTaskDate(v) })}
-            className="h-[34px] px-2"
+            className="h-8 px-2"
           />
         </div>
       </div>
@@ -142,7 +142,7 @@ function JiraFields({ task }: { task: TaskDetail }) {
   const tone = dueTone(due, today, task.status)
   return (
     <>
-      <div role="note" className="flex gap-2 rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-2 text-[12px] leading-normal text-[#1e40af]">
+      <div role="note" className="flex gap-2 rounded-lg border border-[#bfdbfe] bg-tag-blue-bg px-2.5 py-2 text-[12px] leading-normal text-[#1e40af]">
         <Lock size={14} className="mt-0.5 shrink-0" />
         Managed in Jira. Fields show the last synced snapshot and can’t be edited here.
       </div>
@@ -160,15 +160,15 @@ function JiraFields({ task }: { task: TaskDetail }) {
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
           <Label>Start</Label>
-          <ReadField className={start ? '' : 'text-[#a1a1aa]'}>{start ? monthDay(start) : 'Not set'}</ReadField>
+          <ReadField className={start ? '' : 'text-ink-faint'}>{start ? monthDay(start) : 'Not set'}</ReadField>
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
           <Label>Due</Label>
           <ReadField
             className={cn(
-              !due && 'text-[#a1a1aa]',
-              tone === 'over' && 'border-[#fecaca] bg-[#fef2f2] text-[#b91c1c]',
-              tone === 'today' && 'border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]',
+              !due && 'text-ink-faint',
+              tone === 'over' && 'border-danger-line bg-danger-tint text-danger-ink',
+              tone === 'today' && 'border-[#fed7aa] bg-today-tint text-[#9a3412]',
             )}
           >
             {due ? monthDay(due) : 'Not set'}
@@ -201,7 +201,7 @@ export function TaskInspector({
         <InspectorHeader onClose={onClose}>
           <span className="mr-auto text-[13px] font-semibold">Task</span>
         </InspectorHeader>
-        <p className="m-0 p-4 text-[13px] text-[#71717a]">{isError ? 'This task no longer exists.' : 'Loading…'}</p>
+        <p className="m-0 p-4 text-[13px] text-ink-muted">{isError ? 'This task no longer exists.' : 'Loading…'}</p>
       </>
     )
   }
@@ -212,13 +212,13 @@ export function TaskInspector({
       <InspectorHeader onClose={onClose}>
         <span className="text-[13px] font-semibold">Task</span>
         <OriginBadge origin={local ? 'local' : 'jira'} />
-        <span className="font-mono text-[12px] text-[#52525b]">{taskKey(task.id)}</span>
+        <span className="font-mono text-[12px] text-ink-secondary">{taskKey(task.id)}</span>
         {local && saving && <SavedMark saving />}
         <button
           type="button"
           onClick={() => onOpen(task.id)}
           className={cn(
-            'inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-[#3f3f46] hover:bg-[#f4f4f5]',
+            'inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-ink-secondary hover:bg-bg-muted',
             !(local && saving) && 'ml-auto',
           )}
         >
@@ -232,7 +232,7 @@ export function TaskInspector({
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Label>Description</Label>
-            <span className="flex items-center gap-1 text-[11px] text-[#a1a1aa]">
+            <span className="flex items-center gap-1 text-[11px] text-ink-muted">
               <MdIcon />
               {local ? 'Markdown' : 'Markdown from Jira'}
             </span>
@@ -254,15 +254,15 @@ export function TaskInspector({
               emptyText="Add a description…"
             />
           ) : task.description.trim() ? (
-            <div className="rounded-lg border border-[#f4f4f5] bg-[#fafafa] p-3">
+            <div className="rounded-lg border border-border-subtle bg-bg-subtle p-3">
               <Markdown source={task.description} />
             </div>
           ) : (
-            <span className="text-[12px] text-[#a1a1aa]">No description</span>
+            <span className="text-[12px] text-ink-faint">No description</span>
           )}
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-[#f4f4f5] pt-4">
+        <div className="flex flex-col gap-3 border-t border-border-subtle pt-4">
           <span className="text-[13px] font-semibold">Relations</span>
           <Relations
             task={task}
@@ -272,15 +272,15 @@ export function TaskInspector({
         </div>
 
         {local && (
-          <div className="flex items-center gap-2 border-t border-[#f4f4f5] pt-3.5">
-            <span className="font-mono text-[11px] text-[#a1a1aa]">{task.id}</span>
+          <div className="flex items-center gap-2 border-t border-border-subtle pt-3.5">
+            <span className="font-mono text-[11px] text-ink-muted">{task.id}</span>
             <button
               type="button"
               onClick={() => {
                 onClose()
                 void remove(task.id)
               }}
-              className="ml-auto flex h-8 items-center gap-1.5 rounded-md border border-[#e4e4e7] bg-white px-2.5 text-[13px] font-medium text-[#dc2626] hover:bg-[#fef2f2]"
+              className="ml-auto flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 text-[13px] font-medium text-danger hover:bg-danger-tint"
             >
               <Trash2 size={13} />
               Delete task

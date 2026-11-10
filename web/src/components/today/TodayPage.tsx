@@ -137,7 +137,7 @@ export function TodayPage() {
         <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3">
           <RequestsCard requests={requests} selection={selection} onSelect={select} />
           {selection && (
-            <aside aria-label="Inspector" className="flex min-w-0 flex-col rounded-xl border border-[#e4e4e7] bg-white shadow-card">
+            <aside aria-label="Inspector" className="flex min-w-0 flex-col rounded-xl border border-border bg-white shadow-xs">
               {selection.kind === 'todo' && selectedTodo && (
                 <TodoInspector
                   key={selectedTodo.id}
@@ -170,9 +170,9 @@ export function TodayPage() {
                 />
               )}
               {((selection.kind === 'todo' && !selectedTodo) || (selection.kind === 'req' && !selectedReq)) && (
-                <div className="flex items-center justify-between px-4 py-3 text-[13px] text-[#71717a]">
+                <div className="flex items-center justify-between px-4 py-3 text-[13px] text-ink-muted">
                   Not found. It may have been removed.
-                  <button type="button" onClick={close} className="text-[12px] font-medium text-[#3f3f46] hover:underline">
+                  <button type="button" onClick={close} className="text-[12px] font-medium text-ink-secondary hover:underline">
                     Close
                   </button>
                 </div>

@@ -15,14 +15,14 @@ export function SelectTrigger({
   return (
     <S.Trigger
       className={cn(
-        'flex h-8 w-full items-center gap-2 rounded-md border border-[#e4e4e7] bg-white px-2.5 text-[13px] shadow-card outline-none data-[state=open]:border-primary data-[state=open]:shadow-ring',
+        'flex h-8 w-full items-center gap-2 rounded-md border border-border bg-white px-2.5 text-[13px] shadow-xs outline-none data-[state=open]:border-accent data-[state=open]:shadow-ring',
         className,
       )}
       {...props}
     >
       {children}
       {!hideIcon && (
-        <S.Icon className="ml-auto text-[#a1a1aa]">
+        <S.Icon className="ml-auto text-ink-faint">
           <ChevronDown size={14} />
         </S.Icon>
       )}
@@ -37,7 +37,7 @@ export function SelectContent({ className, children, ...props }: ComponentProps<
         position="popper"
         sideOffset={6}
         className={cn(
-          'z-50 min-w-[var(--radix-select-trigger-width)] rounded-[10px] border border-[#e4e4e7] bg-white p-1 shadow-popover',
+          'z-50 min-w-[var(--radix-select-trigger-width)] rounded-xl border border-border bg-white p-1 shadow-lg',
           className,
         )}
         {...props}
@@ -51,12 +51,12 @@ export function SelectContent({ className, children, ...props }: ComponentProps<
 export function SelectItem({ children, ...props }: ComponentProps<typeof S.Item> & { children: ReactNode }) {
   return (
     <S.Item
-      className="relative flex h-8 cursor-pointer items-center gap-2 rounded-md pr-8 pl-2 text-[13px] outline-none select-none data-[highlighted]:bg-[#f4f4f5]"
+      className="relative flex h-8 cursor-pointer items-center gap-2 rounded-md pr-8 pl-2 text-[13px] outline-none select-none data-[highlighted]:bg-bg-muted"
       {...props}
     >
       <S.ItemText>{children}</S.ItemText>
       <S.ItemIndicator className="absolute right-2">
-        <Check size={14} className="text-primary" />
+        <Check size={14} className="text-accent" />
       </S.ItemIndicator>
     </S.Item>
   )

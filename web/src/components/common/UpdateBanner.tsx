@@ -50,9 +50,9 @@ export function UpdateBanner() {
   return (
     <div
       role="status"
-      className="flex items-center gap-3 rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-3.5 py-2.5 text-[13px] text-[#1e3a8a]"
+      className="flex items-center gap-3 rounded-lg border border-[#bfdbfe] bg-tag-blue-bg px-3.5 py-2.5 text-[13px] text-[#1e3a8a]"
     >
-      <ArrowUpCircle size={15} className="shrink-0 text-[#2563eb]" />
+      <ArrowUpCircle size={15} className="shrink-0 text-tag-blue-solid" />
       <span className="flex-1">
         Wharf <span className="font-medium">{latest}</span> is available. You have {update.current}.
       </span>
@@ -61,7 +61,7 @@ export function UpdateBanner() {
           href={update.release_url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 text-[13px] text-[#1d4ed8] underline-offset-2 hover:underline"
+          className="inline-flex items-center gap-1 text-[13px] text-tag-blue-ink underline-offset-2 hover:underline"
         >
           Release notes
           <ExternalLink size={13} />

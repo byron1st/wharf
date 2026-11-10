@@ -27,23 +27,23 @@ export function RelationChip({
       type="button"
       aria-label={`Remove ${id}`}
       onClick={onRemove}
-      className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#71717a] opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-black/5"
+      className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-muted opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-black/5"
     >
       <X size={12} strokeWidth={2.2} />
     </button>
   )
   if (!task) {
     return (
-      <div className="group flex h-9 min-w-0 items-center gap-2 rounded-md border border-dashed border-[#d4d4d8] bg-[#fafafa] pr-1.5 pl-2.5">
-        {rich && <span className="size-3 shrink-0 rounded-full border border-dashed border-[#d4d4d8]" />}
-        <span className="min-w-0 truncate font-mono text-[12px] text-[#3f3f46]">{id}</span>
-        <span className="ml-auto shrink-0 text-[11px] text-[#71717a]">Not in Wharf</span>
+      <div className="group flex h-9 min-w-0 items-center gap-2 rounded-md border border-dashed border-border-strong bg-bg-subtle pr-1.5 pl-2.5">
+        {rich && <span className="size-3 shrink-0 rounded-full border border-dashed border-border-strong" />}
+        <span className="min-w-0 truncate font-mono text-[12px] text-ink-secondary">{id}</span>
+        <span className="ml-auto shrink-0 text-[11px] text-ink-muted">Not in Wharf</span>
         {remove}
       </div>
     )
   }
   return (
-    <div className="group flex h-9 min-w-0 items-center gap-1 rounded-md border border-[#e4e4e7] bg-white pr-1 shadow-card hover:bg-[#fafafa]">
+    <div className="group flex h-9 min-w-0 items-center gap-1 rounded-md border border-border bg-white pr-1 shadow-xs hover:bg-bg-subtle">
       <button
         type="button"
         onClick={() => onOpen?.(task.id)}
@@ -58,7 +58,7 @@ export function RelationChip({
         ) : (
           <OriginDot origin={task.originated} className="size-2" />
         )}
-        <span className="shrink-0 font-mono text-[11px] text-[#52525b]">{taskKey(task.id)}</span>
+        <span className="shrink-0 font-mono text-[11px] text-ink-secondary">{taskKey(task.id)}</span>
         <span className="min-w-0 truncate">{task.title}</span>
       </button>
       {remove}
@@ -80,7 +80,7 @@ function TaskPicker({ exclude, onPick }: { exclude: Set<string>; onPick: (id: st
         content: (
           <>
             <OriginDot origin={t.originated} />
-            <span className="shrink-0 font-mono text-[11px] text-[#52525b]">{taskKey(t.id)}</span>
+            <span className="shrink-0 font-mono text-[11px] text-ink-secondary">{taskKey(t.id)}</span>
             <span className="min-w-0 truncate">{t.title}</span>
           </>
         ),
@@ -93,7 +93,7 @@ function TaskPicker({ exclude, onPick }: { exclude: Set<string>; onPick: (id: st
           <button
             type="button"
             onClick={() => onPick(id)}
-            className="flex h-9 w-full items-center gap-2 border-t border-[#f4f4f5] px-3 text-left text-[12px] text-[#3f3f46] hover:bg-[#fafafa]"
+            className="flex h-9 w-full items-center gap-2 border-t border-border-subtle px-3 text-left text-[12px] text-ink-secondary hover:bg-bg-subtle"
           >
             <Plus size={12} />
             Add <span className="font-mono">{id}</span> by ID
@@ -150,7 +150,7 @@ export function Relations({
     <div className={cn('flex flex-col', rich ? 'gap-4' : 'gap-3')}>
       {(['parent', 'children', 'linked'] as const).map((kind) => (
         <div key={kind} className="flex flex-col gap-2">
-          <div className={cn('flex h-[26px] items-center gap-1.5 text-[12px]', rich ? 'text-[#52525b]' : 'text-[#71717a]')}>
+          <div className={cn('flex h-[26px] items-center gap-1.5 text-[12px]', rich ? 'text-ink-secondary' : 'text-ink-muted')}>
             {rich && ICON[kind]}
             {TITLE[kind]}
             {rich && kind !== 'parent' && ids[kind].length > 0 && <span>· {ids[kind].length}</span>}
@@ -159,7 +159,7 @@ export function Relations({
                 type="button"
                 aria-label={kind === 'parent' ? 'Change parent' : kind === 'children' ? 'Add child task' : 'Link a task'}
                 onClick={() => setAdding(adding === kind ? null : kind)}
-                className="ml-auto flex size-[26px] items-center justify-center rounded-md text-[#71717a] hover:bg-[#f4f4f5]"
+                className="ml-auto flex size-[26px] items-center justify-center rounded-md text-ink-muted hover:bg-bg-muted"
               >
                 {kind === 'parent' && ids.parent.length ? <Pencil size={13} /> : <Plus size={14} />}
               </button>
@@ -176,7 +176,7 @@ export function Relations({
             />
           ))}
           {ids[kind].length === 0 && adding !== kind && (
-            <span className="text-[12px] text-[#a1a1aa]">{kind === 'children' ? emptyChildren : 'None'}</span>
+            <span className="text-[12px] text-ink-muted">{kind === 'children' ? emptyChildren : 'None'}</span>
           )}
           {adding === kind && (
             <TaskPicker

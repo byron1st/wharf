@@ -29,16 +29,16 @@ function SyncButton() {
       className={cn(
         pill,
         busy
-          ? 'border-[#99f6e4] bg-[#f0fdfa] text-[#0f766e]'
+          ? 'border-accent-line bg-accent-tint text-accent'
           : failed
-            ? 'border-[#fecaca] bg-[#fef2f2] text-[#b91c1c]'
-            : 'border-[#e4e4e7] bg-white text-[#52525b] hover:bg-[#fafafa]',
+            ? 'border-danger-line bg-danger-tint text-danger-ink'
+            : 'border-border bg-white text-ink-secondary hover:bg-bg-subtle',
       )}
     >
       {busy ? (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden className="animate-spin">
-          <circle cx="12" cy="12" r="9" stroke="#ccfbf1" strokeWidth="3" />
-          <path d="M21 12a9 9 0 0 0-9-9" stroke="#0f766e" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="9" className="stroke-tag-teal-line" strokeWidth="3" />
+          <path d="M21 12a9 9 0 0 0-9-9" className="stroke-accent" strokeWidth="3" strokeLinecap="round" />
         </svg>
       ) : failed ? (
         <CircleAlert size={14} />
@@ -99,8 +99,8 @@ function NewTaskButton({ onCreate }: { onCreate: (title: string) => Promise<void
             pill,
             'pr-3',
             open
-              ? 'border-primary bg-primary-subtle text-[#115e59] shadow-ring'
-              : 'border-[#e4e4e7] bg-white text-[#3f3f46] hover:bg-[#fafafa]',
+              ? 'border-accent bg-accent-tint text-accent-ink shadow-ring'
+              : 'border-border bg-white text-ink-secondary hover:bg-bg-subtle',
           )}
         >
           <Plus size={14} strokeWidth={2.2} />
@@ -133,12 +133,12 @@ function NewTaskButton({ onCreate }: { onCreate: (title: string) => Promise<void
               void create()
             }
           }}
-          className="h-9 rounded-md border border-[#e4e4e7] px-3 text-[14px] outline-none focus:border-primary focus:shadow-ring"
+          className="h-8 rounded-md border border-border px-3 text-[13px] outline-none focus:border-accent focus:shadow-ring"
         />
-        <span className="text-[12px] leading-normal text-[#71717a]">
+        <span className="text-[12px] leading-normal text-ink-muted">
           Opens in the inspector so you can add a due date, description and todos next.
         </span>
-        <div className="flex items-center gap-2 border-t border-[#f4f4f5] pt-2.5 text-[12px] text-[#71717a]">
+        <div className="flex items-center gap-2 border-t border-border-subtle pt-2.5 text-[12px] text-ink-muted">
           <span className="flex items-center gap-1">
             <Kbd accent>Enter</Kbd>create
           </span>
@@ -161,14 +161,14 @@ export function Header({ onCreateTask, onSettings }: { onCreateTask: (title: str
   const { now } = useNow()
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-3">
-      <h1 className="m-0 text-[24px] font-semibold tracking-[-0.02em]">Wharf</h1>
+      <h1 className="m-0 text-[22px] leading-[28px] font-semibold tracking-[-0.02em]">Wharf</h1>
       <div className="ml-auto flex items-center gap-3">
         <SyncButton />
         <NewTaskButton onCreate={onCreateTask} />
-        <span className="h-4 w-px bg-[#e4e4e7]" />
+        <span className="h-4 w-px bg-bg-pressed" />
         <span className="flex items-baseline gap-2.5 tabular-nums">
-          <time className="text-[13px] font-medium text-[#c2410c]">{headerDate(now)}</time>
-          <span aria-hidden className="h-[14px] w-px self-center bg-[#e4e4e7]" />
+          <time className="text-[13px] font-medium text-today-ink">{headerDate(now)}</time>
+          <span aria-hidden className="h-[14px] w-px self-center bg-bg-pressed" />
           <time aria-label="Current time" className="text-[15px] font-semibold tracking-[-0.01em]">
             {hhmm(now)}
           </time>
@@ -178,7 +178,7 @@ export function Header({ onCreateTask, onSettings }: { onCreateTask: (title: str
           aria-label="Settings"
           title="Settings (⌘,)"
           onClick={onSettings}
-          className="flex size-9 items-center justify-center rounded-lg border border-[#e4e4e7] bg-white text-[#52525b] shadow-card hover:bg-[#fafafa]"
+          className="flex size-8 items-center justify-center rounded-md border border-border bg-white text-ink-secondary shadow-xs hover:bg-bg-subtle"
         >
           <Settings size={17} />
         </button>

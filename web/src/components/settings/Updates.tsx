@@ -17,12 +17,12 @@ export function Updates() {
         ? `Wharf ${update.latest} is available.`
         : 'Up to date.'
   return (
-    <div className="overflow-hidden rounded-lg border border-[#e4e4e7]">
+    <div className="overflow-hidden rounded-lg border border-border">
       <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)] items-center px-3.5 text-[13px]">
-        <span className="text-[#71717a]">Version</span>
+        <span className="text-ink-muted">Version</span>
         <span>
           <span className="font-mono">{update.current}</span>
-          <span className="text-[12px] text-[#71717a]">
+          <span className="text-[12px] text-ink-muted">
             {' · '}
             {state}
             {checked && ` Checked ${ymd(checked) === today ? '' : `${ymd(checked)} `}${hhmm(checked)}.`}

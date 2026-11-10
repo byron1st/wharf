@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Check, CircleAlert, CircleCheck, CircleX, ServerCrash, TriangleAlert, Undo2, SearchX, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// Toasts follow docs/design §6: success and info close after 4 seconds,
+// Toasts follow the design: success and info close after 4 seconds,
 // warnings and errors stay until dismissed or retried, and a loading toast is
 // replaced in place by its result by reusing its id.
 
@@ -34,11 +34,11 @@ const ICONS = {
 function Card({ id, variant, opts }: { id: string | number; variant: Variant; opts: ToastOptions }) {
   const tone =
     variant === 'warn'
-      ? 'bg-[#fffbeb] border-[#fde68a] text-[#92400e]'
+      ? 'bg-warning-tint border-warning-line text-warning-ink'
       : variant === 'error'
-        ? 'bg-[#fef2f2] border-[#fecaca] text-[#b91c1c]'
-        : 'bg-white border-[#e4e4e7] text-[#09090b]'
-  const sub = variant === 'warn' ? 'text-[#92400e]' : variant === 'error' ? 'text-[#b91c1c]' : 'text-[#52525b]'
+        ? 'bg-danger-tint border-danger-line text-danger-ink'
+        : 'bg-white border-border text-ink'
+  const sub = variant === 'warn' ? 'text-warning-ink' : variant === 'error' ? 'text-danger-ink' : 'text-ink-secondary'
   const Icon = opts.icon
     ? ICONS[opts.icon]
     : variant === 'success'
@@ -52,19 +52,19 @@ function Card({ id, variant, opts }: { id: string | number; variant: Variant; op
             : null
   const iconColor =
     variant === 'success'
-      ? 'text-[#16a34a]'
+      ? 'text-success'
       : variant === 'warn'
-        ? 'text-[#d97706]'
+        ? 'text-warning'
         : variant === 'error'
-          ? 'text-[#dc2626]'
-          : 'text-[#52525b]'
+          ? 'text-danger'
+          : 'text-ink-secondary'
   const sticky = variant === 'warn' || variant === 'error'
 
   return (
     <div
       role={variant === 'error' ? 'alert' : 'status'}
       className={cn(
-        'relative w-[356px] max-w-[380px] overflow-hidden rounded-[10px] border p-4 pr-9 shadow-toast font-sans',
+        'relative w-[356px] max-w-[380px] overflow-hidden rounded-xl border p-4 pr-9 shadow-md font-sans',
         tone,
       )}
     >
@@ -72,8 +72,8 @@ function Card({ id, variant, opts }: { id: string | number; variant: Variant; op
         <span className="mt-[2px] shrink-0">
           {variant === 'loading' ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="animate-spin" aria-hidden>
-              <circle cx="12" cy="12" r="9" stroke="#e4e4e7" strokeWidth="3" />
-              <path d="M21 12a9 9 0 0 0-9-9" stroke="#52525b" strokeWidth="3" strokeLinecap="round" />
+              <circle cx="12" cy="12" r="9" className="stroke-border" strokeWidth="3" />
+              <path d="M21 12a9 9 0 0 0-9-9" className="stroke-ink-secondary" strokeWidth="3" strokeLinecap="round" />
             </svg>
           ) : Icon ? (
             <Icon size={16} className={iconColor} aria-hidden />
@@ -83,7 +83,7 @@ function Card({ id, variant, opts }: { id: string | number; variant: Variant; op
           <p className="m-0 text-[14px] font-semibold leading-5">
             {opts.title}
             {opts.meta && (
-              <span className="ml-2 font-mono text-[11px] font-normal text-[#a1a1aa]">{opts.meta}</span>
+              <span className="ml-2 font-mono text-[11px] font-normal text-ink-muted">{opts.meta}</span>
             )}
           </p>
           {opts.description && <div className={cn('mt-0.5 text-[13px] leading-5', sub)}>{opts.description}</div>}
@@ -100,10 +100,10 @@ function Card({ id, variant, opts }: { id: string | number; variant: Variant; op
                   className={cn(
                     'h-7 rounded-md px-2.5 text-[13px] font-medium',
                     a.primary
-                      ? 'bg-[#dc2626] text-white hover:bg-[#b91c1c]'
+                      ? 'bg-danger text-white hover:bg-danger-hover'
                       : variant === 'warn'
-                        ? 'border border-[#fcd34d] bg-white text-[#78350f] hover:bg-[#fffbeb]'
-                        : 'border border-[#e4e4e7] bg-white text-[#09090b] hover:bg-[#fafafa]',
+                        ? 'border border-[#fcd34d] bg-white text-[#78350f] hover:bg-warning-tint'
+                        : 'border border-border bg-white text-ink hover:bg-bg-subtle',
                   )}
                 >
                   {a.label}
@@ -124,8 +124,8 @@ function Card({ id, variant, opts }: { id: string | number; variant: Variant; op
         </button>
       )}
       {variant === 'loading' && (
-        <div className="absolute right-0 bottom-0 left-0 h-[3px] overflow-hidden bg-[#f4f4f5]">
-          <div className="h-full w-1/3 animate-[toast-progress_1.4s_ease-in-out_infinite] bg-[#0f766e]" />
+        <div className="absolute right-0 bottom-0 left-0 h-[3px] overflow-hidden bg-bg-muted">
+          <div className="h-full w-1/3 animate-[toast-progress_1.4s_ease-in-out_infinite] bg-accent" />
         </div>
       )}
     </div>

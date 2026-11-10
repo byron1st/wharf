@@ -31,7 +31,7 @@ export function Checkbox({
       style={{ width: size, height: size }}
       className={cn(
         'flex shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition-colors',
-        checked ? 'border-primary bg-primary text-white' : 'border-[#a1a1aa] bg-white hover:border-[#71717a]',
+        checked ? 'border-accent bg-accent text-white' : 'border-border-control bg-white hover:border-ink-muted',
         className,
       )}
     >
