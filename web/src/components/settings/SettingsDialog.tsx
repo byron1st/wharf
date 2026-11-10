@@ -431,7 +431,7 @@ export function SettingsDialog({ tab, onTab, onClose }: { tab: Tab; onTab: (t: T
                   onClick={() => onTab(id)}
                   className={cn(
                     'flex h-8 items-center gap-2.5 rounded-md px-2.5 text-left text-[13px]',
-                    tab === id ? 'bg-accent-tint font-medium text-accent' : 'text-ink hover:bg-bg-muted',
+                    tab === id ? 'bg-accent-tint font-medium text-accent-ink' : 'text-ink-secondary hover:bg-bg-muted',
                   )}
                 >
                   <Icon size={15} className={id === 'atlassian' && tab !== id ? 'text-tag-blue-ink' : undefined} />
@@ -440,7 +440,7 @@ export function SettingsDialog({ tab, onTab, onClose }: { tab: Tab; onTab: (t: T
               ))}
               <hr className="mx-2.5 my-2 border-0 border-t border-border" />
               {SOON.map(({ label, Icon }) => (
-                <span key={label} aria-disabled className="flex h-8 items-center gap-2.5 px-2.5 text-[13px] whitespace-nowrap text-ink-muted">
+                <span key={label} aria-disabled className="flex h-8 items-center gap-2.5 px-2.5 text-[13px] whitespace-nowrap text-ink-faint">
                   <Icon size={15} />
                   {label}
                   <span className="ml-auto rounded-full border border-border bg-white px-1.5 text-[10px] text-ink-muted">Soon</span>
