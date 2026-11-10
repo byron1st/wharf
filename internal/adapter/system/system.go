@@ -26,6 +26,9 @@ var (
 	ErrEmptyChosenFilePath = errors.New("system: chosen file path is empty")
 
 	ErrFailedToNotify                  = errors.New("system: failed to show notification")
+	ErrDBPasswordNotFound              = errors.New("system: database password not found in keychain")
+	ErrFailedToReadDBPassword          = errors.New("system: failed to read database password from keychain")
+	ErrEmptyDBPassword                 = errors.New("system: database password in keychain is empty")
 	ErrFailedToFindExecutableToReplace = errors.New("system: failed to find executable to replace")
 	ErrFailedToFindExecutableToInstall = errors.New("system: failed to find executable to install")
 	ErrFailedToCreateTempExecutable    = errors.New("system: failed to create temp executable")
@@ -94,6 +97,18 @@ var launchAgent = template.Must(template.New("plist").Funcs(template.FuncMap{"xm
 </plist>
 `))
 
+// securityPath is the macOS keychain command, by absolute path so that no
+// other "security" earlier on PATH is handed the request.
+const securityPath = "/usr/bin/security"
+
+// KeychainDBService is the service name of the generic password item in the
+// login keychain that holds the database password.
+const KeychainDBService = "wharf-db"
+
+// itemNotFoundExitCode is the exit code of security when no keychain item
+// matches (errSecItemNotFound).
+const itemNotFoundExitCode = 44
+
 // userCanceled is in osascript's stderr when the dialog is canceled: it is
 // AppleScript error -128.
 const userCanceled = "(-128)"
@@ -102,6 +117,7 @@ type Desktop interface {
 	ChooseTOMLFile(ctx context.Context) (string, error)
 	Open(ctx context.Context, path string) error
 	Notify(ctx context.Context, title, message string) error
+	DBPassword(ctx context.Context) (string, error)
 	ReplaceExecutable(ctx context.Context, data []byte) error
 	InstallLaunchAgent(ctx context.Context, configPath string) error
 	UninstallLaunchAgent(ctx context.Context) error
@@ -181,6 +197,33 @@ func (c *client) Notify(ctx context.Context, title, message string) error {
 	}
 
 	return nil
+}
+
+// DBPassword returns the password of the KeychainDBService generic password
+// item in the user's keychains. It fails with ErrDBPasswordNotFound when there
+// is no such item and with ErrEmptyDBPassword when its password is empty.
+// Error messages never carry the password.
+func (c *client) DBPassword(ctx context.Context) (string, error) {
+	if c.goos != "darwin" {
+		return "", ErrUnsupportedOS
+	}
+
+	out, err := c.run(ctx, securityPath, "find-generic-password", "-s", KeychainDBService, "-w")
+	if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) && exitErr.ExitCode() == itemNotFoundExitCode {
+		return "", fmt.Errorf("%w: service=%s", ErrDBPasswordNotFound, KeychainDBService)
+	}
+
+	if err != nil {
+		return "", errors.Join(fmt.Errorf("%w: service=%s", ErrFailedToReadDBPassword, KeychainDBService), err)
+	}
+
+	// security ends the password with a newline.
+	password := strings.TrimSuffix(string(out), "\n")
+	if password == "" {
+		return "", fmt.Errorf("%w: service=%s", ErrEmptyDBPassword, KeychainDBService)
+	}
+
+	return password, nil
 }
 
 // ReplaceExecutable makes data the running executable, resolved through

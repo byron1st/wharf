@@ -34,13 +34,18 @@ func newSettings(t *testing.T) *settingsFixture {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "config.toml")
-	require.NoError(t, os.WriteFile(path, []byte("db_path = \"/data/w.db\"\n"), 0o600))
+	require.NoError(t, os.WriteFile(path, []byte("db_url = \"postgres://me@db.example.com/postgres\"\n"), 0o600))
 
 	f := &settingsFixture{jira: mocks.NewMockClient(t), desktop: mocks.NewMockDesktop(t), path: path}
 	f.settings = service.NewSettings(service.SettingsDeps{
-		Jira:      f.jira,
-		System:    f.desktop,
-		App:       service.AppSettings{ConfigPath: path, Addr: ":8080", DBPath: "/data/w.db", Version: "v1"},
+		Jira:   f.jira,
+		System: f.desktop,
+		App: service.AppSettings{
+			ConfigPath: path,
+			Addr:       ":8080",
+			DBTarget:   "db.example.com/postgres",
+			Version:    "v1",
+		},
 		Atlassian: saved,
 		Restart:   func(configPath string) { f.restarted = append(f.restarted, configPath) },
 	})
@@ -53,7 +58,7 @@ func TestGetSettings(t *testing.T) {
 
 	require.Equal(t, saved, f.settings.GetAtlassianSettings(t.Context()))
 	require.Equal(t, service.AppSettings{
-		ConfigPath: f.path, Addr: ":8080", DBPath: "/data/w.db", Version: "v1",
+		ConfigPath: f.path, Addr: ":8080", DBTarget: "db.example.com/postgres", Version: "v1",
 	}, f.settings.GetAppSettings(t.Context()))
 }
 
@@ -67,7 +72,7 @@ func TestSaveAtlassianSettings(t *testing.T) {
 
 	cfg, err := config.Load(f.path)
 	require.NoError(t, err)
-	require.Equal(t, "/data/w.db", cfg.DBPath)
+	require.Equal(t, "postgres://me@db.example.com/postgres", cfg.DBURL)
 	require.Equal(t, next.SiteURL, cfg.AtlassianSiteURL)
 	require.Equal(t, next.APIToken, cfg.AtlassianAPIToken)
 }
@@ -88,7 +93,7 @@ func TestSaveAtlassianSettingsRejectsInvalid(t *testing.T) {
 
 	data, err := os.ReadFile(f.path)
 	require.NoError(t, err)
-	require.Equal(t, "db_path = \"/data/w.db\"\n", string(data))
+	require.Equal(t, "db_url = \"postgres://me@db.example.com/postgres\"\n", string(data))
 }
 
 func TestSaveAtlassianSettingsWriteFailure(t *testing.T) {
@@ -208,13 +213,33 @@ func TestRestartServer(t *testing.T) {
 	require.NoError(t, f.settings.RestartServer(t.Context()))
 
 	other := filepath.Join(t.TempDir(), "other.toml")
-	require.NoError(t, os.WriteFile(other, []byte("addr = \":9090\"\ndb_path = \"/data/w.db\"\n"), 0o600))
+	require.NoError(
+		t,
+		os.WriteFile(other, []byte("addr = \":9090\"\ndb_url = \"postgres://me@db.example.com/postgres\"\n"), 0o600),
+	)
 	f.desktop.EXPECT().ChooseTOMLFile(mock.Anything).Return(other, nil).Once()
 
 	_, err := f.settings.ChooseConfigFile(t.Context())
 	require.NoError(t, err)
 	require.NoError(t, f.settings.RestartServer(t.Context()))
 	require.Equal(t, []string{f.path, other}, f.restarted)
+}
+
+func TestRestartServerRejectsConfigWithoutDBURL(t *testing.T) {
+	f := newSettings(t)
+
+	// The file loads, but the server could not start with it.
+	other := filepath.Join(t.TempDir(), "other.toml")
+	require.NoError(t, os.WriteFile(other, []byte("addr = \":9090\"\n"), 0o600))
+	f.desktop.EXPECT().ChooseTOMLFile(mock.Anything).Return(other, nil).Once()
+
+	_, err := f.settings.ChooseConfigFile(t.Context())
+	require.NoError(t, err)
+
+	err = f.settings.RestartServer(t.Context())
+	require.ErrorIs(t, err, service.ErrInvalidConfigFile)
+	require.ErrorIs(t, err, config.ErrMissingDBURL)
+	require.Empty(t, f.restarted)
 }
 
 func TestRestartServerRejectsInvalidConfig(t *testing.T) {

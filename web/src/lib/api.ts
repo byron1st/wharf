@@ -109,7 +109,7 @@ export interface AppSettings {
   config_path: string
   pending_config_path: string | null
   addr: string
-  db_path: string
+  db_target: string
   version: string
 }
 

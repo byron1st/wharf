@@ -71,7 +71,7 @@ func getAppSettings(settings service.Settings) http.HandlerFunc {
 			ConfigPath:        app.ConfigPath,
 			PendingConfigPath: nonEmpty(app.PendingConfigPath),
 			Addr:              app.Addr,
-			DBPath:            app.DBPath,
+			DBTarget:          app.DBTarget,
 			Version:           app.Version,
 		})
 	}

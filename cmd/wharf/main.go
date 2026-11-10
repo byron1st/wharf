@@ -58,13 +58,21 @@ func run() (code int, restartWith string) {
 		return 1, ""
 	}
 
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.LoadForServer(cfgPath)
 	if err != nil {
 		logger.Error("failed to load config", "error", err)
 		return 1, ""
 	}
 
-	dbMng := db.NewManager(cfg.DBPath, scripts.Migrations())
+	desktop := system.NewDesktop()
+
+	dbPassword, err := desktop.DBPassword(ctx)
+	if err != nil {
+		logger.Error("failed to read database password", "error", err)
+		return 1, ""
+	}
+
+	dbMng := db.NewManager(cfg.DBURL, dbPassword, scripts.Migrations())
 	if err := dbMng.Connect(ctx); err != nil {
 		logger.Error("failed to connect database", "error", err)
 		return 1, ""
@@ -89,7 +97,6 @@ func run() (code int, restartWith string) {
 		cfg.AtlassianEmail,
 		cfg.AtlassianAPIToken,
 	)
-	desktop := system.NewDesktop()
 	svc := service.NewService(atls, dbMng)
 	settings := service.NewSettings(service.SettingsDeps{
 		Jira:   atls,
@@ -97,7 +104,7 @@ func run() (code int, restartWith string) {
 		App: service.AppSettings{
 			ConfigPath: cfgPath,
 			Addr:       cfg.Addr,
-			DBPath:     cfg.DBPath,
+			DBTarget:   cfg.DBTarget(),
 			Version:    buildinfo.Version(),
 		},
 		Atlassian: service.AtlassianSettings{

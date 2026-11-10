@@ -18,7 +18,6 @@ const PathEnv = "WHARF_CONFIG"
 
 const (
 	defaultAddr                = "127.0.0.1:8080"
-	defaultDBFileName          = "wharf.db"
 	defaultUpdateCheckInterval = 24 * time.Hour
 	// minUpdateCheckInterval keeps the unauthenticated GitHub API rate limit
 	// (60 requests an hour) far away.
@@ -30,7 +29,9 @@ var (
 	ErrFailedToReadConfigFile       = errors.New("config: failed to read config file")
 	ErrFailedToParseConfigFile      = errors.New("config: failed to parse config file")
 	ErrUnknownConfigKeys            = errors.New("config: unknown config keys")
-	ErrFailedToCreateDBDir          = errors.New("config: failed to create default db dir")
+	ErrInvalidDBURL                 = errors.New("config: invalid db url")
+	ErrDBURLHasPassword             = errors.New("config: db url must not contain a password")
+	ErrMissingDBURL                 = errors.New("config: db_url is required to start the server")
 	ErrMissingConfigKey             = errors.New("config: missing required config key")
 	ErrInvalidAtlassianSiteURL      = errors.New("config: invalid atlassian site url")
 	ErrFailedToEncodeConfigValue    = errors.New("config: failed to encode config value")
@@ -50,9 +51,11 @@ var atlassianKeys = []string{"atlassian_site_url", "atlassian_email", "atlassian
 type Config struct {
 	// Addr is the TCP address the server listens on.
 	Addr string `toml:"addr"`
-	// DBPath is the SQLite database file path, defaulting to wharf/wharf.db
-	// under os.UserConfigDir, whose directory Load creates when missing.
-	DBPath string `toml:"db_path"`
+	// DBURL is the Postgres connection URL, such as
+	// postgresql://user@host:5432/postgres?sslmode=require, without a password:
+	// the password is read from the macOS Keychain. Empty means the database is
+	// not configured yet.
+	DBURL string `toml:"db_url"`
 	// AtlassianSiteURL is the Jira Cloud REST API base URL, an absolute https
 	// URL without query or fragment such as https://{site}.atlassian.net or
 	// https://api.atlassian.com/ex/jira/{cloudId} for scoped API tokens.
@@ -98,7 +101,7 @@ func defaultFilePath(name string) (string, error) {
 }
 
 // Load reads the TOML config file at path, rejects unknown keys, validates
-// the Atlassian keys, and fills unset values with defaults. A missing file is
+// the database URL and the Atlassian keys, and fills unset values with defaults. A missing file is
 // an empty config. The Atlassian keys are all set or all unset; unset means
 // Atlassian is not configured yet.
 func Load(path string) (Config, error) {
@@ -134,17 +137,61 @@ func Load(path string) (Config, error) {
 		)
 	}
 
-	if cfg.DBPath == "" {
-		if cfg.DBPath, err = defaultFilePath(defaultDBFileName); err != nil {
-			return Config{}, err
-		}
-
-		if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o700); err != nil {
-			return Config{}, errors.Join(fmt.Errorf("%w: path=%s", ErrFailedToCreateDBDir, cfg.DBPath), err)
-		}
+	if err := validateDBURL(path, cfg.DBURL); err != nil {
+		return Config{}, err
 	}
 
 	return cfg, nil
+}
+
+// LoadForServer loads path as Load does and also requires db_url, which the
+// server needs to start. Load allows it to be missing so that a file holding
+// only the Atlassian keys still loads.
+func LoadForServer(path string) (Config, error) {
+	cfg, err := Load(path)
+	if err != nil {
+		return Config{}, err
+	}
+
+	if cfg.DBURL == "" {
+		return Config{}, fmt.Errorf("%w: path=%s", ErrMissingDBURL, path)
+	}
+
+	return cfg, nil
+}
+
+// DBTarget returns the host and database of DBURL without its user, for
+// display. It is empty when DBURL is.
+func (c Config) DBTarget() string {
+	u, err := url.Parse(c.DBURL)
+	if err != nil {
+		return ""
+	}
+
+	return u.Host + u.Path
+}
+
+// validateDBURL accepts an empty url or a postgres:// or postgresql:// URL
+// with a host and without a password. Messages never carry the userinfo, and
+// the *url.Error, which quotes the raw URL, is unwrapped to its cause.
+func validateDBURL(path, dbURL string) error {
+	if dbURL == "" {
+		return nil
+	}
+
+	u, err := url.Parse(dbURL)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" {
+		return errors.Join(
+			fmt.Errorf("%w: path=%s, db_url=%s", ErrInvalidDBURL, path, withoutUserinfo(u)),
+			errors.Unwrap(err),
+		)
+	}
+
+	if _, ok := u.User.Password(); ok {
+		return fmt.Errorf("%w: path=%s, db_url=%s", ErrDBURLHasPassword, path, withoutUserinfo(u))
+	}
+
+	return nil
 }
 
 // validateAtlassian checks the Atlassian keys as Load describes. Messages

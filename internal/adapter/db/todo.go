@@ -51,8 +51,6 @@ func (m *manager) CreateTodo(ctx context.Context, t todo.Todo) (int64, error) {
 	err := m.inTx(ctx, func(queries *Queries) error {
 		var err error
 
-		// The insert checks the task, keeping the write-first rule described
-		// at busyTimeoutPragma.
 		id, err = queries.CreateTodo(ctx, CreateTodoParams{
 			Description: t.Description,
 			Note:        t.Note,
