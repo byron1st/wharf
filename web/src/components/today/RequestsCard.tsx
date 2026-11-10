@@ -28,29 +28,29 @@ export function RequestsCard({
   return (
     <section
       aria-label="Service Desk requests"
-      className={cn('overflow-hidden rounded-xl border bg-white shadow-card', open ? 'border-[#c7d2fe]' : 'border-[#e4e4e7]')}
+      className={cn('overflow-hidden rounded-xl border bg-white shadow-xs', open ? 'border-[#c7d2fe]' : 'border-border')}
     >
       <button
         type="button"
         aria-expanded={open}
         onClick={toggle}
-        className={cn('flex min-h-11 w-full items-center gap-2 pr-3 pl-3.5 text-left text-[#27272a]', open ? 'bg-[#f5f7ff]' : 'bg-white')}
+        className={cn('flex min-h-11 w-full items-center gap-2 pr-3 pl-3.5 text-left text-ink', open ? 'bg-[#f5f7ff]' : 'bg-white')}
       >
-        <Ticket size={15} className="text-[#6366f1]" />
+        <Ticket size={15} className="text-tag-indigo-solid" />
         <span className="text-[13px] font-semibold">Requests</span>
-        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#eef2ff] px-1.5 text-[11px] font-semibold text-[#4338ca] tabular-nums">
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-tag-indigo-bg px-1.5 text-[11px] font-semibold text-tag-indigo-ink tabular-nums">
           {requests.length}
         </span>
         {changed > 0 && (
-          <span className="inline-flex items-center gap-[5px] text-[12px] font-medium text-[#4338ca]">
-            <span className="size-1.5 rounded-full bg-[#6366f1]" />
+          <span className="inline-flex items-center gap-[5px] text-[12px] font-medium text-tag-indigo-ink">
+            <span className="size-1.5 rounded-full bg-tag-indigo-solid" />
             {changed} changed today
           </span>
         )}
-        <span className="ml-auto flex text-[#71717a]">{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
+        <span className="ml-auto flex text-ink-muted">{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
       </button>
       {open && (
-        <div className="flex max-h-80 flex-col gap-0.5 overflow-y-auto border-t border-[#f4f4f5] p-1.5">
+        <div className="flex max-h-80 flex-col gap-0.5 overflow-y-auto border-t border-border-subtle p-1.5">
           {requests.map((r) => {
             const s = reqStatusStyle(r)
             const isSel = selection?.kind === 'req' && selection.id === r.key
@@ -60,7 +60,7 @@ export function RequestsCard({
                 key={r.key}
                 className={cn(
                   'grid min-h-11 grid-cols-[12px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2',
-                  isSel && 'bg-[#eef2ff] shadow-[inset_0_0_0_1px_#c7d2fe]',
+                  isSel && 'bg-tag-indigo-bg shadow-[inset_0_0_0_1px_#c7d2fe]',
                 )}
               >
                 <span className="flex justify-center">
@@ -70,13 +70,13 @@ export function RequestsCard({
                   type="button"
                   aria-pressed={isSel}
                   onClick={() => onSelect({ kind: 'req', id: r.key })}
-                  className="flex h-[42px] min-w-0 flex-col justify-center gap-px text-left text-[#27272a]"
+                  className="flex h-[42px] min-w-0 flex-col justify-center gap-px text-left text-ink"
                 >
                   <span className={cn('max-w-full truncate text-[13px]', isSel && 'font-semibold')}>{r.title}</span>
-                  <span className="flex items-center gap-1.5 text-[11px] text-[#71717a] tabular-nums">
-                    <span className="font-mono text-[#4338ca]">{r.key}</span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-ink-muted tabular-nums">
+                    <span className="font-mono text-tag-indigo-ink">{r.key}</span>
                     {days <= 0 ? (
-                      <span className="font-semibold text-[#4338ca]">changed today</span>
+                      <span className="font-semibold text-tag-indigo-ink">changed today</span>
                     ) : (
                       <span>{days}d in status</span>
                     )}
@@ -91,7 +91,7 @@ export function RequestsCard({
               </div>
             )
           })}
-          {requests.length === 0 && <p className="m-0 p-2.5 text-[12px] text-[#71717a]">No open requests.</p>}
+          {requests.length === 0 && <p className="m-0 p-2.5 text-[12px] text-ink-muted">No open requests.</p>}
         </div>
       )}
     </section>

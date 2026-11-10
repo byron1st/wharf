@@ -100,12 +100,12 @@ function General() {
         <div className="flex gap-2">
           <span
             className={cn(
-              'flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border bg-[#fafafa] px-3 font-mono text-[13px]',
-              pending ? 'border-[#fcd34d] bg-[#fffbeb]' : 'border-[#e4e4e7]',
+              'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border bg-bg-subtle px-3 font-mono text-[13px]',
+              pending ? 'border-[#fcd34d] bg-warning-tint' : 'border-border',
             )}
             title={pending ?? app.config_path}
           >
-            <File size={14} className="shrink-0 text-[#71717a]" />
+            <File size={14} className="shrink-0 text-ink-muted" />
             <span className="truncate">{tilde(pending ?? app.config_path)}</span>
           </span>
           <Button variant="outline" onClick={() => void call("Couldn't open the file chooser", api.chooseConfig)}>
@@ -117,34 +117,34 @@ function General() {
             Open
           </Button>
         </div>
-        <span className="text-[12px] text-[#71717a]">
+        <span className="text-[12px] text-ink-muted">
           A <span className="font-mono">.toml</span> file. Port and database below are read from it — edit the file to change
           them.
         </span>
       </div>
-      <span className="mt-2 flex items-center gap-1.5 text-[12px] font-medium text-[#52525b]">
+      <span className="mt-2 flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">
         <Lock size={12} />
         From config.toml · read-only
       </span>
-      <div className="overflow-hidden rounded-lg border border-[#e4e4e7]">
-        <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)] items-center border-b border-[#f4f4f5] px-3.5 text-[13px]">
-          <span className="text-[#71717a]">Port</span>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)] items-center border-b border-border-subtle px-3.5 text-[13px]">
+          <span className="text-ink-muted">Port</span>
           <span>
             <span className="font-mono">{port}</span>
-            <span className="text-[12px] text-[#71717a]"> · http://localhost:{port}</span>
+            <span className="text-[12px] text-ink-muted"> · http://localhost:{port}</span>
           </span>
         </div>
         <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-[13px]">
-          <span className="text-[#71717a]">Database</span>
+          <span className="text-ink-muted">Database</span>
           <span className="truncate font-mono" title={app.db_target}>
             {app.db_target}
           </span>
-          <span className="rounded-md bg-[#f4f4f5] px-2 py-0.5 text-[12px]">Postgres</span>
+          <span className="rounded-md bg-bg-muted px-2 py-0.5 text-[12px]">Postgres</span>
         </div>
       </div>
       {pending && (
-        <div role="status" className="mt-3 flex items-center gap-3 rounded-lg border border-[#fde68a] bg-[#fffbeb] px-3.5 py-2.5 text-[13px] text-[#92400e]">
-          <CircleAlert size={14} className="shrink-0 text-[#d97706]" />
+        <div role="status" className="mt-3 flex items-center gap-3 rounded-lg border border-warning-line bg-warning-tint px-3.5 py-2.5 text-[13px] text-warning-ink">
+          <CircleAlert size={14} className="shrink-0 text-warning" />
           <span className="flex-1">The server is still using the previous file. Restart it to load the new config.</span>
           <Button
             variant="outline"
@@ -173,13 +173,13 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
     <label className="flex flex-col gap-1.5">
       <span className="text-[13px] font-medium">{label}</span>
       {children}
-      <span className="text-[12px] text-[#71717a]">{hint}</span>
+      <span className="text-[12px] text-ink-muted">{hint}</span>
     </label>
   )
 }
 
 const input =
-  'h-9 w-full rounded-md border border-[#e4e4e7] px-3 text-[14px] outline-none placeholder:text-[#a1a1aa] focus:border-primary focus:shadow-ring'
+  'h-8 w-full rounded-md border border-border px-3 text-[13px] outline-none placeholder:text-ink-faint focus:border-accent focus:shadow-ring'
 
 function Atlassian() {
   const { data: stored } = useAtlassianSettings()
@@ -249,7 +249,7 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
       <section className="flex flex-col gap-4">
         <h3 className="m-0 flex items-baseline gap-2 text-[15px] font-semibold">
           Connection
-          <span className="text-[12px] font-normal text-[#71717a]">Jira issues and Service Desk requests</span>
+          <span className="text-[12px] font-normal text-ink-muted">Jira issues and Service Desk requests</span>
         </h3>
         <Field label="URL" hint="Your Atlassian Cloud site. Also used for “Open in Jira” links.">
           <input
@@ -290,16 +290,16 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
               {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
             </Button>
           </div>
-          <span className="text-[12px] text-[#71717a]">Create one in your Atlassian account under Security → API tokens.</span>
+          <span className="text-[12px] text-ink-muted">Create one in your Atlassian account under Security → API tokens.</span>
         </div>
         <div
           className={cn(
             'flex min-h-[56px] items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px]',
             test.state === 'ok'
-              ? 'border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]'
+              ? 'border-success-line bg-success-tint text-success-ink'
               : test.state === 'failed'
-                ? 'border-[#fecaca] bg-[#fef2f2] text-[#b91c1c]'
-                : 'border-[#e4e4e7] bg-[#fafafa] text-[#52525b]',
+                ? 'border-danger-line bg-danger-tint text-danger-ink'
+                : 'border-border bg-bg-subtle text-ink-secondary',
           )}
         >
           {test.state === 'testing' ? (
@@ -333,39 +333,39 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
         </div>
       </section>
 
-      <hr className="m-0 border-0 border-t border-[#f4f4f5]" />
+      <hr className="m-0 border-0 border-t border-border-subtle" />
 
       <section className="flex flex-col gap-4">
         <h3 className="m-0 flex items-baseline gap-2 text-[15px] font-semibold">
           Sync
-          <span className="text-[12px] font-normal text-[#71717a]">Runs only when you start it</span>
+          <span className="text-[12px] font-normal text-ink-muted">Runs only when you start it</span>
         </h3>
-        <div className="flex items-center gap-4 rounded-xl border border-[#e4e4e7] px-5 py-4">
+        <div className="flex items-center gap-4 rounded-xl border border-border px-5 py-4">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[12px] text-[#71717a]">Last sync</span>
+            <span className="text-[12px] text-ink-muted">Last sync</span>
             {last && lastAt ? (
               <>
                 <span className="flex items-center gap-2 text-[16px] font-semibold tabular-nums">
                   {ymd(lastAt) === today ? 'Today' : lastAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })},{' '}
                   {hhmm(lastAt)}
                   {failures ? (
-                    <span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-[#fffbeb] px-2 text-[12px] font-medium text-[#92400e]">
+                    <span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-warning-tint px-2 text-[12px] font-medium text-warning-ink">
                       <CircleAlert size={12} />
                       Partial
                     </span>
                   ) : (
-                    <span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-[#dcfce7] px-2 text-[12px] font-medium text-[#15803d]">
+                    <span className="inline-flex h-[22px] items-center gap-1 rounded-full bg-[#dcfce7] px-2 text-[12px] font-medium text-success-ink">
                       <Check size={12} />
                       Complete
                     </span>
                   )}
                 </span>
-                <span className="text-[13px] text-[#52525b]">
+                <span className="text-[13px] text-ink-secondary">
                   {last.issues} issues · {last.open_requests} open requests imported or updated
                 </span>
               </>
             ) : (
-              <span className="text-[14px] text-[#52525b]">Never synced</span>
+              <span className="text-[14px] text-ink-secondary">Never synced</span>
             )}
           </div>
           <Button className="h-10 px-4 text-[15px]" disabled={syncStatus === 'busy'} onClick={run}>
@@ -375,12 +375,12 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
         </div>
         <div className="flex flex-col gap-2">
           <span className="text-[14px] font-semibold">What a sync does</span>
-          <ul className="m-0 flex list-none flex-col gap-2 p-0 text-[13px] text-[#3f3f46]">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0 text-[13px] text-ink-secondary">
             {[
-              [Diamond, 'bg-[#eff6ff] text-[#1d4ed8]', <>Imports Jira issues <b>assigned to you that aren’t done</b>, and updates the ones already here.</>],
-              [Ticket, 'bg-[#eef2ff] text-[#4338ca]', 'Refreshes Service Desk requests. Done and Canceled requests drop out of Today.'],
-              [Lock, 'bg-[#f4f4f5] text-[#52525b]', 'Only reads from Atlassian. Todos, notes and links you add in Wharf are never written back.'],
-              [FileText, 'bg-[#f4f4f5] text-[#52525b]', 'Issues that leave your list, like resolved or reassigned ones, are fetched again one by one. Done and Canceled ones drop out of Today once their todos for today are done.'],
+              [Diamond, 'bg-tag-blue-bg text-tag-blue-ink', <>Imports Jira issues <b>assigned to you that aren’t done</b>, and updates the ones already here.</>],
+              [Ticket, 'bg-tag-indigo-bg text-tag-indigo-ink', 'Refreshes Service Desk requests. Done and Canceled requests drop out of Today.'],
+              [Lock, 'bg-bg-muted text-ink-secondary', 'Only reads from Atlassian. Todos, notes and links you add in Wharf are never written back.'],
+              [FileText, 'bg-bg-muted text-ink-secondary', 'Issues that leave your list, like resolved or reassigned ones, are fetched again one by one. Done and Canceled ones drop out of Today once their todos for today are done.'],
             ].map(([Icon, cls, text], i) => {
               const I = Icon as typeof Diamond
               return (
@@ -415,13 +415,13 @@ export function SettingsDialog({ tab, onTab, onClose }: { tab: Tab; onTab: (t: T
   return (
     <D.Root open onOpenChange={(o) => !o && onClose()}>
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-40 flex items-start justify-center bg-[rgba(9,9,11,0.48)] px-6 pt-14">
+        <D.Overlay className="fixed inset-0 z-40 flex items-start justify-center bg-[rgba(9,9,11,0.4)] px-6 pt-14">
           <D.Content
             aria-describedby={undefined}
             onOpenAutoFocus={(e) => e.preventDefault()}
-            className="flex h-[min(800px,calc(100vh-112px))] w-full max-w-[920px] overflow-hidden rounded-[14px] bg-white shadow-dialog outline-none"
+            className="flex h-[min(800px,calc(100vh-112px))] w-full max-w-[920px] overflow-hidden rounded-[14px] bg-white shadow-xl outline-none"
           >
-            <nav aria-label="Settings sections" className="flex w-[210px] shrink-0 flex-col border-r border-[#f4f4f5] bg-[#fafafa] px-2.5 pt-5 pb-4">
+            <nav aria-label="Settings sections" className="flex w-[210px] shrink-0 flex-col border-r border-border-subtle bg-bg-subtle px-2.5 pt-5 pb-4">
               <D.Title className="m-0 mb-3 px-2.5 text-[16px] font-semibold">Settings</D.Title>
               {NAV.map(({ id, label, Icon }) => (
                 <button
@@ -430,35 +430,35 @@ export function SettingsDialog({ tab, onTab, onClose }: { tab: Tab; onTab: (t: T
                   aria-current={tab === id ? 'page' : undefined}
                   onClick={() => onTab(id)}
                   className={cn(
-                    'flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left text-[14px]',
-                    tab === id ? 'bg-primary-tint font-medium text-[#0f766e]' : 'text-[#27272a] hover:bg-[#f4f4f5]',
+                    'flex h-8 items-center gap-2.5 rounded-md px-2.5 text-left text-[14px]',
+                    tab === id ? 'bg-accent-tint font-medium text-accent' : 'text-ink hover:bg-bg-muted',
                   )}
                 >
-                  <Icon size={15} className={id === 'atlassian' && tab !== id ? 'text-[#1d4ed8]' : undefined} />
+                  <Icon size={15} className={id === 'atlassian' && tab !== id ? 'text-tag-blue-ink' : undefined} />
                   {label}
                 </button>
               ))}
-              <hr className="mx-2.5 my-2 border-0 border-t border-[#e4e4e7]" />
+              <hr className="mx-2.5 my-2 border-0 border-t border-border" />
               {SOON.map(({ label, Icon }) => (
-                <span key={label} aria-disabled className="flex h-9 items-center gap-2.5 px-2.5 text-[14px] whitespace-nowrap text-[#a1a1aa]">
+                <span key={label} aria-disabled className="flex h-8 items-center gap-2.5 px-2.5 text-[14px] whitespace-nowrap text-ink-muted">
                   <Icon size={15} />
                   {label}
-                  <span className="ml-auto rounded-full border border-[#e4e4e7] bg-white px-1.5 text-[10px] text-[#71717a]">Soon</span>
+                  <span className="ml-auto rounded-full border border-border bg-white px-1.5 text-[10px] text-ink-muted">Soon</span>
                 </span>
               ))}
-              <span className="mt-auto px-2.5 text-[11px] text-[#a1a1aa]">Wharf · {app?.version ?? ''}</span>
+              <span className="mt-auto px-2.5 text-[11px] text-ink-muted">Wharf · {app?.version ?? ''}</span>
             </nav>
             <div className="flex min-w-0 flex-1 flex-col">
-              <header className="flex items-start border-b border-[#f4f4f5] px-6 pt-5 pb-4">
+              <header className="flex items-start border-b border-border-subtle px-6 pt-5 pb-4">
                 <div className="flex flex-col gap-0.5">
                   <h2 className="m-0 text-[18px] font-semibold">{tab === 'general' ? 'General' : 'Atlassian Cloud'}</h2>
-                  <p className="m-0 text-[13px] text-[#71717a]">
+                  <p className="m-0 text-[13px] text-ink-muted">
                     {tab === 'general' ? 'The local app server behind Wharf.' : 'Jira issues and Service Desk requests.'}
                   </p>
                 </div>
                 <D.Close
                   aria-label="Close settings"
-                  className="ml-auto flex size-8 items-center justify-center rounded-md text-[#52525b] hover:bg-[#f4f4f5]"
+                  className="ml-auto flex size-8 items-center justify-center rounded-md text-ink-secondary hover:bg-bg-muted"
                 >
                   <X size={18} />
                 </D.Close>

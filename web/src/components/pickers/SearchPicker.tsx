@@ -25,26 +25,26 @@ export function SearchPicker({
 }) {
   return (
     <Command
-      className="overflow-hidden rounded-lg border border-[#c7d2fe] bg-white shadow-card"
+      className="overflow-hidden rounded-lg border border-[#c7d2fe] bg-white shadow-xs"
       loop
       filter={(value, search) => (value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0)}
     >
-      <div className="flex h-9 items-center gap-2 border-b border-[#f4f4f5] px-3">
-        <Search size={14} className="text-[#a1a1aa]" />
+      <div className="flex h-9 items-center gap-2 border-b border-border-subtle px-3">
+        <Search size={14} className="text-ink-faint" />
         <Command.Input
           autoFocus
           placeholder={placeholder}
-          className="h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[#a1a1aa]"
+          className="h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-faint"
         />
       </div>
       <Command.List className="max-h-[260px] overflow-y-auto p-1">
-        <Command.Empty className="px-2 py-3 text-[12px] text-[#a1a1aa]">{empty}</Command.Empty>
+        <Command.Empty className="px-2 py-3 text-[12px] text-ink-muted">{empty}</Command.Empty>
         {items.map((it) => (
           <Command.Item
             key={it.id}
             value={`${it.value} ${it.id}`}
             onSelect={() => onPick(it.id)}
-            className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-[13px] data-[selected=true]:bg-[#f4f4f5]"
+            className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-[13px] data-[selected=true]:bg-bg-muted"
           >
             {it.content}
           </Command.Item>

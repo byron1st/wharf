@@ -47,10 +47,10 @@ export function RequestInspector({
       <InspectorHeader onClose={onClose}>
         <span className="text-[13px] font-semibold">Request</span>
         <OriginBadge origin="sd" />
-        <span className="mr-auto font-mono text-[12px] text-[#52525b]">{request.key}</span>
+        <span className="mr-auto font-mono text-[12px] text-ink-secondary">{request.key}</span>
       </InspectorHeader>
       <div className="flex flex-col gap-[18px] p-4">
-        <div role="note" className="flex gap-2 rounded-lg border border-[#c7d2fe] bg-[#eef2ff] px-3 py-2 text-[12px] leading-normal text-[#4338ca]">
+        <div role="note" className="flex gap-2 rounded-lg border border-[#c7d2fe] bg-tag-indigo-bg px-3 py-2 text-[12px] leading-normal text-tag-indigo-ink">
           <Lock size={14} className="mt-0.5 shrink-0" />
           Synced from Service Desk with Jira sync. It leaves Today once it’s Done or Canceled.
         </div>
@@ -76,29 +76,29 @@ export function RequestInspector({
             ].map(([label, value]) => (
               <div key={label} className="flex min-w-0 flex-col gap-1.5">
                 <Label>{label}</Label>
-                <span className="flex h-[34px] items-center rounded-md bg-[#fafafa] px-2 text-[13px] tabular-nums">{value}</span>
+                <span className="flex h-[34px] items-center rounded-md bg-bg-subtle px-2 text-[13px] tabular-nums">{value}</span>
               </div>
             ))}
           </div>
-          <div className="flex gap-4 text-[12px] text-[#71717a]">
+          <div className="flex gap-4 text-[12px] text-ink-muted">
             <span>{statusAge === 'today' ? `Since today in ${request.status}` : `${statusAge} in ${request.status}`}</span>
             <span>Open for {openAge === 'today' ? 'less than a day' : openAge}</span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 border-t border-[#f4f4f5] pt-4">
-          <div className="flex items-center gap-1.5 text-[12px] font-medium text-[#3f3f46]">
+        <div className="flex flex-col gap-1.5 border-t border-border-subtle pt-4">
+          <div className="flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">
             <ListChecks size={13} />
             Linked todos
-            <span className="font-normal text-[#a1a1aa]">{linked.length}</span>
-            <span className="ml-auto font-normal text-[#a1a1aa]">Saved only in Wharf</span>
+            <span className="font-normal text-ink-muted">{linked.length}</span>
+            <span className="ml-auto font-normal text-ink-faint">Saved only in Wharf</span>
           </div>
           {linked.map((t) => (
-            <div key={t.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-[#e4e4e7] py-1.5 pr-1 pl-2.5">
+            <div key={t.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-border py-1.5 pr-1 pl-2.5">
               <Checkbox checked={t.is_done} label={t.description} onChange={(v) => update(t, { is_done: v })} />
               <button type="button" onClick={() => onSelectTodo(t.id)} className="flex min-w-0 flex-1 flex-col text-left">
-                <span className={cn('truncate text-[13px]', t.is_done && 'text-[#71717a] line-through')}>{t.description}</span>
-                <span className="flex min-w-0 items-center gap-1 text-[11px] text-[#71717a]">
+                <span className={cn('truncate text-[13px]', t.is_done && 'text-ink-muted line-through')}>{t.description}</span>
+                <span className="flex min-w-0 items-center gap-1 text-[11px] text-ink-muted">
                   <OriginDot origin={tasks.get(t.task_id)?.originated} className="size-[6px]" />
                   <span className="shrink-0 font-mono">{taskKey(t.task_id)}</span>
                   <span className="truncate">{tasks.get(t.task_id)?.title}</span>
@@ -108,7 +108,7 @@ export function RequestInspector({
                 type="button"
                 aria-label={`Unlink ${t.description}`}
                 onClick={() => unlink(t, request.key)}
-                className="flex size-[26px] shrink-0 items-center justify-center rounded-md text-[#71717a] hover:bg-black/5"
+                className="flex size-[26px] shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-black/5"
               >
                 <X size={12} strokeWidth={2.2} />
               </button>
@@ -124,9 +124,9 @@ export function RequestInspector({
                 content: (
                   <>
                     <OriginDot origin={tasks.get(t.task_id)?.originated} />
-                    <span className="shrink-0 font-mono text-[11px] text-[#52525b]">{taskKey(t.task_id)}</span>
+                    <span className="shrink-0 font-mono text-[11px] text-ink-secondary">{taskKey(t.task_id)}</span>
                     <span className="min-w-0 truncate">{t.description}</span>
-                    {isToday && <span className="ml-auto shrink-0 text-[10px] font-semibold text-[#c2410c]">TODAY</span>}
+                    {isToday && <span className="ml-auto shrink-0 text-[10px] font-semibold text-today-ink">TODAY</span>}
                   </>
                 ),
               }))}
@@ -141,7 +141,7 @@ export function RequestInspector({
             type="button"
             aria-expanded={picking}
             onClick={() => setPicking(!picking)}
-            className="flex h-8 items-center justify-center gap-1.5 rounded-md border border-dashed border-[#c7d2fe] bg-white text-[12px] font-medium text-[#4338ca] hover:bg-[#fafaff]"
+            className="flex h-8 items-center justify-center gap-1.5 rounded-md border border-dashed border-[#c7d2fe] bg-white text-[12px] font-medium text-tag-indigo-ink hover:bg-[#fafaff]"
           >
             <Link2 size={12} strokeWidth={2.2} />
             {picking ? 'Cancel' : 'Link an existing todo'}
