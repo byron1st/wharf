@@ -41,13 +41,15 @@ function useCollapsed() {
     }
   })
   const set = (ids: string[], v: boolean) => {
-    const next = { ...collapsed }
-    for (const id of ids) {
-      if (v) next[id] = true
-      else delete next[id]
-    }
-    setCollapsed(next)
-    localStorage.setItem('wharf.collapsed', JSON.stringify(next))
+    setCollapsed((prev) => {
+      const next = { ...prev }
+      for (const id of ids) {
+        if (v) next[id] = true
+        else delete next[id]
+      }
+      localStorage.setItem('wharf.collapsed', JSON.stringify(next))
+      return next
+    })
   }
   return [collapsed, set] as const
 }
@@ -503,8 +505,9 @@ export function TodosCard({
               type="button"
               aria-label={toggleAllLabel}
               title={toggleAllLabel}
+              disabled={groups.length === 0}
               onClick={toggleAll}
-              className="flex size-7 items-center justify-center rounded-md text-ink-muted hover:bg-black/5"
+              className="flex size-7 items-center justify-center rounded-md text-ink-muted hover:bg-black/5 disabled:opacity-50 disabled:hover:bg-transparent"
             >
               {allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
             </button>

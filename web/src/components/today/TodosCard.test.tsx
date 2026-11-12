@@ -131,7 +131,7 @@ describe('TodosCard', () => {
   })
 
   it('collapses every task from the column header, then expands them all again', () => {
-    renderCard([
+    const { setAdding } = renderCard([
       { task: task('local-WHF-001'), todos: [todo(1)] },
       { task: task('jira-SEC-3'), todos: [todo(2, { task_id: 'jira-SEC-3' })] },
     ])
@@ -146,7 +146,9 @@ describe('TodosCard', () => {
       'jira-SEC-3': true,
     })
 
+    setAdding.mockClear()
     fireEvent.click(screen.getByRole('button', { name: 'Expand all tasks' }))
+    expect(setAdding).not.toHaveBeenCalled()
     for (const b of groupToggles()) expect(b).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Todo 1')).toBeInTheDocument()
     expect(screen.getByText('Todo 2')).toBeInTheDocument()
@@ -181,5 +183,11 @@ describe('TodosCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse or expand WHF-001' }))
     expect(setAdding).toHaveBeenCalledWith(null)
+  })
+
+  it('disables the collapse-all button when there are no tasks', () => {
+    renderCard([])
+
+    expect(screen.getByRole('button', { name: 'Collapse all tasks' })).toBeDisabled()
   })
 })
