@@ -1,11 +1,12 @@
-import { Lock, Link2, ListChecks, X } from 'lucide-react'
+import { ExternalLink, Lock, Link2, ListChecks, X } from 'lucide-react'
 import { useState } from 'react'
 import { OriginBadge, OriginDot, reqStatusStyle } from '@/components/common/badges'
 import { SearchPicker } from '@/components/pickers/SearchPicker'
 import { Checkbox } from '@/components/ui/checkbox'
-import { useTodoActions, useTodos } from '@/hooks/data'
+import { useAtlassianSettings, useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import { taskKey, type ServiceDeskRequest, type TaskListItem, type Todo } from '@/lib/api'
+import { jiraURL } from '@/lib/jira'
 import { ageText, hhmm, isTodayTodo, monthDay, ymd } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import { InspectorHeader, Label } from './InspectorShell'
@@ -32,6 +33,8 @@ export function RequestInspector({
   const { today } = useNow()
   const { update, link, unlink } = useTodoActions()
   const { data: linked = [] } = useTodos({ service_desk_request: request.key })
+  const { data: atlassian } = useAtlassianSettings()
+  const browse = jiraURL(atlassian?.site_url, request.key)
   const [picking, setPicking] = useState(false)
   const s = reqStatusStyle(request)
   const statusAge = ageText(ymd(new Date(request.status_at)), today)
@@ -47,7 +50,21 @@ export function RequestInspector({
       <InspectorHeader onClose={onClose}>
         <span className="text-[13px] font-semibold">Request</span>
         <OriginBadge origin="sd" />
-        <span className="mr-auto font-mono text-[12px] text-ink-secondary">{request.key}</span>
+        {browse ? (
+          <a
+            href={browse}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open ${request.key} in Jira (new tab)`}
+            aria-label={`Open ${request.key} in Jira (new tab)`}
+            className="-ml-0.5 mr-auto inline-flex h-[22px] items-center gap-1 rounded-[5px] px-1.5 font-mono text-[12px] text-tag-indigo-ink underline decoration-tag-indigo-ink/35 underline-offset-[3px] hover:bg-tag-indigo-bg"
+          >
+            {request.key}
+            <ExternalLink size={11} strokeWidth={2.2} className="shrink-0" />
+          </a>
+        ) : (
+          <span className="mr-auto font-mono text-[12px] text-ink-secondary">{request.key}</span>
+        )}
       </InspectorHeader>
       <div className="flex flex-col gap-[18px] p-4">
         <div role="note" className="flex gap-2 rounded-lg border border-[#c7d2fe] bg-tag-indigo-bg px-3 py-2 text-[12px] leading-normal text-tag-indigo-ink">

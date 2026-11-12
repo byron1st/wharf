@@ -8,7 +8,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { Check, ChevronDown, ChevronRight, FileText, Plus, Ticket, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileText, Plus, Ticket, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Kbd, OriginDot, STATUS_LABEL, StatusIcon } from '@/components/common/badges'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -40,11 +40,16 @@ function useCollapsed() {
       return {}
     }
   })
-  const set = (id: string, v: boolean) => {
-    const next = { ...collapsed, [id]: v }
-    if (!v) delete next[id]
-    setCollapsed(next)
-    localStorage.setItem('wharf.collapsed', JSON.stringify(next))
+  const set = (ids: string[], v: boolean) => {
+    setCollapsed((prev) => {
+      const next = { ...prev }
+      for (const id of ids) {
+        if (v) next[id] = true
+        else delete next[id]
+      }
+      localStorage.setItem('wharf.collapsed', JSON.stringify(next))
+      return next
+    })
   }
   return [collapsed, set] as const
 }
@@ -578,6 +583,13 @@ export function TodosCard({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   const ids = groups.map((g) => g.task.id)
   const dragged = groups.find((g) => g.task.id === active)?.task
+  const isOpen = (id: string) => !collapsed[id] || adding === id
+  const allCollapsed = groups.length > 0 && !ids.some(isOpen)
+  const toggleAllLabel = allCollapsed ? 'Expand all tasks' : 'Collapse all tasks'
+  const toggleAll = () => {
+    setCollapsed(ids, !allCollapsed)
+    if (!allCollapsed) setAdding(null)
+  }
 
   const moveBy = (id: string, delta: -1 | 1) => {
     const i = ids.indexOf(id)
@@ -596,7 +608,18 @@ export function TodosCard({
     <section aria-label="Todos" className="min-w-0 overflow-x-auto rounded-xl border border-border bg-white shadow-xs">
       <div className="min-w-[520px]">
         <div className={cn(ROW, 'h-9 border-b border-border text-[12px] font-medium text-ink-muted')}>
-          <span />
+          <span className="flex justify-center">
+            <button
+              type="button"
+              aria-label={toggleAllLabel}
+              title={toggleAllLabel}
+              disabled={groups.length === 0}
+              onClick={toggleAll}
+              className="flex size-7 items-center justify-center rounded-md text-ink-muted hover:bg-black/5 disabled:opacity-50 disabled:hover:bg-transparent"
+            >
+              {allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+            </button>
+          </span>
           <span>Todo</span>
           <span>Reminder</span>
           <span className="text-right">When</span>
@@ -618,7 +641,7 @@ export function TodosCard({
         >
           {groups.map((g) => {
             const id = g.task.id
-            const open = !collapsed[id] || adding === id
+            const open = isOpen(id)
             return (
               <TaskGroup
                 key={id}
@@ -628,7 +651,10 @@ export function TodosCard({
                 adding={adding}
                 setAdding={setAdding}
                 open={open}
-                onCollapse={() => setCollapsed(id, open)}
+                onCollapse={() => {
+                  setCollapsed([id], open)
+                  if (open && adding === id) setAdding(null)
+                }}
                 doneOpen={!!doneOpen[id]}
                 onToggleDoneOpen={() => setDoneOpen((m) => ({ ...m, [id]: !m[id] }))}
                 onToggleDone={onToggleDone}

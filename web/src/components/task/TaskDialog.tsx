@@ -13,6 +13,7 @@ import { useAtlassianSettings, useTask, useTaskActions } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import { useSyncTask } from '@/hooks/useSync'
 import { taskKey, type TaskDetail, type TaskInput } from '@/lib/api'
+import { jiraURL } from '@/lib/jira'
 import { dayLabel, fromTaskDate, longDate, relDays, toTaskDate } from '@/lib/dates'
 import { notify } from '@/lib/toast'
 import { cn } from '@/lib/utils'
@@ -34,12 +35,6 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
       <div className="min-w-0">{children}</div>
     </div>
   )
-}
-
-/** jiraURL is the browser link of a Jira task on the configured site. */
-export function jiraURL(siteURL: string | undefined, id: string): string | null {
-  if (!siteURL) return null
-  return `${siteURL.replace(/\/+$/, '')}/browse/${encodeURIComponent(taskKey(id))}`
 }
 
 type Draft = Pick<TaskInput, 'title' | 'description' | 'status' | 'start_date' | 'due_date' | 'parent_id' | 'children_ids' | 'linked_ids'>
@@ -81,7 +76,7 @@ function Body({
   const view = draft ?? draftOf(task)
   const start = fromTaskDate(view.start_date)
   const due = fromTaskDate(view.due_date)
-  const link = jiraURL(atlassian?.site_url, task.id)
+  const link = jiraURL(atlassian?.site_url, taskKey(task.id))
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...(d ?? draftOf(task)), ...patch }))
   useEffect(() => onEditing(editing ? () => setDraft(null) : null), [editing, onEditing])
 

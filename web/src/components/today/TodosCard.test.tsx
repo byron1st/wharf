@@ -39,13 +39,13 @@ const todo = (id: number, over: Partial<Todo> = {}): Todo => ({
   ...over,
 })
 
-function renderCard(groups: TodoGroup[]) {
-  const props = { onToggleDone: vi.fn(), onSetStatus: vi.fn(), onMove: vi.fn() }
+function renderCard(groups: TodoGroup[], adding: string | null = null) {
+  const props = { onToggleDone: vi.fn(), onSetStatus: vi.fn(), onMove: vi.fn(), setAdding: vi.fn() }
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={qc}>
       <ClockContext.Provider value={{ now, today }}>
-        <TodosCard groups={groups} selection={null} onSelect={vi.fn()} adding={null} setAdding={vi.fn()} {...props} />
+        <TodosCard groups={groups} selection={null} onSelect={vi.fn()} adding={adding} {...props} />
       </ClockContext.Provider>
     </QueryClientProvider>,
   )
@@ -92,6 +92,7 @@ function stubSaves() {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  localStorage.clear()
 })
 
 describe('TodosCard', () => {
@@ -166,6 +167,7 @@ describe('TodosCard', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder WHF-001' }), { key: 'ArrowDown' })
     expect(onMove).toHaveBeenCalledTimes(3)
   })
+
   it('moves an open todo onto another of its task by drag', async () => {
     const saves = stubSaves()
     stubRects([1, 2, 3])
@@ -233,5 +235,66 @@ describe('TodosCard', () => {
     await new Promise((r) => setTimeout(r, 60))
     fireEvent.click(box)
     expect(onToggleDone).toHaveBeenCalledWith(first, true)
+  })
+
+  it('collapses every task from the column header, then expands them all again', () => {
+    const { setAdding } = renderCard([
+      { task: task('local-WHF-001'), todos: [todo(1)] },
+      { task: task('jira-SEC-3'), todos: [todo(2, { task_id: 'jira-SEC-3' })] },
+    ])
+    const groupToggles = () => screen.getAllByRole('button', { name: /^Collapse or expand / })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all tasks' }))
+    for (const b of groupToggles()) expect(b).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Todo 1')).toBeNull()
+    expect(screen.queryByText('Todo 2')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('wharf.collapsed') ?? '{}')).toEqual({
+      'local-WHF-001': true,
+      'jira-SEC-3': true,
+    })
+
+    setAdding.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all tasks' }))
+    expect(setAdding).not.toHaveBeenCalled()
+    for (const b of groupToggles()) expect(b).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Todo 1')).toBeInTheDocument()
+    expect(screen.getByText('Todo 2')).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('wharf.collapsed') ?? '{}')).toEqual({})
+    expect(screen.getByRole('button', { name: 'Collapse all tasks' })).toBeInTheDocument()
+  })
+
+  it('collapses every task when only some are collapsed', () => {
+    renderCard([
+      { task: task('local-WHF-001'), todos: [] },
+      { task: task('local-WHF-002'), todos: [] },
+    ])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse or expand WHF-001' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all tasks' }))
+
+    for (const b of screen.getAllByRole('button', { name: /^Collapse or expand / })) {
+      expect(b).toHaveAttribute('aria-expanded', 'false')
+    }
+    expect(screen.getByRole('button', { name: 'Expand all tasks' })).toBeInTheDocument()
+  })
+
+  it('closes the new todo row when collapsing every task', () => {
+    const { setAdding } = renderCard([{ task: task('local-WHF-001'), todos: [] }], 'local-WHF-001')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all tasks' }))
+    expect(setAdding).toHaveBeenCalledWith(null)
+  })
+
+  it('closes the new todo row when collapsing its task', () => {
+    const { setAdding } = renderCard([{ task: task('local-WHF-001'), todos: [] }], 'local-WHF-001')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse or expand WHF-001' }))
+    expect(setAdding).toHaveBeenCalledWith(null)
+  })
+
+  it('disables the collapse-all button when there are no tasks', () => {
+    renderCard([])
+
+    expect(screen.getByRole('button', { name: 'Collapse all tasks' })).toBeDisabled()
   })
 })
