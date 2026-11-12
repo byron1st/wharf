@@ -69,15 +69,16 @@ export function Updates() {
     }
   }
 
+  const when = checked && `${ymd(checked) === today ? 'today' : monthDay(ymd(checked))} at ${hhmm(checked)}`
   const note =
     phase === 'checking'
       ? 'Checking GitHub releases…'
       : !update.supported
         ? 'Update checks are off: a development build, not macOS on Apple silicon, or update_check = false.'
         : update.check_failed
-          ? 'Last check failed'
-          : checked
-            ? `Last checked ${ymd(checked) === today ? 'today' : monthDay(ymd(checked))} at ${hhmm(checked)}`
+          ? `Last check failed${when ? ` · last successful check ${when}` : ''}`
+          : when
+            ? `Last checked ${when}`
             : 'Not checked yet.'
 
   return (
@@ -94,7 +95,7 @@ export function Updates() {
             <span className="text-[15px] font-semibold">Wharf</span>
             <span className="font-mono text-[13px]">{update.current}</span>
             {update.supported && checked && !update.available && !update.check_failed && (
-              <span className="inline-flex h-5 items-center gap-1 self-center rounded-full bg-[#dcfce7] px-[7px] text-[11px] font-medium text-success-ink">
+              <span className="inline-flex h-5 items-center gap-1 self-center rounded-full bg-success-tint px-[7px] text-[11px] font-medium text-success-ink">
                 <Check size={10} strokeWidth={3} />
                 Latest
               </span>

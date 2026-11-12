@@ -104,10 +104,16 @@ describe('Updates', () => {
   it('shows a failed check with a retry', async () => {
     renderUpdates(status({ check_failed: true }))
 
-    expect(await screen.findByText('Last check failed')).toBeInTheDocument()
+    expect(await screen.findByText('Last check failed · last successful check today at 14:07')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent(/Couldn’t check for updates/)
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
     expect(screen.queryByText('Latest')).toBeNull()
+  })
+
+  it('says only that the check failed when none has succeeded yet', async () => {
+    renderUpdates(status({ check_failed: true, latest: null, checked_at: null }))
+
+    expect(await screen.findByText('Last check failed')).toBeInTheDocument()
   })
 
   it('hides the failed-check alert while updating', async () => {

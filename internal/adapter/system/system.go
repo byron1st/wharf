@@ -251,8 +251,9 @@ func (c *client) GitHubToken(ctx context.Context) (string, error) {
 		return "", errors.Join(fmt.Errorf("%w: service=%s", ErrFailedToReadGitHubToken, KeychainGitHubService), err)
 	}
 
-	// security ends the password with a newline.
-	token := strings.TrimSuffix(string(out), "\n")
+	// security ends the password with a newline, and a token pasted at the
+	// prompt may carry stray whitespace that would break the header.
+	token := strings.TrimSpace(string(out))
 	if token == "" {
 		return "", fmt.Errorf("%w: service=%s", ErrEmptyGitHubToken, KeychainGitHubService)
 	}

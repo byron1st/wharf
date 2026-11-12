@@ -16,6 +16,9 @@ var (
 	ErrFailedToCreateReleaseRequest  = errors.New("github: failed to create latest release request")
 	ErrFailedToRequestLatestRelease  = errors.New("github: failed to request latest release")
 	ErrUnexpectedLatestReleaseStatus = errors.New("github: unexpected latest release status")
+	ErrGitHubTokenRejected           = errors.New(
+		"github: token rejected; replace or delete the wharf-github keychain item and restart",
+	)
 	ErrFailedToDecodeLatestRelease   = errors.New("github: failed to decode latest release")
 	ErrFailedToCreateDownloadRequest = errors.New("github: failed to create download request")
 	ErrFailedToDownloadAsset         = errors.New("github: failed to download release asset")
@@ -100,6 +103,10 @@ func (c *client) LatestRelease(ctx context.Context) (Release, error) {
 	}
 
 	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusUnauthorized && c.token != "" {
+		return Release{}, ErrGitHubTokenRejected
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return Release{}, fmt.Errorf("%w: status=%d", ErrUnexpectedLatestReleaseStatus, resp.StatusCode)

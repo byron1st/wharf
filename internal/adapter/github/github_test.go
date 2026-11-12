@@ -45,6 +45,21 @@ func TestLatestReleaseWithToken(t *testing.T) {
 	require.Equal(t, "v0.2.0", rel.Tag)
 }
 
+func TestLatestReleaseUnauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	_, err := github.NewClientWithToken(srv.URL, srv.URL, "expired").LatestRelease(t.Context())
+	require.ErrorIs(t, err, github.ErrGitHubTokenRejected)
+
+	// Without a token a 401 is just an unexpected status.
+	_, err = github.NewClientWith(srv.URL, srv.URL).LatestRelease(t.Context())
+	require.ErrorIs(t, err, github.ErrUnexpectedLatestReleaseStatus)
+	require.ErrorContains(t, err, "status=401")
+}
+
 func TestDownloadWithTokenSendsNoCredentials(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v0.2.0/checksums.txt", func(w http.ResponseWriter, r *http.Request) {

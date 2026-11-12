@@ -320,6 +320,14 @@ func TestGitHubToken(t *testing.T) {
 	}}, *calls)
 }
 
+func TestGitHubTokenTrimsWhitespace(t *testing.T) {
+	_, run := recorder([]byte(" github_pat_x \r\n"), nil)
+
+	token, err := system.NewDesktopWith("darwin", run).GitHubToken(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "github_pat_x", token)
+}
+
 func TestGitHubTokenNotFound(t *testing.T) {
 	_, run := recorder(nil, exitError(t, 44))
 
@@ -339,6 +347,7 @@ func TestGitHubTokenFailures(t *testing.T) {
 		"other exit":    {goos: "darwin", err: exitError(t, 51), want: system.ErrFailedToReadGitHubToken},
 		"command fails": {goos: "darwin", err: errors.New("security missing"), want: system.ErrFailedToReadGitHubToken},
 		"empty token":   {goos: "darwin", out: []byte("\n"), want: system.ErrEmptyGitHubToken},
+		"blank token":   {goos: "darwin", out: []byte(" \t\n"), want: system.ErrEmptyGitHubToken},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, run := recorder(tc.out, tc.err)
