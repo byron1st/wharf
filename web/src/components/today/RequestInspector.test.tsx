@@ -18,17 +18,17 @@ const request: ServiceDeskRequest = {
   status_at: atLocal('2026-11-11', '10:00').toISOString(),
 }
 
-/** renderInspector serves siteURL from GET /api/settings/atlassian and no linked todos. */
+/** renderInspector renders with the Atlassian settings already loaded, so the branch under test is the first render. */
 function renderInspector(siteURL: string) {
+  const settings = { site_url: siteURL, email: '', api_token: '' }
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) =>
-      url === '/api/settings/atlassian'
-        ? new Response(JSON.stringify({ site_url: siteURL, email: '', api_token: '' }))
-        : new Response(JSON.stringify({ todos: [] })),
+      url === '/api/settings/atlassian' ? new Response(JSON.stringify(settings)) : new Response(JSON.stringify({ todos: [] })),
     ),
   )
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  qc.setQueryData(['settings', 'atlassian'], settings)
   render(
     <QueryClientProvider client={qc}>
       <ClockContext.Provider value={{ now, today }}>
@@ -41,17 +41,17 @@ function renderInspector(siteURL: string) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('RequestInspector', () => {
-  it('links the request key to its Jira browse page in a new tab', async () => {
+  it('links the request key to its Jira browse page in a new tab', () => {
     renderInspector('https://example.atlassian.net/')
-    const link = await screen.findByRole('link', { name: 'Open CIS-12345 in Jira (new tab)' })
+    const link = screen.getByRole('link', { name: 'Open CIS-12345 in Jira (new tab)' })
     expect(link).toHaveAttribute('href', 'https://example.atlassian.net/browse/CIS-12345')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
-  it('shows the key as plain text when no site URL is set', async () => {
+  it('shows the key as plain text when no site URL is set', () => {
     renderInspector('')
-    expect(await screen.findByText('CIS-12345')).toBeInTheDocument()
+    expect(screen.getByText('CIS-12345')).toBeInTheDocument()
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 })
