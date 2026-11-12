@@ -124,8 +124,8 @@ wharf service uninstall
 
 릴리스 빌드를 macOS(arm64)에서 실행하면, 서버가 시작할 때와 `update_check_interval`마다 GitHub의 최신 릴리스(`/releases/latest`, draft와 pre-release 제외)를 확인합니다.
 
-- 새 버전을 처음 발견하면 macOS 알림을 한 번 띄우고, 웹 앱 상단에 배너가 나타납니다. Settings › General에서 현재 버전과 마지막 확인 시각을 볼 수 있습니다.
-- 배너의 **Upgrade**를 누르면 서버가 릴리스 archive와 `checksums.txt`를 받아 SHA-256을 검증한 뒤, archive 안의 `wharf`로 실행 중인 바이너리를 교체하고 재시작합니다. 웹 앱은 서버가 돌아오면 새로고침됩니다.
+- 새 버전을 처음 발견하면 macOS 알림을 한 번 띄웁니다. Settings › General의 Version에서 현재 버전, 마지막 확인 시각과 결과를 볼 수 있고, **Check for updates**로 바로 확인할 수 있습니다. 확인이 실패하면 그 사실이 표시되고, 원인은 서버 로그에 남습니다.
+- 새 버전이 있으면 Version에 나타나는 **Update and restart**를 누릅니다. 서버가 릴리스 archive와 `checksums.txt`를 받아 SHA-256을 검증한 뒤, archive 안의 `wharf`로 실행 중인 바이너리를 교체하고 재시작합니다. 웹 앱은 서버가 돌아오면 새로고침됩니다.
 - 교체는 같은 디렉터리 안에서 rename으로 하므로, 바이너리가 있는 디렉터리에 쓰기 권한이 있어야 합니다(`~/.local/bin` 등). 검증이나 교체가 실패하면 바이너리는 그대로입니다.
 - 이전 바이너리는 `wharf.old`로 남습니다. 새 버전에 문제가 있으면 서버를 멈추고 되돌립니다. 새 버전이 DB 마이그레이션을 적용했다면 `DB 마이그레이션`의 백업 파일도 함께 되돌려야 이전 버전이 시작됩니다.
 
@@ -135,6 +135,15 @@ wharf service uninstall
   wharf service install
   ```
 
+- GitHub API는 인증 없이 호출하면 IP당 시간당 60회로 제한되어, 회사 망처럼 여러 사람이 공인 IP를 공유하면 확인이 403으로 실패할 수 있습니다. 로그인 키체인에 서비스 이름이 `wharf-github`인 GitHub 토큰을 등록하면 확인 요청에 그 토큰을 써서 사용자당 한도(시간당 5,000회)를 적용받습니다. 선택 사항이며, 없으면 인증 없이 확인합니다.
+
+  ```sh
+  security add-generic-password -a "$USER" -s wharf-github -w
+  ```
+
+  - 토큰은 fine-grained personal access token에 Repository access를 "Public repositories (read-only)"로 두고 다른 권한은 주지 않으면 됩니다(classic이라면 scope 없이).
+  - 서버가 시작할 때 한 번 읽으므로, 등록하거나 바꾼 뒤에는 재시작합니다(`launchctl kickstart -k gui/$(id -u)/com.byron1st.wharf`). 읽지 못하면 경고 로그만 남기고 인증 없이 확인합니다.
+  - 토큰은 최신 릴리스 조회에만 쓰고, 릴리스 파일 다운로드에는 보내지 않습니다.
 - `make build`/`make install`로 만든 개발 빌드(`(devel)`, pseudo-version, `+dirty`)는 확인하지 않습니다. `update_check = false`로 끌 수도 있습니다.
 - v0.1.0에는 업데이트 기능이 없으므로, 이 기능이 들어간 첫 버전은 직접 설치해야 합니다.
 

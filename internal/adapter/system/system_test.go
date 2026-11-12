@@ -307,3 +307,45 @@ func TestDBPasswordFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestGitHubToken(t *testing.T) {
+	calls, run := recorder([]byte("github_pat_x\n"), nil)
+
+	token, err := system.NewDesktopWith("darwin", run).GitHubToken(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "github_pat_x", token)
+	require.Equal(t, []call{{
+		name: "/usr/bin/security",
+		args: []string{"find-generic-password", "-s", system.KeychainGitHubService, "-w"},
+	}}, *calls)
+}
+
+func TestGitHubTokenNotFound(t *testing.T) {
+	_, run := recorder(nil, exitError(t, 44))
+
+	token, err := system.NewDesktopWith("darwin", run).GitHubToken(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, token)
+}
+
+func TestGitHubTokenFailures(t *testing.T) {
+	for name, tc := range map[string]struct {
+		goos string
+		out  []byte
+		err  error
+		want error
+	}{
+		"not macOS":     {goos: "linux", want: system.ErrUnsupportedOS},
+		"other exit":    {goos: "darwin", err: exitError(t, 51), want: system.ErrFailedToReadGitHubToken},
+		"command fails": {goos: "darwin", err: errors.New("security missing"), want: system.ErrFailedToReadGitHubToken},
+		"empty token":   {goos: "darwin", out: []byte("\n"), want: system.ErrEmptyGitHubToken},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, run := recorder(tc.out, tc.err)
+
+			token, err := system.NewDesktopWith(tc.goos, run).GitHubToken(t.Context())
+			require.ErrorIs(t, err, tc.want)
+			require.Empty(t, token)
+		})
+	}
+}

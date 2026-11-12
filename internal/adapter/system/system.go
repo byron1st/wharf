@@ -29,6 +29,8 @@ var (
 	ErrDBPasswordNotFound              = errors.New("system: database password not found in keychain")
 	ErrFailedToReadDBPassword          = errors.New("system: failed to read database password from keychain")
 	ErrEmptyDBPassword                 = errors.New("system: database password in keychain is empty")
+	ErrFailedToReadGitHubToken         = errors.New("system: failed to read GitHub token from keychain")
+	ErrEmptyGitHubToken                = errors.New("system: GitHub token in keychain is empty")
 	ErrFailedToFindExecutableToReplace = errors.New("system: failed to find executable to replace")
 	ErrFailedToFindExecutableToInstall = errors.New("system: failed to find executable to install")
 	ErrFailedToCreateTempExecutable    = errors.New("system: failed to create temp executable")
@@ -105,6 +107,10 @@ const securityPath = "/usr/bin/security"
 // login keychain that holds the database password.
 const KeychainDBService = "wharf-db"
 
+// KeychainGitHubService is the service name of the optional generic password
+// item in the login keychain that holds a GitHub token for the update check.
+const KeychainGitHubService = "wharf-github"
+
 // itemNotFoundExitCode is the exit code of security when no keychain item
 // matches (errSecItemNotFound).
 const itemNotFoundExitCode = 44
@@ -118,6 +124,7 @@ type Desktop interface {
 	Open(ctx context.Context, path string) error
 	Notify(ctx context.Context, title, message string) error
 	DBPassword(ctx context.Context) (string, error)
+	GitHubToken(ctx context.Context) (string, error)
 	ReplaceExecutable(ctx context.Context, data []byte) error
 	InstallLaunchAgent(ctx context.Context, configPath string) error
 	UninstallLaunchAgent(ctx context.Context) error
@@ -224,6 +231,33 @@ func (c *client) DBPassword(ctx context.Context) (string, error) {
 	}
 
 	return password, nil
+}
+
+// GitHubToken returns the password of the KeychainGitHubService generic
+// password item in the user's keychains, or "" when there is no such item: the
+// token is optional. It fails with ErrEmptyGitHubToken when the item's
+// password is empty. Error messages never carry the token.
+func (c *client) GitHubToken(ctx context.Context) (string, error) {
+	if c.goos != "darwin" {
+		return "", ErrUnsupportedOS
+	}
+
+	out, err := c.run(ctx, securityPath, "find-generic-password", "-s", KeychainGitHubService, "-w")
+	if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) && exitErr.ExitCode() == itemNotFoundExitCode {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", errors.Join(fmt.Errorf("%w: service=%s", ErrFailedToReadGitHubToken, KeychainGitHubService), err)
+	}
+
+	// security ends the password with a newline.
+	token := strings.TrimSuffix(string(out), "\n")
+	if token == "" {
+		return "", fmt.Errorf("%w: service=%s", ErrEmptyGitHubToken, KeychainGitHubService)
+	}
+
+	return token, nil
 }
 
 // ReplaceExecutable makes data the running executable, resolved through
