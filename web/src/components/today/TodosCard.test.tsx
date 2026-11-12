@@ -175,4 +175,11 @@ describe('TodosCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Collapse all tasks' }))
     expect(setAdding).toHaveBeenCalledWith(null)
   })
+
+  it('closes the new todo row when collapsing its task', () => {
+    const { setAdding } = renderCard([{ task: task('local-WHF-001'), todos: [] }], 'local-WHF-001')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse or expand WHF-001' }))
+    expect(setAdding).toHaveBeenCalledWith(null)
+  })
 })

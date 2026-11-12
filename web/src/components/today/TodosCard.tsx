@@ -540,7 +540,10 @@ export function TodosCard({
                 adding={adding}
                 setAdding={setAdding}
                 open={open}
-                onCollapse={() => setCollapsed([id], open)}
+                onCollapse={() => {
+                  setCollapsed([id], open)
+                  if (open && adding === id) setAdding(null)
+                }}
                 doneOpen={!!doneOpen[id]}
                 onToggleDoneOpen={() => setDoneOpen((m) => ({ ...m, [id]: !m[id] }))}
                 onToggleDone={onToggleDone}
