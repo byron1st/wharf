@@ -56,6 +56,81 @@ describe('useTodoActions().update', () => {
   })
 })
 
+describe('useTodoActions().update with a position', () => {
+  const at = (id: number, position: number, task_id = 'local-WHF-001'): Todo => ({ ...todo, id, task_id, position })
+
+  it.each([
+    { name: 'down', id: 1, to: 2, want: { 1: 2, 2: 0, 3: 1, 4: 3 } },
+    { name: 'up', id: 4, to: 1, want: { 1: 0, 2: 2, 3: 3, 4: 1 } },
+  ])('shifts the cached todos of the task at once when a todo moves $name', async ({ id, to, want }) => {
+    let release!: () => void
+    const held = new Promise<void>((r) => (release = r))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          await held
+          return new Response(null, { status: 204 })
+        }
+        return new Promise<Response>(() => {})
+      }),
+    )
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const other = at(9, 1, 'local-WHF-002')
+    qc.setQueryData(keys.todos({ is_done: false }), [at(1, 0), at(2, 1), at(4, 3), other])
+    qc.setQueryData(keys.todos({ completed_since: 'x' }), [{ ...at(3, 2), is_done: true }])
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    const { result } = renderHook(() => useTodoActions(), { wrapper })
+
+    const moved = [at(1, 0), at(2, 1), at(3, 2), at(4, 3)].find((t) => t.id === id)!
+    act(() => result.current.update(moved, { position: to }))
+
+    await waitFor(() => {
+      const cached = [
+        ...(qc.getQueryData<Todo[]>(keys.todos({ is_done: false })) ?? []),
+        ...(qc.getQueryData<Todo[]>(keys.todos({ completed_since: 'x' })) ?? []),
+      ]
+      expect(Object.fromEntries(cached.filter((t) => t.task_id === 'local-WHF-001').map((t) => [t.id, t.position]))).toEqual(want)
+      expect(cached.find((t) => t.id === 9)?.position).toBe(1)
+    })
+    release()
+  })
+})
+
+describe('useTodoActions().update moving todos of one task', () => {
+  it('sends the second move only after the first lands', async () => {
+    const urls: string[] = []
+    let release!: () => void
+    const firstHeld = new Promise<void>((r) => (release = r))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          urls.push(url)
+          if (urls.length === 1) await firstHeld
+          return new Response(null, { status: 204 })
+        }
+        return new Promise<Response>(() => {})
+      }),
+    )
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const a = { ...todo, id: 1, position: 0 }
+    const b = { ...todo, id: 2, position: 1 }
+    qc.setQueryData(keys.todos({ is_done: false }), [a, b])
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    const { result } = renderHook(() => useTodoActions(), { wrapper })
+
+    act(() => result.current.update(a, { position: 1 }))
+    await waitFor(() => expect(urls).toEqual(['/api/todos/1']))
+    act(() => result.current.update(b, { position: 1 }))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(urls).toEqual(['/api/todos/1'])
+
+    release()
+    await waitFor(() => expect(urls).toEqual(['/api/todos/1', '/api/todos/2']))
+  })
+})
+
 const task: TaskDetail = {
   id: 'local-WHF-001',
   originated: 'local',

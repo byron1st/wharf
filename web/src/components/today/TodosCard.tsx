@@ -8,8 +8,8 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { Check, ChevronDown, ChevronRight, FileText, Plus, Ticket, X } from 'lucide-react'
-import { useState } from 'react'
+import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileText, Plus, Ticket, X } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { Kbd, OriginDot, STATUS_LABEL, StatusIcon } from '@/components/common/badges'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -40,11 +40,16 @@ function useCollapsed() {
       return {}
     }
   })
-  const set = (id: string, v: boolean) => {
-    const next = { ...collapsed, [id]: v }
-    if (!v) delete next[id]
-    setCollapsed(next)
-    localStorage.setItem('wharf.collapsed', JSON.stringify(next))
+  const set = (ids: string[], v: boolean) => {
+    setCollapsed((prev) => {
+      const next = { ...prev }
+      for (const id of ids) {
+        if (v) next[id] = true
+        else delete next[id]
+      }
+      localStorage.setItem('wharf.collapsed', JSON.stringify(next))
+      return next
+    })
   }
   return [collapsed, set] as const
 }
@@ -206,6 +211,122 @@ function DoneTodos({
       onToggleDone={onToggleDone}
     />
   ))
+}
+
+/** DraggableTodo is an open todo row that drags onto, and takes drops from, the open todos of its task. */
+function DraggableTodo({
+  todo,
+  dragging,
+  line,
+  children,
+}: {
+  todo: Todo
+  dragging: boolean
+  /** line marks where a dropped todo will land. */
+  line: 'top' | 'bottom' | null
+  children: ReactNode
+}) {
+  const { setNodeRef: dragRef, listeners } = useDraggable({ id: todo.id })
+  const { setNodeRef: dropRef } = useDroppable({ id: todo.id })
+  return (
+    <div
+      ref={(node) => {
+        dragRef(node)
+        dropRef(node)
+      }}
+      {...listeners}
+      data-todo={todo.id}
+      className={cn('relative', dragging && 'opacity-45')}
+    >
+      <span aria-hidden className="absolute top-1/2 left-[3px] z-[1] flex size-3 -translate-y-1/2 cursor-grab text-border-strong">
+        <GripIcon />
+      </span>
+      {children}
+      {line && <span aria-hidden className={cn('absolute inset-x-0 z-[1] h-0.5 bg-accent', line === 'top' ? 'top-0' : 'bottom-0')} />}
+    </div>
+  )
+}
+
+/** TodoRows lists a task's todos for today; open ones reorder by drag within the task. */
+function TodoRows({
+  todos,
+  selection,
+  onSelect,
+  onToggleDone,
+}: {
+  todos: Todo[]
+  selection: Selection
+  onSelect: (s: Selection) => void
+  onToggleDone: (todo: Todo, done: boolean) => void
+}) {
+  const { update } = useTodoActions()
+  const [active, setActive] = useState<number | null>(null)
+  const [over, setOver] = useState<number | null>(null)
+  // A small distance keeps clicks on the row's checkbox and text from starting a drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  const ids = todos.map((t) => t.id)
+  const dragged = todos.find((t) => t.id === active)
+
+  const reset = () => {
+    setActive(null)
+    setOver(null)
+  }
+
+  const row = (t: Todo) => (
+    <TodoRow
+      key={t.id}
+      todo={t}
+      selected={selection?.kind === 'todo' && selection.id === t.id}
+      onSelect={() => onSelect({ kind: 'todo', id: t.id })}
+      onToggleDone={onToggleDone}
+    />
+  )
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={(e) => setActive(Number(e.active.id))}
+      onDragOver={(e) => setOver(e.over ? Number(e.over.id) : null)}
+      onDragCancel={reset}
+      onDragEnd={(e) => {
+        reset()
+        const from = todos.find((t) => t.id === Number(e.active.id))
+        const to = e.over && todos.find((t) => t.id === Number(e.over?.id))
+        if (!from || !to || from.id === to.id || to.position == null) return
+        update(from, { position: to.position })
+      }}
+    >
+      {todos.map((t) =>
+        t.is_done ? (
+          row(t)
+        ) : (
+          <DraggableTodo
+            key={t.id}
+            todo={t}
+            dragging={active === t.id}
+            line={
+              active !== null && active !== t.id && over === t.id
+                ? ids.indexOf(active) < ids.indexOf(t.id)
+                  ? 'bottom'
+                  : 'top'
+                : null
+            }
+          >
+            {row(t)}
+          </DraggableTodo>
+        ),
+      )}
+      <DragOverlay dropAnimation={null}>
+        {dragged && (
+          <div className="flex h-11 max-w-[420px] cursor-grabbing items-center gap-2 rounded-lg border border-border bg-white px-3 text-[14px] shadow-lg">
+            <span className="size-[18px] shrink-0 rounded-[5px] border-[1.5px] border-border-control" />
+            <span className="min-w-0 truncate">{dragged.description}</span>
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
+  )
 }
 
 /** TaskStatusButton opens the status menu of a local task; a Jira task's status is read-only. */
@@ -409,15 +530,7 @@ function TaskGroup({
       {open && (
         <>
           {adding === task.id && <NewTodoRow task={task} onDone={() => setAdding(null)} />}
-          {todos.map((t) => (
-            <TodoRow
-              key={t.id}
-              todo={t}
-              selected={selection?.kind === 'todo' && selection.id === t.id}
-              onSelect={() => onSelect({ kind: 'todo', id: t.id })}
-              onToggleDone={onToggleDone}
-            />
-          ))}
+          <TodoRows todos={todos} selection={selection} onSelect={onSelect} onToggleDone={onToggleDone} />
           {doneOpen && (
             <DoneTodos task={task} shown={todos} selection={selection} onSelect={onSelect} onToggleDone={onToggleDone} />
           )}
@@ -470,6 +583,13 @@ export function TodosCard({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   const ids = groups.map((g) => g.task.id)
   const dragged = groups.find((g) => g.task.id === active)?.task
+  const isOpen = (id: string) => !collapsed[id] || adding === id
+  const allCollapsed = groups.length > 0 && !ids.some(isOpen)
+  const toggleAllLabel = allCollapsed ? 'Expand all tasks' : 'Collapse all tasks'
+  const toggleAll = () => {
+    setCollapsed(ids, !allCollapsed)
+    if (!allCollapsed) setAdding(null)
+  }
 
   const moveBy = (id: string, delta: -1 | 1) => {
     const i = ids.indexOf(id)
@@ -488,7 +608,18 @@ export function TodosCard({
     <section aria-label="Todos" className="min-w-0 overflow-x-auto rounded-xl border border-border bg-white shadow-xs">
       <div className="min-w-[520px]">
         <div className={cn(ROW, 'h-9 border-b border-border text-[12px] font-medium text-ink-muted')}>
-          <span />
+          <span className="flex justify-center">
+            <button
+              type="button"
+              aria-label={toggleAllLabel}
+              title={toggleAllLabel}
+              disabled={groups.length === 0}
+              onClick={toggleAll}
+              className="flex size-7 items-center justify-center rounded-md text-ink-muted hover:bg-black/5 disabled:opacity-50 disabled:hover:bg-transparent"
+            >
+              {allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+            </button>
+          </span>
           <span>Todo</span>
           <span>Reminder</span>
           <span className="text-right">When</span>
@@ -510,7 +641,7 @@ export function TodosCard({
         >
           {groups.map((g) => {
             const id = g.task.id
-            const open = !collapsed[id] || adding === id
+            const open = isOpen(id)
             return (
               <TaskGroup
                 key={id}
@@ -520,7 +651,10 @@ export function TodosCard({
                 adding={adding}
                 setAdding={setAdding}
                 open={open}
-                onCollapse={() => setCollapsed(id, open)}
+                onCollapse={() => {
+                  setCollapsed([id], open)
+                  if (open && adding === id) setAdding(null)
+                }}
                 doneOpen={!!doneOpen[id]}
                 onToggleDoneOpen={() => setDoneOpen((m) => ({ ...m, [id]: !m[id] }))}
                 onToggleDone={onToggleDone}

@@ -102,6 +102,25 @@ function patchCounts(qc: QueryClient, taskID: string, todos: number, done: numbe
   )
 }
 
+/**
+ * patchPositions moves todo id to position to among its task's cached todos,
+ * shifting the ones between as the server does, so lists sorted by position
+ * show the new order before the refetch.
+ */
+function patchPositions(qc: QueryClient, id: number, taskID: string, to: number) {
+  const from = cachedTodo(qc, id)?.position
+  if (from == null || from === to) return
+  qc.setQueriesData<Todo[]>({ queryKey: keys.allTodos }, (old) =>
+    old?.map((t) => {
+      if (t.task_id !== taskID || t.position == null) return t
+      if (t.id === id) return { ...t, position: to }
+      if (from < to && t.position > from && t.position <= to) return { ...t, position: t.position - 1 }
+      if (to < from && t.position >= to && t.position < from) return { ...t, position: t.position + 1 }
+      return t
+    }),
+  )
+}
+
 function settle(qc: QueryClient) {
   void qc.invalidateQueries({ queryKey: keys.allTodos })
   void qc.invalidateQueries({ queryKey: keys.tasks })
@@ -128,11 +147,18 @@ export function useTodoActions() {
     // The body is built when the save is sent, from the cache that already
     // holds this patch and every earlier one, so concurrent edits of other
     // fields are kept.
+    // Moves within a task also go one at a time, since each position assumes
+    // the earlier moves have landed.
     mutationFn: ({ todo, patch }: TodoUpdate) =>
-      queued(`todo-${todo.id}`, () => api.updateTodo(todo.id, todoInput(cachedTodo(qc, todo.id) ?? todo, patch))),
+      queued(`todo-${todo.id}`, () => {
+        const save = () => api.updateTodo(todo.id, todoInput(cachedTodo(qc, todo.id) ?? todo, patch))
+        return patch.position === undefined ? save() : queued(`todo-order-${todo.task_id}`, save)
+      }),
     onMutate: async ({ todo, patch }) => {
       await qc.cancelQueries({ queryKey: keys.allTodos })
       const snap = snapshot(qc)
+      // Shift siblings first, while the cache still holds the todo's old position.
+      if (patch.position !== undefined) patchPositions(qc, todo.id, todo.task_id, patch.position)
       patchTodo(qc, todo.id, (t) => {
         const next = { ...t, ...patch } as Todo
         if (patch.is_done !== undefined && patch.is_done !== t.is_done) {
