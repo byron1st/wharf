@@ -52,7 +52,47 @@ function renderCard(groups: TodoGroup[]) {
   return props
 }
 
-afterEach(() => vi.unstubAllGlobals())
+/** stubRects lays the todo rows out 44px apart in the given order, so dnd-kit can find the row under the pointer. */
+function stubRects(order: number[]) {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const i = this.dataset.todo ? order.indexOf(Number(this.dataset.todo)) : -1
+    const top = i < 0 ? -1000 : i * 44
+    return { x: 0, y: top, top, left: 0, right: 500, bottom: top + 44, width: 500, height: 44, toJSON: () => ({}) }
+  })
+}
+
+/** drag presses on the text, moves to the middle of the row at index to, and lets go. */
+async function drag(text: string, to: number) {
+  // The drag overlay of an earlier drag repeats the text until it is gone.
+  const el = await waitFor(() => screen.getByText(text))
+  const at = (y: number) => ({ clientX: 100, clientY: y, isPrimary: true, button: 0 })
+  const y = Number(el.closest<HTMLElement>('[data-todo]')?.getBoundingClientRect().top ?? -1000) + 22
+  fireEvent.pointerDown(el, at(y))
+  fireEvent.pointerMove(el, at(y + 6))
+  fireEvent.pointerMove(el, at(to * 44 + 22))
+  fireEvent.pointerUp(el, at(to * 44 + 22))
+}
+
+/** stubSaves records the todo saves the card sends. */
+function stubSaves() {
+  const saves: { url: string; body: Record<string, unknown> }[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        saves.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> })
+        return new Response(null, { status: 204 })
+      }
+      return new Response(JSON.stringify({ todos: [], tasks: [] }))
+    }),
+  )
+  return saves
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 describe('TodosCard', () => {
   it('changes a local task status from its menu', async () => {
@@ -125,5 +165,73 @@ describe('TodosCard', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder WHF-001' }), { key: 'ArrowUp', altKey: true })
     fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder WHF-001' }), { key: 'ArrowDown' })
     expect(onMove).toHaveBeenCalledTimes(3)
+  })
+  it('moves an open todo onto another of its task by drag', async () => {
+    const saves = stubSaves()
+    stubRects([1, 2, 3])
+    renderCard([{ task: task('local-WHF-003'), todos: [todo(1), todo(2), todo(3)] }])
+
+    await drag('Todo 1', 2)
+
+    await waitFor(() => expect(saves).toHaveLength(1))
+    expect(saves[0].url).toBe('/api/todos/1')
+    expect(saves[0].body).toMatchObject({ description: 'Todo 1', position: 3 })
+  })
+
+  it('moves a todo up to the position of the one it lands on', async () => {
+    const saves = stubSaves()
+    stubRects([4, 7, 9])
+    renderCard([{ task: task('local-WHF-003'), todos: [todo(4), todo(7), todo(9)] }])
+
+    await drag('Todo 9', 0)
+
+    await waitFor(() => expect(saves).toHaveLength(1))
+    expect(saves[0].url).toBe('/api/todos/9')
+    expect(saves[0].body).toMatchObject({ position: 4 })
+  })
+
+  it('does not drag a done todo or drop onto one', async () => {
+    const saves = stubSaves()
+    stubRects([1, 2, 3])
+    const done = todo(2, { is_done: true, completed_at: now.toISOString() })
+    renderCard([{ task: task('local-WHF-003'), todos: [todo(1), done, todo(3)] }])
+
+    expect(screen.getByText('Todo 2').closest('[data-todo]')).toBeNull()
+    await drag('Todo 2', 0)
+    await drag('Todo 1', 1)
+
+    await new Promise((r) => setTimeout(r, 20))
+    expect(saves).toHaveLength(0)
+  })
+
+  it('does not move a todo onto another task or back onto itself', async () => {
+    const saves = stubSaves()
+    stubRects([1, 2, 5])
+    renderCard([
+      { task: task('local-WHF-003'), todos: [todo(1), todo(2)] },
+      { task: task('local-WHF-004'), todos: [todo(5, { task_id: 'local-WHF-004' })] },
+    ])
+
+    await drag('Todo 1', 2)
+    await drag('Todo 1', 0)
+
+    await new Promise((r) => setTimeout(r, 20))
+    expect(saves).toHaveLength(0)
+  })
+  it('does not click the checkbox a drag began and ended on', async () => {
+    stubSaves()
+    stubRects([1, 2])
+    const first = todo(1)
+    const { onToggleDone } = renderCard([{ task: task('local-WHF-003'), todos: [first, todo(2)] }])
+    const box = screen.getByRole('checkbox', { name: 'Todo 1' })
+
+    await drag('Todo 1', 0)
+    fireEvent.click(box)
+    expect(onToggleDone).not.toHaveBeenCalled()
+
+    // dnd-kit swallows clicks for 50ms after a drag.
+    await new Promise((r) => setTimeout(r, 60))
+    fireEvent.click(box)
+    expect(onToggleDone).toHaveBeenCalledWith(first, true)
   })
 })
