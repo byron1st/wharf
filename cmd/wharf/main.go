@@ -118,8 +118,14 @@ func run() (code int, restartWith string) {
 			stop()
 		},
 	})
+	// The token is optional: without it the update check is unauthenticated.
+	githubToken, err := desktop.GitHubToken(ctx)
+	if err != nil {
+		logger.Warn("failed to read GitHub token; checking for updates without it", "error", err)
+	}
+
 	updater := service.NewUpdater(service.UpdaterDeps{
-		Releases: github.NewClient(),
+		Releases: github.NewClient(githubToken),
 		System:   desktop,
 		Version:  buildinfo.Version(),
 		GOOS:     runtime.GOOS,

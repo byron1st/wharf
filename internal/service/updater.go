@@ -66,14 +66,20 @@ type UpdateStatus struct {
 	// Available reports whether Latest is newer than Current.
 	Available bool
 	// CheckedAt is when the last check succeeded, zero until one does.
-	CheckedAt  time.Time
-	ReleaseURL string
-	Notes      string
+	CheckedAt time.Time
+	// CheckFailed reports whether the most recent check failed; the other
+	// fields keep what the last successful check found.
+	CheckFailed bool
+	ReleaseURL  string
+	Notes       string
+	// PublishedAt is when Latest was published, zero until a check succeeds.
+	PublishedAt time.Time
 }
 
 type Updater interface {
 	Run(ctx context.Context)
 	GetUpdateStatus(ctx context.Context) UpdateStatus
+	Check(ctx context.Context) (UpdateStatus, error)
 	ApplyUpdate(ctx context.Context) error
 }
 
@@ -108,6 +114,9 @@ type updater struct {
 	// applying is held from the start of an update until it fails, so a
 	// replaced executable is not replaced again before the restart.
 	applying sync.Mutex
+
+	// checking serializes the periodic and on-demand checks.
+	checking sync.Mutex
 
 	mu       sync.Mutex
 	status   UpdateStatus
@@ -155,14 +164,36 @@ func (u *updater) Run(ctx context.Context) {
 	}
 }
 
+// Check checks for a newer release now and returns the resulting status. A
+// failed check is logged and reported by the status's CheckFailed, not as an
+// error. It fails with ErrUpdateNotSupported when updates are not supported.
+func (u *updater) Check(ctx context.Context) (UpdateStatus, error) {
+	if !u.status.Supported {
+		return UpdateStatus{}, ErrUpdateNotSupported
+	}
+
+	u.check(ctx)
+
+	return u.GetUpdateStatus(ctx), nil
+}
+
 func (u *updater) check(ctx context.Context) {
+	u.checking.Lock()
+	defer u.checking.Unlock()
+
 	rel, err := u.releases.LatestRelease(ctx)
 	if err == nil {
 		err = u.record(ctx, rel)
 	}
 
-	if err != nil {
+	// A check cut short by its caller, such as a closed page or a shutdown,
+	// says nothing about GitHub, so it keeps the last result.
+	if err != nil && ctx.Err() == nil {
 		u.logger.WarnContext(ctx, "failed to check for update", "error", err)
+
+		u.mu.Lock()
+		u.status.CheckFailed = true
+		u.mu.Unlock()
 	}
 }
 
@@ -182,8 +213,10 @@ func (u *updater) record(ctx context.Context, rel github.Release) error {
 	u.status.Latest = latest
 	u.status.Available = compareVersions(latestVersion, currentVersion) > 0
 	u.status.CheckedAt = time.Now()
+	u.status.CheckFailed = false
 	u.status.ReleaseURL = rel.URL
 	u.status.Notes = rel.Notes
+	u.status.PublishedAt = rel.PublishedAt
 	notify := u.status.Available && u.notified != latest
 
 	if notify {
@@ -195,7 +228,7 @@ func (u *updater) record(ctx context.Context, rel github.Release) error {
 	if notify {
 		// The notification only points at the web app, which shows the update
 		// anyway, so failing to show it is not worth failing the check.
-		msg := fmt.Sprintf("Wharf %s is available. Open Wharf to upgrade.", latest)
+		msg := fmt.Sprintf("Wharf %s is available. Open Wharf Settings to update.", latest)
 		if err := u.system.Notify(ctx, "Wharf", msg); err != nil {
 			u.logger.WarnContext(ctx, "failed to notify about update", "version", latest, "error", err)
 		}

@@ -16,6 +16,9 @@ var (
 	ErrFailedToCreateReleaseRequest  = errors.New("github: failed to create latest release request")
 	ErrFailedToRequestLatestRelease  = errors.New("github: failed to request latest release")
 	ErrUnexpectedLatestReleaseStatus = errors.New("github: unexpected latest release status")
+	ErrGitHubTokenRejected           = errors.New(
+		"github: token rejected; replace or delete the wharf-github keychain item and restart",
+	)
 	ErrFailedToDecodeLatestRelease   = errors.New("github: failed to decode latest release")
 	ErrFailedToCreateDownloadRequest = errors.New("github: failed to create download request")
 	ErrFailedToDownloadAsset         = errors.New("github: failed to download release asset")
@@ -46,6 +49,8 @@ type Release struct {
 	URL string
 	// Notes is the release body in Markdown.
 	Notes string
+	// PublishedAt is when the release was published.
+	PublishedAt time.Time
 }
 
 type Releases interface {
@@ -57,17 +62,24 @@ type client struct {
 	http         *http.Client
 	apiBase      string
 	downloadBase string
+	token        string
 }
 
-// NewClient returns Releases for github.com/byron1st/wharf. It sends no
-// credentials, so it follows the redirect of a release download to its
-// storage host.
-func NewClient() Releases {
-	return newClient(apiBaseURL, downloadBaseURL)
+// NewClient returns Releases for github.com/byron1st/wharf. A non-empty token
+// authenticates the latest release request, which lifts the API rate limit
+// from per IP address to per user. Downloads never carry it, so it does not
+// follow their redirect to the storage host.
+func NewClient(token string) Releases {
+	return newClient(apiBaseURL, downloadBaseURL, token)
 }
 
-func newClient(apiBase, downloadBase string) Releases {
-	return &client{http: &http.Client{Timeout: requestTimeout}, apiBase: apiBase, downloadBase: downloadBase}
+func newClient(apiBase, downloadBase, token string) Releases {
+	return &client{
+		http:         &http.Client{Timeout: requestTimeout},
+		apiBase:      apiBase,
+		downloadBase: downloadBase,
+		token:        token,
+	}
 }
 
 // LatestRelease returns the newest release that is neither a draft nor a
@@ -81,6 +93,10 @@ func (c *client) LatestRelease(ctx context.Context) (Release, error) {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return Release{}, errors.Join(ErrFailedToRequestLatestRelease, err)
@@ -88,21 +104,26 @@ func (c *client) LatestRelease(ctx context.Context) (Release, error) {
 
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusUnauthorized && c.token != "" {
+		return Release{}, ErrGitHubTokenRejected
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return Release{}, fmt.Errorf("%w: status=%d", ErrUnexpectedLatestReleaseStatus, resp.StatusCode)
 	}
 
 	var body struct {
-		TagName string `json:"tag_name"`
-		HTMLURL string `json:"html_url"`
-		Body    string `json:"body"`
+		TagName     string    `json:"tag_name"`
+		HTMLURL     string    `json:"html_url"`
+		Body        string    `json:"body"`
+		PublishedAt time.Time `json:"published_at"`
 	}
 
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxReleaseBytes)).Decode(&body); err != nil {
 		return Release{}, errors.Join(ErrFailedToDecodeLatestRelease, err)
 	}
 
-	return Release{Tag: body.TagName, URL: body.HTMLURL, Notes: body.Body}, nil
+	return Release{Tag: body.TagName, URL: body.HTMLURL, Notes: body.Body, PublishedAt: body.PublishedAt}, nil
 }
 
 // Download returns the asset name of the release tagged tag.

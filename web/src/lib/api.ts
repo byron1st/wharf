@@ -123,6 +123,9 @@ export interface UpdateStatus {
   checked_at: string | null
   release_url: string | null
   notes: string
+  /** check_failed reports whether the most recent check failed; the other fields keep the last successful one. */
+  check_failed: boolean
+  published_at: string | null
 }
 
 /** ApiError is a response with an error status; code tells apart errors that share one. */
@@ -223,6 +226,7 @@ export const api = {
   restart: () => request<void>('POST', '/api/settings/app/restart'),
 
   updateStatus: () => request<UpdateStatus>('GET', '/api/update'),
+  checkUpdate: () => request<UpdateStatus>('POST', '/api/update/check'),
   applyUpdate: () => request<void>('POST', '/api/update/apply'),
 }
 
