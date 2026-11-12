@@ -93,7 +93,7 @@ export function Updates() {
           <span className="flex flex-wrap items-baseline gap-2">
             <span className="text-[15px] font-semibold">Wharf</span>
             <span className="font-mono text-[13px]">{update.current}</span>
-            {update.supported && checked && !update.available && (
+            {update.supported && checked && !update.available && !update.check_failed && (
               <span className="inline-flex h-5 items-center gap-1 self-center rounded-full bg-[#dcfce7] px-[7px] text-[11px] font-medium text-success-ink">
                 <Check size={10} strokeWidth={3} />
                 Latest
@@ -157,7 +157,7 @@ export function Updates() {
           </span>
         </div>
       )}
-      {update.supported && update.check_failed && phase !== 'checking' && (
+      {update.supported && update.check_failed && !busy && (
         <div
           role="alert"
           className="flex flex-wrap items-center gap-2.5 rounded-lg border border-danger-line bg-danger-tint px-3 py-2.5 text-[13px] text-danger-ink"

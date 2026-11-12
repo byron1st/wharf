@@ -107,6 +107,21 @@ describe('Updates', () => {
     expect(await screen.findByText('Last check failed')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent(/Couldn’t check for updates/)
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
+    expect(screen.queryByText('Latest')).toBeNull()
+  })
+
+  it('hides the failed-check alert while updating', async () => {
+    renderUpdates(available({ check_failed: true }), (url, init) =>
+      url === '/api/update/apply' && init?.method === 'POST'
+        ? new Promise<Response>(() => {})
+        : new Response(null, { status: 404 }),
+    )
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Update and restart' }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('Updating to 0.2.0…')
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('checks on demand and shows what the check found', async () => {

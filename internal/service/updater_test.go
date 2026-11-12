@@ -80,7 +80,7 @@ func TestUpdaterReportsNewerRelease(t *testing.T) {
 	f := newUpdaterFixture(t)
 	f.releases.EXPECT().LatestRelease(mock.Anything).Return(release, nil).Once()
 	f.desktop.EXPECT().
-		Notify(mock.Anything, "Wharf", "Wharf 0.2.0 is available. Open Wharf to upgrade.").
+		Notify(mock.Anything, "Wharf", "Wharf 0.2.0 is available. Open Wharf Settings to update.").
 		Return(nil).
 		Once()
 
@@ -251,6 +251,24 @@ func TestUpdaterCheckFailureKeepsLastResult(t *testing.T) {
 	recovered, err := u.Check(t.Context())
 	require.NoError(t, err)
 	require.False(t, recovered.CheckFailed)
+}
+
+func TestUpdaterCanceledCheckIsNotAFailure(t *testing.T) {
+	f := newUpdaterFixture(t)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	f.releases.EXPECT().LatestRelease(mock.Anything).
+		RunAndReturn(func(ctx context.Context) (github.Release, error) {
+			cancel()
+			return github.Release{}, ctx.Err()
+		}).
+		Once()
+
+	u := f.updater("0.1.0", "darwin", true, time.Hour)
+
+	status, err := u.Check(ctx)
+	require.NoError(t, err)
+	require.False(t, status.CheckFailed)
 }
 
 func TestUpdaterCheckFailureBeforeAnySuccess(t *testing.T) {

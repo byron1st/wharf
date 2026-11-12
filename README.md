@@ -144,6 +144,7 @@ wharf service uninstall
   - 토큰은 fine-grained personal access token에 Repository access를 "Public repositories (read-only)"로 두고 다른 권한은 주지 않으면 됩니다(classic이라면 scope 없이).
   - 서버가 시작할 때 한 번 읽으므로, 등록하거나 바꾼 뒤에는 재시작합니다(`launchctl kickstart -k gui/$(id -u)/com.byron1st.wharf`). 읽지 못하면 경고 로그만 남기고 인증 없이 확인합니다.
   - 토큰은 최신 릴리스 조회에만 쓰고, 릴리스 파일 다운로드에는 보내지 않습니다.
+  - 토큰이 만료되거나 폐기되면 확인이 계속 실패하고 로그에 `status=401`이 남습니다. 새 토큰으로 바꾸거나(`security add-generic-password -U -a "$USER" -s wharf-github -w`) 항목을 지운 뒤 재시작하세요.
 - `make build`/`make install`로 만든 개발 빌드(`(devel)`, pseudo-version, `+dirty`)는 확인하지 않습니다. `update_check = false`로 끌 수도 있습니다.
 - v0.1.0에는 업데이트 기능이 없으므로, 이 기능이 들어간 첫 버전은 직접 설치해야 합니다.
 

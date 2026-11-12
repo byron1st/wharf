@@ -186,7 +186,9 @@ func (u *updater) check(ctx context.Context) {
 		err = u.record(ctx, rel)
 	}
 
-	if err != nil {
+	// A check cut short by its caller, such as a closed page or a shutdown,
+	// says nothing about GitHub, so it keeps the last result.
+	if err != nil && ctx.Err() == nil {
 		u.logger.WarnContext(ctx, "failed to check for update", "error", err)
 
 		u.mu.Lock()
@@ -226,7 +228,7 @@ func (u *updater) record(ctx context.Context, rel github.Release) error {
 	if notify {
 		// The notification only points at the web app, which shows the update
 		// anyway, so failing to show it is not worth failing the check.
-		msg := fmt.Sprintf("Wharf %s is available. Open Wharf to upgrade.", latest)
+		msg := fmt.Sprintf("Wharf %s is available. Open Wharf Settings to update.", latest)
 		if err := u.system.Notify(ctx, "Wharf", msg); err != nil {
 			u.logger.WarnContext(ctx, "failed to notify about update", "version", latest, "error", err)
 		}
