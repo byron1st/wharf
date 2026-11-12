@@ -33,13 +33,15 @@ func serveUpdate(t *testing.T, updater service.Updater, method, path string) *ht
 func TestGetUpdateStatus(t *testing.T) {
 	updater := mocks.NewMockUpdater(t)
 	updater.EXPECT().GetUpdateStatus(mock.Anything).Return(service.UpdateStatus{
-		Supported:  true,
-		Current:    "0.1.0",
-		Latest:     "0.2.0",
-		Available:  true,
-		CheckedAt:  time.Date(2026, 11, 9, 7, 0, 0, 0, time.UTC),
-		ReleaseURL: "https://github.com/byron1st/wharf/releases/tag/v0.2.0",
-		Notes:      "notes",
+		Supported:   true,
+		Current:     "0.1.0",
+		Latest:      "0.2.0",
+		Available:   true,
+		CheckedAt:   time.Date(2026, 11, 9, 7, 0, 0, 0, time.UTC),
+		ReleaseURL:  "https://github.com/byron1st/wharf/releases/tag/v0.2.0",
+		Notes:       "notes",
+		CheckFailed: true,
+		PublishedAt: time.Date(2026, 11, 8, 9, 12, 17, 0, time.UTC),
 	}).Once()
 
 	rec := serveUpdate(t, updater, http.MethodGet, "/api/update")
@@ -51,7 +53,9 @@ func TestGetUpdateStatus(t *testing.T) {
 		"available": true,
 		"checked_at": "2026-11-09T07:00:00Z",
 		"release_url": "https://github.com/byron1st/wharf/releases/tag/v0.2.0",
-		"notes": "notes"
+		"notes": "notes",
+		"check_failed": true,
+		"published_at": "2026-11-08T09:12:17Z"
 	}`, rec.Body.String())
 }
 
@@ -68,8 +72,44 @@ func TestGetUpdateStatusBeforeCheck(t *testing.T) {
 		"available": false,
 		"checked_at": null,
 		"release_url": null,
-		"notes": ""
+		"notes": "",
+		"check_failed": false,
+		"published_at": null
 	}`, rec.Body.String())
+}
+
+func TestCheckUpdate(t *testing.T) {
+	updater := mocks.NewMockUpdater(t)
+	updater.EXPECT().Check(mock.Anything).Return(service.UpdateStatus{
+		Supported:   true,
+		Current:     "0.2.0",
+		Latest:      "0.2.0",
+		CheckedAt:   time.Date(2026, 11, 9, 7, 0, 0, 0, time.UTC),
+		CheckFailed: true,
+	}, nil).Once()
+
+	rec := serveUpdate(t, updater, http.MethodPost, "/api/update/check")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{
+		"supported": true,
+		"current": "0.2.0",
+		"latest": "0.2.0",
+		"available": false,
+		"checked_at": "2026-11-09T07:00:00Z",
+		"release_url": null,
+		"notes": "",
+		"check_failed": true,
+		"published_at": null
+	}`, rec.Body.String())
+}
+
+func TestCheckUpdateNotSupported(t *testing.T) {
+	updater := mocks.NewMockUpdater(t)
+	updater.EXPECT().Check(mock.Anything).Return(service.UpdateStatus{}, service.ErrUpdateNotSupported).Once()
+
+	rec := serveUpdate(t, updater, http.MethodPost, "/api/update/check")
+	require.Equal(t, http.StatusConflict, rec.Code)
+	require.Contains(t, rec.Body.String(), "update_not_supported")
 }
 
 func TestApplyUpdate(t *testing.T) {

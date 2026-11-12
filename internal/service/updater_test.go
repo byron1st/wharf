@@ -80,7 +80,7 @@ func TestUpdaterReportsNewerRelease(t *testing.T) {
 	f := newUpdaterFixture(t)
 	f.releases.EXPECT().LatestRelease(mock.Anything).Return(release, nil).Once()
 	f.desktop.EXPECT().
-		Notify(mock.Anything, "Wharf", "Wharf 0.2.0 is available. Open Wharf to upgrade.").
+		Notify(mock.Anything, "Wharf", "Wharf 0.2.0 is available. Open Wharf Settings to update.").
 		Return(nil).
 		Once()
 
@@ -192,8 +192,98 @@ func TestUpdaterUnsupportedNeverChecks(t *testing.T) {
 
 			require.Equal(t, service.UpdateStatus{Current: tc.version}, u.GetUpdateStatus(t.Context()))
 			require.ErrorIs(t, u.ApplyUpdate(t.Context()), service.ErrUpdateNotSupported)
+
+			_, err := u.Check(t.Context())
+			require.ErrorIs(t, err, service.ErrUpdateNotSupported)
 		})
 	}
+}
+
+func TestUpdaterCheck(t *testing.T) {
+	f := newUpdaterFixture(t)
+	published := time.Date(2026, 11, 10, 9, 12, 17, 0, time.UTC)
+	rel := release
+	rel.PublishedAt = published
+	f.releases.EXPECT().LatestRelease(mock.Anything).Return(rel, nil).Once()
+	f.desktop.EXPECT().Notify(mock.Anything, "Wharf", mock.Anything).Return(nil).Once()
+
+	u := f.updater("0.1.0", "darwin", true, time.Hour)
+
+	status, err := u.Check(t.Context())
+	require.NoError(t, err)
+	require.WithinDuration(t, time.Now(), status.CheckedAt, time.Minute)
+	status.CheckedAt = time.Time{}
+	require.Equal(t, service.UpdateStatus{
+		Supported:   true,
+		Current:     "0.1.0",
+		Latest:      "0.2.0",
+		Available:   true,
+		ReleaseURL:  release.URL,
+		Notes:       "notes",
+		PublishedAt: published,
+	}, status)
+}
+
+func TestUpdaterCheckFailureKeepsLastResult(t *testing.T) {
+	f := newUpdaterFixture(t)
+	f.releases.EXPECT().LatestRelease(mock.Anything).Return(release, nil).Once()
+	f.releases.EXPECT().
+		LatestRelease(mock.Anything).
+		Return(github.Release{}, github.ErrUnexpectedLatestReleaseStatus).
+		Once()
+	f.releases.EXPECT().LatestRelease(mock.Anything).Return(release, nil).Once()
+	f.desktop.EXPECT().Notify(mock.Anything, "Wharf", mock.Anything).Return(nil).Once()
+
+	u := f.updater("0.1.0", "darwin", true, time.Hour)
+
+	first, err := u.Check(t.Context())
+	require.NoError(t, err)
+	require.False(t, first.CheckFailed)
+
+	failed, err := u.Check(t.Context())
+	require.NoError(t, err)
+	require.True(t, failed.CheckFailed)
+	require.Equal(t, "0.2.0", failed.Latest)
+	require.True(t, failed.Available)
+	require.Equal(t, first.CheckedAt, failed.CheckedAt)
+	require.True(t, u.GetUpdateStatus(t.Context()).CheckFailed)
+
+	recovered, err := u.Check(t.Context())
+	require.NoError(t, err)
+	require.False(t, recovered.CheckFailed)
+}
+
+func TestUpdaterCanceledCheckIsNotAFailure(t *testing.T) {
+	f := newUpdaterFixture(t)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	f.releases.EXPECT().LatestRelease(mock.Anything).
+		RunAndReturn(func(ctx context.Context) (github.Release, error) {
+			cancel()
+			return github.Release{}, ctx.Err()
+		}).
+		Once()
+
+	u := f.updater("0.1.0", "darwin", true, time.Hour)
+
+	status, err := u.Check(ctx)
+	require.NoError(t, err)
+	require.False(t, status.CheckFailed)
+}
+
+func TestUpdaterCheckFailureBeforeAnySuccess(t *testing.T) {
+	f := newUpdaterFixture(t)
+	f.releases.EXPECT().
+		LatestRelease(mock.Anything).
+		Return(github.Release{}, github.ErrUnexpectedLatestReleaseStatus).
+		Once()
+
+	u := f.updater("0.1.0", "darwin", true, time.Hour)
+	runOnce(t, u, func() bool { return u.GetUpdateStatus(context.Background()).CheckFailed })
+
+	status := u.GetUpdateStatus(t.Context())
+	require.True(t, status.CheckedAt.IsZero())
+	require.Empty(t, status.Latest)
 }
 
 // archive returns a .tar.gz holding files, in order.

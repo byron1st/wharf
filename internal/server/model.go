@@ -172,6 +172,10 @@ type updateStatusResponse struct {
 	CheckedAt  *time.Time `json:"checked_at"`
 	ReleaseURL *string    `json:"release_url"`
 	Notes      string     `json:"notes"`
+	// CheckFailed reports whether the most recent check failed.
+	CheckFailed bool `json:"check_failed"`
+	// PublishedAt is when latest was published.
+	PublishedAt *time.Time `json:"published_at"`
 }
 
 type chosenConfigResponse struct {

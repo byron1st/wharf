@@ -93,76 +93,77 @@ function General() {
   const pending = app.pending_config_path
   const port = app.addr.split(':').pop()
   return (
-    <section className="flex flex-col gap-3">
-      <h3 className="m-0 text-[15px] font-semibold">App Server</h3>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-medium">Config file</span>
-        <div className="flex gap-2">
-          <span
-            className={cn(
-              'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border bg-bg-subtle px-3 font-mono text-[13px]',
-              pending ? 'border-[#fcd34d] bg-warning-tint' : 'border-border',
-            )}
-            title={pending ?? app.config_path}
-          >
-            <File size={14} className="shrink-0 text-ink-muted" />
-            <span className="truncate">{tilde(pending ?? app.config_path)}</span>
-          </span>
-          <Button variant="outline" onClick={() => void call("Couldn't open the file chooser", api.chooseConfig)}>
-            <Folder size={15} />
-            Choose…
-          </Button>
-          <Button variant="outline" onClick={() => void call("Couldn't open the config file", api.openConfig)}>
-            <ExternalLink size={15} />
-            Open
-          </Button>
-        </div>
-        <span className="text-[12px] text-ink-muted">
-          A <span className="font-mono">.toml</span> file. Port and database below are read from it — edit the file to change
-          them.
-        </span>
-      </div>
-      <span className="mt-2 flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">
-        <Lock size={12} />
-        From config.toml · read-only
-      </span>
-      <div className="overflow-hidden rounded-lg border border-border">
-        <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)] items-center border-b border-border-subtle px-3.5 text-[13px]">
-          <span className="text-ink-muted">Port</span>
-          <span>
-            <span className="font-mono">{port}</span>
-            <span className="text-[12px] text-ink-muted"> · http://localhost:{port}</span>
-          </span>
-        </div>
-        <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-[13px]">
-          <span className="text-ink-muted">Database</span>
-          <span className="truncate font-mono" title={app.db_target}>
-            {app.db_target}
-          </span>
-          <span className="rounded-md bg-bg-muted px-2 py-0.5 text-[12px]">Postgres</span>
-        </div>
-      </div>
-      {pending && (
-        <div role="status" className="mt-3 flex items-center gap-3 rounded-lg border border-warning-line bg-warning-tint px-3.5 py-2.5 text-[13px] text-warning-ink">
-          <CircleAlert size={14} className="shrink-0 text-warning" />
-          <span className="flex-1">The server is still using the previous file. Restart it to load the new config.</span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-[#fcd34d] text-[#78350f]"
-            disabled={restarting}
-            onClick={() => void call("Couldn't undo the change", api.clearPendingConfig)}
-          >
-            Undo
-          </Button>
-          <Button size="sm" disabled={restarting} onClick={() => void restart()}>
-            Restart server
-          </Button>
-        </div>
-      )}
-      <h3 className="m-0 mt-4 text-[15px] font-semibold">Updates</h3>
+    <div className="flex flex-col gap-7">
       <Updates />
-    </section>
+      <section className="flex flex-col gap-3 border-t border-border-subtle pt-6">
+        <h3 className="m-0 text-[15px] font-semibold">App Server</h3>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium">Config file</span>
+          <div className="flex gap-2">
+            <span
+              className={cn(
+                'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border bg-bg-subtle px-3 font-mono text-[13px]',
+                pending ? 'border-[#fcd34d] bg-warning-tint' : 'border-border',
+              )}
+              title={pending ?? app.config_path}
+            >
+              <File size={14} className="shrink-0 text-ink-muted" />
+              <span className="truncate">{tilde(pending ?? app.config_path)}</span>
+            </span>
+            <Button variant="outline" onClick={() => void call("Couldn't open the file chooser", api.chooseConfig)}>
+              <Folder size={15} />
+              Choose…
+            </Button>
+            <Button variant="outline" onClick={() => void call("Couldn't open the config file", api.openConfig)}>
+              <ExternalLink size={15} />
+              Open
+            </Button>
+          </div>
+          <span className="text-[12px] text-ink-muted">
+            A <span className="font-mono">.toml</span> file. Port and database below are read from it — edit the file to change
+            them.
+          </span>
+        </div>
+        <span className="mt-2 flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">
+          <Lock size={12} />
+          From config.toml · read-only
+        </span>
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)] items-center border-b border-border-subtle px-3.5 text-[13px]">
+            <span className="text-ink-muted">Port</span>
+            <span>
+              <span className="font-mono">{port}</span>
+              <span className="text-[12px] text-ink-muted"> · http://localhost:{port}</span>
+            </span>
+          </div>
+          <div className="grid min-h-10 grid-cols-[108px_minmax(0,1fr)_auto] items-center gap-2 px-3.5 text-[13px]">
+            <span className="text-ink-muted">Database</span>
+            <span className="truncate font-mono" title={app.db_target}>
+              {app.db_target}
+            </span>
+            <span className="rounded-md bg-bg-muted px-2 py-0.5 text-[12px]">Postgres</span>
+          </div>
+        </div>
+        {pending && (
+          <div role="status" className="mt-3 flex items-center gap-3 rounded-lg border border-warning-line bg-warning-tint px-3.5 py-2.5 text-[13px] text-warning-ink">
+            <CircleAlert size={14} className="shrink-0 text-warning" />
+            <span className="flex-1">The server is still using the previous file. Restart it to load the new config.</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-[#fcd34d] text-[#78350f]"
+              disabled={restarting}
+              onClick={() => void call("Couldn't undo the change", api.clearPendingConfig)}
+            >
+              Undo
+            </Button>
+            <Button size="sm" disabled={restarting} onClick={() => void restart()}>
+              Restart server
+            </Button>
+          </div>
+        )}
+      </section>
+    </div>
   )
 }
 
@@ -453,7 +454,7 @@ export function SettingsDialog({ tab, onTab, onClose }: { tab: Tab; onTab: (t: T
                 <div className="flex flex-col gap-0.5">
                   <h2 className="m-0 text-[18px] font-semibold">{tab === 'general' ? 'General' : 'Atlassian Cloud'}</h2>
                   <p className="m-0 text-[13px] text-ink-muted">
-                    {tab === 'general' ? 'The local app server behind Wharf.' : 'Jira issues and Service Desk requests.'}
+                    {tab === 'general' ? 'Version, updates and the local app server.' : 'Jira issues and Service Desk requests.'}
                   </p>
                 </div>
                 <D.Close

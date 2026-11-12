@@ -98,6 +98,66 @@ func (_c *MockUpdater_ApplyUpdate_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// Check provides a mock function for the type MockUpdater
+func (_mock *MockUpdater) Check(ctx context.Context) (service.UpdateStatus, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Check")
+	}
+
+	var r0 service.UpdateStatus
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (service.UpdateStatus, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) service.UpdateStatus); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Get(0).(service.UpdateStatus)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockUpdater_Check_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Check'
+type MockUpdater_Check_Call struct {
+	*mock.Call
+}
+
+// Check is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockUpdater_Expecter) Check(ctx any) *MockUpdater_Check_Call {
+	return &MockUpdater_Check_Call{Call: _e.mock.On("Check", ctx)}
+}
+
+func (_c *MockUpdater_Check_Call) Run(run func(ctx context.Context)) *MockUpdater_Check_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockUpdater_Check_Call) Return(updateStatus service.UpdateStatus, err error) *MockUpdater_Check_Call {
+	_c.Call.Return(updateStatus, err)
+	return _c
+}
+
+func (_c *MockUpdater_Check_Call) RunAndReturn(run func(ctx context.Context) (service.UpdateStatus, error)) *MockUpdater_Check_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetUpdateStatus provides a mock function for the type MockUpdater
 func (_mock *MockUpdater) GetUpdateStatus(ctx context.Context) service.UpdateStatus {
 	ret := _mock.Called(ctx)

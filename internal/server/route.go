@@ -65,6 +65,7 @@ func NewHandler(
 	mux.HandleFunc("POST /api/settings/app/config/open", openConfigFile(settings, logger))
 	mux.HandleFunc("POST /api/settings/app/restart", restartServer(settings, logger))
 	mux.HandleFunc("GET /api/update", getUpdateStatus(updater))
+	mux.HandleFunc("POST /api/update/check", checkUpdate(updater, logger))
 	mux.HandleFunc("POST /api/update/apply", applyUpdate(updater, logger))
 	mux.HandleFunc("GET /", spa(static))
 
