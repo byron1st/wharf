@@ -454,7 +454,7 @@ export function SettingsDialog({ tab, onTab, onClose }: { tab: Tab; onTab: (t: T
                 <div className="flex flex-col gap-0.5">
                   <h2 className="m-0 text-[18px] font-semibold">{tab === 'general' ? 'General' : 'Atlassian Cloud'}</h2>
                   <p className="m-0 text-[13px] text-ink-muted">
-                    {tab === 'general' ? 'The local app server behind Wharf.' : 'Jira issues and Service Desk requests.'}
+                    {tab === 'general' ? 'Version, updates and the local app server.' : 'Jira issues and Service Desk requests.'}
                   </p>
                 </div>
                 <D.Close
