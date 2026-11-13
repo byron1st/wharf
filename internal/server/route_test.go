@@ -96,6 +96,7 @@ func TestRoutesRejectOtherMethods(t *testing.T) {
 
 func TestListTasks(t *testing.T) {
 	due := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
+	closed := time.Date(2026, 10, 23, 5, 6, 7, 0, time.UTC)
 	long := strings.Repeat("가", 101)
 
 	svc := mocks.NewMockService(t)
@@ -121,7 +122,19 @@ func TestListTasks(t *testing.T) {
 				Description: strings.Repeat("가", 100),
 				Status:      task.StatusDone,
 				Position:    new(3),
+				ClosedAt:    &closed,
 			},
+		},
+		{
+			Task: task.Task{
+				ID:             "jira-WHF-9",
+				Originated:     task.OriginJira,
+				Title:          "third",
+				Status:         task.StatusCanceled,
+				ClosedAt:       &closed,
+				ClosedSyncedAt: &closed,
+			},
+			ClosedSinceLastSync: true,
 		},
 	}, nil).Once()
 
@@ -131,9 +144,13 @@ func TestListTasks(t *testing.T) {
 	require.JSONEq(t, `{"tasks":[
 		{"id":"jira-WHF-1","originated":"jira","title":"first","description":"`+strings.Repeat("가", 100)+`…",
 		 "status":"todo","start_date":null,"due_date":"2026-10-31T00:00:00Z","todo_count":5,"done_todo_count":2,
-		 "position":null},
+		 "position":null,"closed_at":null,"closed_since_last_sync":false},
 		{"id":"local-WHF-001","originated":"local","title":"second","description":"`+strings.Repeat("가", 100)+`",
-		 "status":"done","start_date":null,"due_date":null,"todo_count":0,"done_todo_count":0,"position":3}
+		 "status":"done","start_date":null,"due_date":null,"todo_count":0,"done_todo_count":0,"position":3,
+		 "closed_at":"2026-10-23T05:06:07Z","closed_since_last_sync":false},
+		{"id":"jira-WHF-9","originated":"jira","title":"third","description":"",
+		 "status":"canceled","start_date":null,"due_date":null,"todo_count":0,"done_todo_count":0,"position":null,
+		 "closed_at":"2026-10-23T05:06:07Z","closed_since_last_sync":true}
 	]}`, rec.Body.String())
 }
 
@@ -377,7 +394,10 @@ func TestUpdateTaskRejectsInvalidBody(t *testing.T) {
 
 func TestUpdateTaskStatus(t *testing.T) {
 	svc := mocks.NewMockService(t)
-	svc.EXPECT().UpdateTaskStatus(mock.Anything, "local-WHF-001", task.Status(task.StatusDone)).Return(nil).Once()
+	svc.EXPECT().
+		UpdateTaskStatus(mock.Anything, "local-WHF-001", task.Status(task.StatusDone), (*time.Time)(nil)).
+		Return(nil).
+		Once()
 
 	rec, _ := serveBody(
 		t,
@@ -389,6 +409,28 @@ func TestUpdateTaskStatus(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, rec.Code)
 	require.Empty(t, rec.Body.String())
+}
+
+func TestUpdateTaskStatusWithClosedAt(t *testing.T) {
+	closedAt := time.Date(2026, 10, 21, 0, 30, 0, 0, time.UTC)
+
+	svc := mocks.NewMockService(t)
+	svc.EXPECT().
+		UpdateTaskStatus(mock.Anything, "local-WHF-001", task.Status(task.StatusCanceled), mock.MatchedBy(
+			func(at *time.Time) bool { return at != nil && at.Equal(closedAt) },
+		)).
+		Return(nil).
+		Once()
+
+	rec, _ := serveBody(
+		t,
+		svc,
+		http.MethodPut,
+		"/api/tasks/local-WHF-001/status",
+		strings.NewReader(`{"status":"canceled","closed_at":"2026-10-21T09:30:00+09:00"}`),
+	)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
 }
 
 func TestReorderTasks(t *testing.T) {
@@ -411,6 +453,7 @@ func TestTaskStatusAndOrderRoutesRejectInvalidBody(t *testing.T) {
 	for _, req := range []struct{ path, body string }{
 		{path: "/api/tasks/local-WHF-001/status", body: `{"status":"done","title":"x"}`},
 		{path: "/api/tasks/local-WHF-001/status", body: `{"status":"done"} {}`},
+		{path: "/api/tasks/local-WHF-001/status", body: `{"status":"done","closed_at":"yesterday"}`},
 		{path: "/api/tasks/order", body: `{"ids":"T1"}`},
 	} {
 		rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPut, req.path, strings.NewReader(req.body))
@@ -425,6 +468,7 @@ func TestTaskStatusAndOrderRoutesMapServiceErrors(t *testing.T) {
 		status int
 	}{
 		{err: service.ErrUnknownTaskStatusToSet, status: http.StatusBadRequest},
+		{err: service.ErrClosedAtForOpenStatus, status: http.StatusBadRequest},
 		{err: service.ErrLocalTaskToSetStatusNotFound, status: http.StatusNotFound},
 		{err: service.ErrEmptyTaskIDToReorder, status: http.StatusBadRequest},
 		{err: service.ErrDuplicateTaskIDToReorder, status: http.StatusBadRequest},
@@ -433,7 +477,7 @@ func TestTaskStatusAndOrderRoutesMapServiceErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		svc := mocks.NewMockService(t)
-		svc.EXPECT().UpdateTaskStatus(mock.Anything, "T1", mock.Anything).Return(tt.err).Once()
+		svc.EXPECT().UpdateTaskStatus(mock.Anything, "T1", mock.Anything, mock.Anything).Return(tt.err).Once()
 		svc.EXPECT().ReorderTasks(mock.Anything, mock.Anything).Return(tt.err).Once()
 
 		for _, req := range []struct{ path, body string }{

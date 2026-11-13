@@ -105,8 +105,71 @@ func TestToTask(t *testing.T) {
 		Status:      task.StatusDone,
 		StartDate:   date(t, "2026-09-01"),
 		DueDate:     date(t, "2026-09-05"),
+		ClosedAt:    new(time.Date(2026, 9, 4, 9, 30, 12, 345e6, time.UTC)),
 	}, got)
 	require.Equal(t, time.UTC, got.StartDate.Location())
+	require.Equal(t, time.UTC, got.ClosedAt.Location())
+}
+
+func TestToTaskClosedAt(t *testing.T) {
+	tests := []struct {
+		name   string
+		status string
+		change string
+		want   *time.Time
+	}{
+		{
+			name:   "done takes the status category change date",
+			status: `{"name": "Done", "statusCategory": {"key": "done"}}`,
+			change: `"2026-10-23T14:05:09.123+0900"`,
+			want:   new(time.Date(2026, 10, 23, 5, 5, 9, 123e6, time.UTC)),
+		},
+		{
+			name:   "canceled takes the status category change date",
+			status: `{"name": "Canceled", "statusCategory": {"key": "done"}}`,
+			change: `"2026-10-23T14:05:09.000-0300"`,
+			want:   new(time.Date(2026, 10, 23, 17, 5, 9, 0, time.UTC)),
+		},
+		{
+			name:   "an open status has none",
+			status: `{"name": "In Progress", "statusCategory": {"key": "indeterminate"}}`,
+			change: `"2026-10-23T14:05:09.123+0900"`,
+		},
+		{
+			name:   "a closed status without the date has none",
+			status: `{"name": "Done", "statusCategory": {"key": "done"}}`,
+			change: `null`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := atlassian.ToTask(viewWorkItem(t, `{
+				"key": "WHF-1",
+				"fields": {"summary": "s", "status": `+tt.status+`, "statuscategorychangedate": `+tt.change+`}
+			}`))
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got.ClosedAt)
+		})
+	}
+}
+
+func TestToTaskInvalidClosedAt(t *testing.T) {
+	got, err := atlassian.ToTask(viewWorkItem(t, `{
+		"key": "WHF-1",
+		"fields": {
+			"summary": "s",
+			"status": {"name": "Done", "statusCategory": {"key": "done"}},
+			"statuscategorychangedate": "2026-10-23"
+		}
+	}`))
+	require.ErrorIs(t, err, atlassian.ErrFailedToParseClosedAt)
+	require.ErrorContains(t, err, "key=WHF-1")
+	require.Equal(t, task.Status(task.StatusDone), got.Status)
+	require.Nil(t, got.ClosedAt)
+
+	var parseErr *time.ParseError
+	require.ErrorAs(t, err, &parseErr)
 }
 
 func TestToTaskWithoutOptionalFields(t *testing.T) {

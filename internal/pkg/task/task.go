@@ -16,4 +16,11 @@ type Task struct {
 	// Position orders tasks on Today. It is nil until the tasks are first
 	// reordered.
 	Position *int
+	// ClosedAt is when the task was last closed, and nil while it is open or
+	// when the time is unknown. Writes use it as db.Manager describes.
+	ClosedAt *time.Time
+	// ClosedSyncedAt is the time of the full Atlassian sync that saw the
+	// stored, open task closed, and nil otherwise. Writes use it as
+	// db.Manager.UpsertTasks describes.
+	ClosedSyncedAt *time.Time
 }

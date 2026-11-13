@@ -245,7 +245,10 @@ func TestMigrateConcurrently(t *testing.T) {
 
 	err := open(t, dsn).QueryRowContext(context.Background(), "SELECT COUNT(*) FROM schema_migrations").Scan(&applied)
 	require.NoError(t, err)
-	require.Equal(t, 1, applied)
+
+	files, err := fs.Glob(scripts.Migrations(), "migrations/*.sql")
+	require.NoError(t, err)
+	require.Len(t, files, applied, "each project migration is applied once")
 	require.NoError(t, first.UpsertTasks(context.Background(), []task.Task{newTask("WHF-1")}))
 	requireExists(t, dsn, "WHF-1", true)
 }
