@@ -194,6 +194,8 @@ describe('useTaskActions().setStatus and reorder', () => {
     todo_count: 0,
     done_todo_count: 0,
     position,
+    closed_at: null,
+    closed_since_last_sync: false,
   })
 
   function setup(fail: boolean) {
@@ -225,6 +227,29 @@ describe('useTaskActions().setStatus and reorder', () => {
     expect(calls[0]).toEqual({ url: '/api/tasks/local-WHF-001/status', body: { status: 'done' } })
     expect(qc.getQueryData<TaskListItem[]>(keys.tasks)?.[0].status).toBe('done')
     expect(qc.getQueryData<TaskDetail>(keys.task(task.id))?.status).toBe('done')
+  })
+
+  it('sends a closing time to restore and patches closed_at as the server will', async () => {
+    const { qc, calls, actions } = setup(false)
+    const list = () => qc.getQueryData<TaskListItem[]>(keys.tasks)![0]
+
+    act(() => actions().setStatus(task, 'done', '2026-10-21T00:30:00Z'))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0].body).toEqual({ status: 'done', closed_at: '2026-10-21T00:30:00Z' })
+    expect(list().closed_at).toBe('2026-10-21T00:30:00Z')
+
+    // Closed to closed keeps the time; reopening clears it.
+    act(() => actions().setStatus(task, 'canceled'))
+    await waitFor(() => expect(list().status).toBe('canceled'))
+    expect(list().closed_at).toBe('2026-10-21T00:30:00Z')
+    act(() => actions().setStatus(task, 'todo'))
+    await waitFor(() => expect(list().status).toBe('todo'))
+    expect(list().closed_at).toBeNull()
+
+    // Closing an open task without a time closes it now.
+    act(() => actions().setStatus(task, 'done'))
+    await waitFor(() => expect(list().status).toBe('done'))
+    expect(list().closed_at).not.toBeNull()
   })
 
   it('stores every task position and undoes the order when the save fails', async () => {

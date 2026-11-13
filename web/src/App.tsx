@@ -1,25 +1,36 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { Toaster } from 'sonner'
+import { ClosedTasksDialog, NO_CLOSED_FILTERS } from '@/components/closed/ClosedTasksDialog'
 import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { TaskDialog } from '@/components/task/TaskDialog'
 import { TodayPage } from '@/components/today/TodayPage'
 import { ClockContext, useTicker } from '@/hooks/useNow'
 import { SyncProvider } from '@/hooks/useSync'
 
+/** NavState is what a modal URL carries: the Today search to return to, and whether a task was opened from Closed tasks. */
+interface NavState {
+  back?: string
+  fromClosed?: boolean
+}
+
 /**
  * App is Today with modals over it: /task/:id opens a task, /settings/:tab
- * opens Settings. Closing a modal returns to the Today URL it was opened from.
+ * opens Settings, /closed opens Closed tasks. Closing a modal returns to the
+ * Today URL it was opened from, or to Closed tasks for a task opened there.
  */
 export function App() {
   const clock = useTicker()
   const location = useLocation()
   const navigate = useNavigate()
-  const back = (location.state as { back?: string } | null)?.back ?? ''
+  const { back = '', fromClosed = false } = (location.state as NavState | null) ?? {}
   const close = () => navigate({ pathname: '/', search: back })
+  // Kept here so the search and filters survive a visit to a task opened from the list.
+  const [closedFilters, setClosedFilters] = useState(NO_CLOSED_FILTERS)
 
   const task = /^\/task\/(.+)$/.exec(location.pathname)
   const settings = /^\/settings(?:\/(general|atlassian))?\/?$/.exec(location.pathname)
+  const closed = /^\/closed\/?$/.test(location.pathname)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -39,8 +50,16 @@ export function App() {
         {task && (
           <TaskDialog
             id={decodeURIComponent(task[1])}
+            onClose={fromClosed ? () => navigate('/closed', { state: { back } }) : close}
+            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed } })}
+          />
+        )}
+        {closed && (
+          <ClosedTasksDialog
+            filters={closedFilters}
+            onFilters={setClosedFilters}
             onClose={close}
-            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back } })}
+            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed: true } })}
           />
         )}
         {settings && (

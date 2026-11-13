@@ -21,6 +21,8 @@ const task = (id: string, over: Partial<TaskListItem> = {}): TaskListItem => ({
   todo_count: 0,
   done_todo_count: 0,
   position: null,
+  closed_at: null,
+  closed_since_last_sync: false,
   ...over,
 })
 

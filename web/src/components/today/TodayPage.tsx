@@ -118,7 +118,11 @@ export function TodayPage() {
 
   return (
     <main className="box-border flex min-h-screen flex-col gap-4 px-8 pt-7 pb-10">
-      <Header onCreateTask={createTask} onSettings={() => navigate('/settings/general', { state: { back: location.search } })} />
+      <Header
+        onCreateTask={createTask}
+        onClosed={() => navigate('/closed', { state: { back: location.search } })}
+        onSettings={() => navigate('/settings/general', { state: { back: location.search } })}
+      />
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
           <TodosCard

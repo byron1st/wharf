@@ -1,4 +1,4 @@
-import { CircleAlert, Plus, RefreshCw, Settings } from 'lucide-react'
+import { Archive, CircleAlert, Plus, RefreshCw, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Kbd, OriginBadge } from '@/components/common/badges'
 import { Button } from '@/components/ui/button'
@@ -157,7 +157,15 @@ function NewTaskButton({ onCreate }: { onCreate: (title: string) => Promise<void
   )
 }
 
-export function Header({ onCreateTask, onSettings }: { onCreateTask: (title: string) => Promise<void>; onSettings: () => void }) {
+export function Header({
+  onCreateTask,
+  onClosed,
+  onSettings,
+}: {
+  onCreateTask: (title: string) => Promise<void>
+  onClosed: () => void
+  onSettings: () => void
+}) {
   const { now } = useNow()
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-3">
@@ -173,6 +181,15 @@ export function Header({ onCreateTask, onSettings }: { onCreateTask: (title: str
             {hhmm(now)}
           </time>
         </span>
+        <button
+          type="button"
+          aria-label="Closed tasks"
+          title="Closed tasks"
+          onClick={onClosed}
+          className="flex size-8 items-center justify-center rounded-md border border-border bg-white text-ink-secondary shadow-xs hover:bg-bg-subtle"
+        >
+          <Archive size={17} />
+        </button>
         <button
           type="button"
           aria-label="Settings"
