@@ -45,7 +45,7 @@ const fixtures = (): TaskListItem[] => [
 ]
 
 /** serve stubs the server: GET /api/tasks returns tasks, and status PUTs change them as the server would. */
-function serve(tasks: TaskListItem[]) {
+function serve(tasks: TaskListItem[], failPuts = false) {
   const puts: { url: string; body: unknown }[] = []
   vi.stubGlobal(
     'fetch',
@@ -53,6 +53,7 @@ function serve(tasks: TaskListItem[]) {
       if (init?.method === 'PUT') {
         const body = JSON.parse(String(init.body)) as { status: TaskListItem['status']; closed_at?: string }
         puts.push({ url, body })
+        if (failPuts) return new Response(JSON.stringify({ error: 'disk failed' }), { status: 500 })
         const id = decodeURIComponent(url.split('/')[3])
         const t = tasks.find((x) => x.id === id)!
         const closed = body.status === 'done' || body.status === 'canceled'
@@ -66,8 +67,8 @@ function serve(tasks: TaskListItem[]) {
   return puts
 }
 
-function renderDialog(tasks = fixtures()) {
-  const puts = serve(tasks)
+function renderDialog(tasks = fixtures(), failPuts = false) {
+  const puts = serve(tasks, failPuts)
   const props = { onClose: vi.fn(), onOpen: vi.fn() }
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   function Harness() {
@@ -193,6 +194,15 @@ describe('ClosedTasksDialog', () => {
     })
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     await waitFor(() => expect(sections()[1]).toEqual({ label: 'Last week2', keys: ['WHF-002', 'WHF-005'] }))
+  })
+
+  it('keeps the row and shows no notice when the reopen fails', async () => {
+    const user = userEvent.setup()
+    const { puts } = renderDialog(fixtures(), true)
+    await user.click(await screen.findByRole('button', { name: 'Reopen WHF-005' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(await screen.findByText('WHF-005')).toBeInTheDocument()
+    expect(screen.queryByText(/reopened as Todo/)).not.toBeInTheDocument()
   })
 
   it('opens a row’s task', async () => {

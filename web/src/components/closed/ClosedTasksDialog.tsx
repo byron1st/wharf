@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useTaskActions, useTasks } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import { taskKey, type TaskListItem, type TaskStatus } from '@/lib/api'
-import { closedGroup, closedLabel, type ClosedGroup } from '@/lib/dates'
+import { closedGroup, closedLabel, isClosedStatus, type ClosedGroup } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
 export type ClosedStatus = 'all' | 'done' | 'canceled'
@@ -45,8 +45,6 @@ interface Reopened {
   status: TaskStatus
   closedAt: string | null
 }
-
-const isClosed = (t: TaskListItem) => t.status === 'done' || t.status === 'canceled'
 
 /** byClosedAt orders the latest closing first, unknown times last, then by ID. */
 function byClosedAt(a: TaskListItem, b: TaskListItem): number {
@@ -138,11 +136,11 @@ export function ClosedTasksDialog({
 }) {
   const { today } = useNow()
   const { data: tasks = [] } = useTasks()
-  const { setStatus } = useTaskActions()
+  const { setStatus, setStatusAsync } = useTaskActions()
   const [reopened, setReopened] = useState<Reopened | null>(null)
   const set = (patch: Partial<ClosedFilters>) => onFilters({ ...filters, ...patch })
 
-  const closed = useMemo(() => tasks.filter(isClosed).sort(byClosedAt), [tasks])
+  const closed = useMemo(() => tasks.filter((t) => isClosedStatus(t.status)).sort(byClosedAt), [tasks])
   const q = filters.query.trim().toLowerCase()
   const inSource = closed.filter(
     (t) =>
@@ -155,9 +153,13 @@ export function ClosedTasksDialog({
     (g) => g.rows.length > 0,
   )
 
+  // The notice waits for the server: a failed reopen is rolled back and reported instead.
   const reopen = (t: TaskListItem) => {
-    setReopened({ id: t.id, status: t.status, closedAt: t.closed_at })
-    setStatus(t, 'todo')
+    const was = { id: t.id, status: t.status, closedAt: t.closed_at }
+    setStatusAsync(t, 'todo').then(
+      () => setReopened(was),
+      () => {},
+    )
   }
 
   const undo = () => {

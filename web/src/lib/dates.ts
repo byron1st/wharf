@@ -168,8 +168,11 @@ export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, 
 
 /** isTodayTask is whether Today lists a task: any open one, and a done or canceled one only while it has todos for today. */
 export function isTodayTask(task: { status: TaskStatus }, hasTodayTodos: boolean): boolean {
-  return hasTodayTodos || (task.status !== 'done' && task.status !== 'canceled')
+  return hasTodayTodos || !isClosedStatus(task.status)
 }
+
+/** isClosedStatus is whether a task status is done or canceled. */
+export const isClosedStatus = (s: TaskStatus) => s === 'done' || s === 'canceled'
 
 /** isSent reports whether a reminder already went off; wharf keeps no sent flag. */
 export const isSent = (at: string, now: Date) => new Date(at).getTime() <= now.getTime()

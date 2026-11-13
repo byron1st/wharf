@@ -36,12 +36,13 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault()
-        navigate('/settings/general', { state: { back: location.search } })
+        // Over another modal, return to the Today URL that modal came from.
+        navigate('/settings/general', { state: { back: location.pathname === '/' ? location.search : back } })
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, location.search])
+  }, [navigate, location.pathname, location.search, back])
 
   return (
     <ClockContext.Provider value={clock}>

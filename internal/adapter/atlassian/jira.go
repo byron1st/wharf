@@ -285,10 +285,11 @@ func parseDate(value string) (*time.Time, error) {
 }
 
 // jiraDateTimeLayout is how Jira writes date-time fields, such as
-// "2026-10-23T14:05:09.123+0900".
-const jiraDateTimeLayout = "2006-01-02T15:04:05.000-0700"
+// "2026-10-23T14:05:09.123+0900". The fraction is optional when parsing.
+const jiraDateTimeLayout = "2006-01-02T15:04:05.999999999-0700"
 
-// parseDateTime returns a Jira date-time at UTC.
+// parseDateTime returns a Jira date-time at UTC. It also takes RFC 3339, whose
+// offset has a colon.
 func parseDateTime(value string) (*time.Time, error) {
 	if value == "" {
 		return nil, nil
@@ -296,7 +297,10 @@ func parseDateTime(value string) (*time.Time, error) {
 
 	t, err := time.Parse(jiraDateTimeLayout, value)
 	if err != nil {
-		return nil, err
+		var rfcErr error
+		if t, rfcErr = time.Parse(time.RFC3339Nano, value); rfcErr != nil {
+			return nil, err
+		}
 	}
 
 	t = t.UTC()

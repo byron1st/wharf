@@ -131,6 +131,18 @@ func TestToTaskClosedAt(t *testing.T) {
 			want:   new(time.Date(2026, 10, 23, 17, 5, 9, 0, time.UTC)),
 		},
 		{
+			name:   "the fraction is optional",
+			status: `{"name": "Done", "statusCategory": {"key": "done"}}`,
+			change: `"2026-10-23T14:05:09+0900"`,
+			want:   new(time.Date(2026, 10, 23, 5, 5, 9, 0, time.UTC)),
+		},
+		{
+			name:   "RFC 3339 is accepted",
+			status: `{"name": "Done", "statusCategory": {"key": "done"}}`,
+			change: `"2026-10-23T14:05:09.5+09:00"`,
+			want:   new(time.Date(2026, 10, 23, 5, 5, 9, 5e8, time.UTC)),
+		},
+		{
 			name:   "an open status has none",
 			status: `{"name": "In Progress", "statusCategory": {"key": "indeterminate"}}`,
 			change: `"2026-10-23T14:05:09.123+0900"`,

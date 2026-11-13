@@ -12,6 +12,7 @@ import {
   type TodoFilter,
   type TodoInput,
 } from '@/lib/api'
+import { isClosedStatus } from '@/lib/dates'
 import { reportSaveError } from '@/lib/errors'
 
 export const keys = {
@@ -91,12 +92,10 @@ function patchTodo(qc: QueryClient, id: number, fn: (t: Todo) => Todo | null) {
   )
 }
 
-const isClosed = (s: TaskStatus) => s === 'done' || s === 'canceled'
-
 /** nextClosedAt is the closing time the server keeps for t after a status change, as the server decides it. */
 function nextClosedAt(t: TaskListItem, status: TaskStatus, closedAt?: string): string | null {
-  if (!isClosed(status)) return null
-  if (isClosed(t.status)) return t.closed_at
+  if (!isClosedStatus(status)) return null
+  if (isClosedStatus(t.status)) return t.closed_at
   return closedAt ?? new Date().toISOString()
 }
 
@@ -373,6 +372,9 @@ export function useTaskActions() {
     /** setStatus sets a local task's status; closedAt brings back an earlier closing time, for undoing a reopen. */
     setStatus: (task: { id: string }, status: TaskStatus, closedAt?: string) =>
       setStatus.mutate({ task, status, closedAt }),
+    /** setStatusAsync is setStatus resolving once the server stored it; a failure is already reported. */
+    setStatusAsync: (task: { id: string }, status: TaskStatus, closedAt?: string) =>
+      setStatus.mutateAsync({ task, status, closedAt }),
     /** reorder stores ids, every task in Today's order, as the task positions. */
     reorder: (ids: string[]) => reorder.mutate(ids),
     updateAsync: (task: TaskDetail, patch: Partial<TaskInput>) => update.mutateAsync({ task, patch }),
