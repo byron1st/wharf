@@ -87,10 +87,12 @@ func listTasks(svc service.Service, logger *slog.Logger) http.HandlerFunc {
 		resp := taskListResponse{Tasks: make([]taskListItem, 0, len(tasks))}
 		for _, t := range tasks {
 			resp.Tasks = append(resp.Tasks, taskListItem{
-				taskSummary:   toSummary(t.Task),
-				TodoCount:     t.Todos.Todos,
-				DoneTodoCount: t.Todos.Done,
-				Position:      t.Task.Position,
+				taskSummary:         toSummary(t.Task),
+				TodoCount:           t.Todos.Todos,
+				DoneTodoCount:       t.Todos.Done,
+				Position:            t.Task.Position,
+				ClosedAt:            t.Task.ClosedAt,
+				ClosedSinceLastSync: t.ClosedSinceLastSync,
 			})
 		}
 
@@ -176,7 +178,7 @@ func updateTaskStatus(svc service.Service, logger *slog.Logger) http.HandlerFunc
 			return
 		}
 
-		if err := svc.UpdateTaskStatus(r.Context(), r.PathValue("id"), req.Status); err != nil {
+		if err := svc.UpdateTaskStatus(r.Context(), r.PathValue("id"), req.Status, req.ClosedAt); err != nil {
 			writeError(w, r, logger, "failed to update task status", err)
 			return
 		}

@@ -440,7 +440,7 @@ func (q *Queries) GetSchemaMigrationChecksum(ctx context.Context, version string
 }
 
 const getTask = `-- name: GetTask :one
-SELECT tasks.id, tasks.originated, tasks.title, tasks.description, tasks.status, tasks.start_date, tasks.due_date, tasks.position, task_hierarchies.parent_id
+SELECT tasks.id, tasks.originated, tasks.title, tasks.description, tasks.status, tasks.start_date, tasks.due_date, tasks.position, tasks.closed_at, tasks.closed_synced_at, task_hierarchies.parent_id
 FROM tasks
 LEFT JOIN task_hierarchies ON task_hierarchies.child_id = tasks.id
 WHERE tasks.id = $1
@@ -463,6 +463,8 @@ func (q *Queries) GetTask(ctx context.Context, id string) (GetTaskRow, error) {
 		&i.Task.StartDate,
 		&i.Task.DueDate,
 		&i.Task.Position,
+		&i.Task.ClosedAt,
+		&i.Task.ClosedSyncedAt,
 		&i.ParentID,
 	)
 	return i, err
@@ -601,7 +603,7 @@ func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]string, e
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT id, originated, title, description, status, start_date, due_date, position FROM tasks ORDER BY id
+SELECT id, originated, title, description, status, start_date, due_date, position, closed_at, closed_synced_at FROM tasks ORDER BY id
 `
 
 func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
@@ -622,6 +624,8 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 			&i.StartDate,
 			&i.DueDate,
 			&i.Position,
+			&i.ClosedAt,
+			&i.ClosedSyncedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -637,7 +641,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Task, error) {
 }
 
 const listTasksByIDs = `-- name: ListTasksByIDs :many
-SELECT id, originated, title, description, status, start_date, due_date, position FROM tasks
+SELECT id, originated, title, description, status, start_date, due_date, position, closed_at, closed_synced_at FROM tasks
 WHERE id IN (SELECT jsonb_array_elements_text(CAST($1::text AS jsonb)))
 ORDER BY id
 `
@@ -661,6 +665,8 @@ func (q *Queries) ListTasksByIDs(ctx context.Context, ids string) ([]Task, error
 			&i.StartDate,
 			&i.DueDate,
 			&i.Position,
+			&i.ClosedAt,
+			&i.ClosedSyncedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -900,8 +906,13 @@ UPDATE tasks SET
     description = $2,
     status      = $3,
     start_date  = $4,
-    due_date    = $5
-WHERE id = $6 AND originated = 'local'
+    due_date    = $5,
+    closed_at   = CASE
+        WHEN $3::text NOT IN ('done', 'canceled') THEN NULL
+        WHEN status IN ('done', 'canceled') THEN closed_at
+        ELSE $6::timestamptz
+    END
+WHERE id = $7 AND originated = 'local'
 `
 
 type UpdateLocalTaskParams struct {
@@ -910,9 +921,13 @@ type UpdateLocalTaskParams struct {
 	Status      string
 	StartDate   sql.NullTime
 	DueDate     sql.NullTime
+	ClosedAt    sql.NullTime
 	ID          string
 }
 
+// closed_at takes the given time only when the update closes an open task,
+// is kept while the task stays closed, and is cleared when it opens. SET
+// expressions read the row as it was before the update.
 func (q *Queries) UpdateLocalTask(ctx context.Context, arg UpdateLocalTaskParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updateLocalTask,
 		arg.Title,
@@ -920,6 +935,7 @@ func (q *Queries) UpdateLocalTask(ctx context.Context, arg UpdateLocalTaskParams
 		arg.Status,
 		arg.StartDate,
 		arg.DueDate,
+		arg.ClosedAt,
 		arg.ID,
 	)
 	if err != nil {
@@ -929,16 +945,25 @@ func (q *Queries) UpdateLocalTask(ctx context.Context, arg UpdateLocalTaskParams
 }
 
 const updateLocalTaskStatus = `-- name: UpdateLocalTaskStatus :execrows
-UPDATE tasks SET status = $1 WHERE id = $2 AND originated = 'local'
+UPDATE tasks SET
+    status    = $1,
+    closed_at = CASE
+        WHEN $1::text NOT IN ('done', 'canceled') THEN NULL
+        WHEN status IN ('done', 'canceled') THEN closed_at
+        ELSE $2::timestamptz
+    END
+WHERE id = $3 AND originated = 'local'
 `
 
 type UpdateLocalTaskStatusParams struct {
-	Status string
-	ID     string
+	Status   string
+	ClosedAt time.Time
+	ID       string
 }
 
+// closed_at changes as in UpdateLocalTask.
 func (q *Queries) UpdateLocalTaskStatus(ctx context.Context, arg UpdateLocalTaskStatusParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateLocalTaskStatus, arg.Status, arg.ID)
+	result, err := q.db.ExecContext(ctx, updateLocalTaskStatus, arg.Status, arg.ClosedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -1034,29 +1059,41 @@ func (q *Queries) UpsertServiceDeskRequest(ctx context.Context, arg UpsertServic
 
 const upsertTask = `-- name: UpsertTask :exec
 INSERT INTO tasks (
-    id, originated, title, description, status, start_date, due_date
+    id, originated, title, description, status, start_date, due_date, closed_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4,
+    $5, $6, $7, $8
 )
 ON CONFLICT (id) DO UPDATE SET
-    originated  = excluded.originated,
-    title       = excluded.title,
-    description = excluded.description,
-    status      = excluded.status,
-    start_date  = excluded.start_date,
-    due_date    = excluded.due_date
+    originated       = excluded.originated,
+    title            = excluded.title,
+    description      = excluded.description,
+    status           = excluded.status,
+    start_date       = excluded.start_date,
+    due_date         = excluded.due_date,
+    closed_at        = excluded.closed_at,
+    closed_synced_at = CASE
+        WHEN excluded.status NOT IN ('done', 'canceled') THEN NULL
+        WHEN tasks.status IN ('done', 'canceled') THEN tasks.closed_synced_at
+        ELSE $9::timestamptz
+    END
 `
 
 type UpsertTaskParams struct {
-	ID          string
-	Originated  string
-	Title       string
-	Description string
-	Status      string
-	StartDate   sql.NullTime
-	DueDate     sql.NullTime
+	ID             string
+	Originated     string
+	Title          string
+	Description    string
+	Status         string
+	StartDate      sql.NullTime
+	DueDate        sql.NullTime
+	ClosedAt       sql.NullTime
+	ClosedSyncedAt sql.NullTime
 }
 
+// 'done' and 'canceled' are the closed task.Status values. closed_synced_at
+// takes the given sync time only when this upsert closes a stored open task,
+// is kept while the task stays closed, and is cleared when it opens again.
 func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) error {
 	_, err := q.db.ExecContext(ctx, upsertTask,
 		arg.ID,
@@ -1066,6 +1103,8 @@ func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) error {
 		arg.Status,
 		arg.StartDate,
 		arg.DueDate,
+		arg.ClosedAt,
+		arg.ClosedSyncedAt,
 	)
 	return err
 }

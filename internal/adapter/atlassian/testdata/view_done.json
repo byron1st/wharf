@@ -37,6 +37,7 @@
         "self": "https://example.atlassian.net/rest/api/3/statuscategory/3"
       }
     },
+    "statuscategorychangedate": "2026-09-04T18:30:12.345+0900",
     "summary": "Fix flaky login test"
   },
   "fieldsToInclude": null,

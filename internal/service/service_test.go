@@ -3,11 +3,14 @@ package service_test
 import (
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/byron1st/wharf/internal/adapter/db"
+	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
 	"github.com/byron1st/wharf/internal/pkg/mocks"
 	"github.com/byron1st/wharf/internal/pkg/task"
 	"github.com/byron1st/wharf/internal/pkg/todo"
@@ -26,6 +29,7 @@ func TestListTasks(t *testing.T) {
 		CountTodosByTask(mock.Anything).
 		Return(map[string]todo.Count{"WHF-2": {Todos: 5, Done: 2}}, nil).
 		Once()
+	manager.EXPECT().GetLastAtlassianSync(mock.Anything).Return(atlassiansync.Record{}, nil).Once()
 
 	got, err := service.NewService(mocks.NewMockClient(t), manager).ListTasks(t.Context())
 	require.NoError(t, err)
@@ -33,6 +37,55 @@ func TestListTasks(t *testing.T) {
 		{Task: tasks[0]},
 		{Task: tasks[1], Todos: todo.Count{Todos: 5, Done: 2}},
 	}, got)
+}
+
+func TestListTasksClosedSinceLastSync(t *testing.T) {
+	last := time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC)
+	earlier := last.Add(-time.Hour)
+	closed := func(id string, status task.Status, syncedAt *time.Time) task.Task {
+		return task.Task{ID: id, Originated: task.OriginJira, Status: status, ClosedSyncedAt: syncedAt}
+	}
+	stored := []task.Task{
+		closed("jira-A-1", task.StatusDone, &last),
+		closed("jira-A-2", task.StatusCanceled, &last),
+		closed("jira-A-3", task.StatusDone, &earlier),
+		closed("jira-A-4", task.StatusDone, nil),
+		closed("jira-A-5", task.StatusTodo, &last),
+	}
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().ListTasks(mock.Anything).Return(stored, nil).Once()
+	manager.EXPECT().CountTodosByTask(mock.Anything).Return(nil, nil).Once()
+	manager.EXPECT().GetLastAtlassianSync(mock.Anything).Return(atlassiansync.Record{SyncedAt: last}, nil).Once()
+
+	got, err := service.NewService(mocks.NewMockClient(t), manager).ListTasks(t.Context())
+	require.NoError(t, err)
+
+	flags := make([]bool, 0, len(got))
+	for _, s := range got {
+		flags = append(flags, s.ClosedSinceLastSync)
+	}
+
+	require.Equal(t, []bool{true, true, false, false, false}, flags)
+}
+
+func TestListTasksWithoutSync(t *testing.T) {
+	never := time.Time{}
+	stored := []task.Task{
+		{ID: "jira-A-1", Originated: task.OriginJira, Status: task.StatusDone, ClosedSyncedAt: &never},
+	}
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().ListTasks(mock.Anything).Return(stored, nil).Once()
+	manager.EXPECT().CountTodosByTask(mock.Anything).Return(nil, nil).Once()
+	manager.EXPECT().
+		GetLastAtlassianSync(mock.Anything).
+		Return(atlassiansync.Record{}, db.ErrAtlassianSyncNotFound).
+		Once()
+
+	got, err := service.NewService(mocks.NewMockClient(t), manager).ListTasks(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, []service.TaskSummary{{Task: stored[0]}}, got)
 }
 
 func TestListTasksFailures(t *testing.T) {
@@ -50,6 +103,29 @@ func TestListTasksFailures(t *testing.T) {
 
 	_, err = service.NewService(mocks.NewMockClient(t), manager).ListTasks(t.Context())
 	require.ErrorIs(t, err, failure)
+
+	manager = mocks.NewMockManager(t)
+	manager.EXPECT().ListTasks(mock.Anything).Return(tasks, nil).Once()
+	manager.EXPECT().CountTodosByTask(mock.Anything).Return(nil, nil).Once()
+	manager.EXPECT().GetLastAtlassianSync(mock.Anything).Return(atlassiansync.Record{}, failure).Once()
+
+	_, err = service.NewService(mocks.NewMockClient(t), manager).ListTasks(t.Context())
+	require.ErrorIs(t, err, failure)
+}
+
+// closedBetween matches a task equal to want except for a ClosedAt at UTC
+// between from and the time of the match.
+func closedBetween(want task.Task, from time.Time) any {
+	return mock.MatchedBy(func(got task.Task) bool {
+		at := got.ClosedAt
+		if at == nil || at.Location() != time.UTC || at.Before(from) || at.After(time.Now()) {
+			return false
+		}
+
+		got.ClosedAt = nil
+
+		return assert.ObjectsAreEqual(want, got)
+	})
 }
 
 func TestGetTask(t *testing.T) {
@@ -139,17 +215,22 @@ func TestCreateTask(t *testing.T) {
 		Return("local-WHF-001", nil).
 		Once()
 	manager.EXPECT().
-		CreateLocalTask(mock.Anything, task.Task{Title: "done", Status: task.StatusDone}).
+		CreateLocalTask(mock.Anything, closedBetween(task.Task{Title: "done", Status: task.StatusDone}, time.Now())).
 		Return("local-WHF-002", nil).
 		Once()
 
 	svc := service.NewService(mocks.NewMockClient(t), manager)
 
-	id, err := svc.CreateTask(t.Context(), task.Task{Title: "new", ChildrenIDs: []string{"jira-J"}})
+	// Closing times given by the caller are ignored.
+	stray := time.Unix(1, 0)
+
+	id, err := svc.CreateTask(t.Context(), task.Task{
+		Title: "new", ChildrenIDs: []string{"jira-J"}, ClosedAt: &stray, ClosedSyncedAt: &stray,
+	})
 	require.NoError(t, err)
 	require.Equal(t, "local-WHF-001", id)
 
-	id, err = svc.CreateTask(t.Context(), task.Task{Title: "done", Status: task.StatusDone})
+	id, err = svc.CreateTask(t.Context(), task.Task{Title: "done", Status: task.StatusDone, ClosedSyncedAt: &stray})
 	require.NoError(t, err)
 	require.Equal(t, "local-WHF-002", id)
 }
@@ -197,6 +278,22 @@ func TestUpdateTask(t *testing.T) {
 		Return(task.Task{ID: "local-WHF-001", Originated: task.OriginLocal}, nil).
 		Once()
 	manager.EXPECT().UpdateLocalTask(mock.Anything, want).Return(nil).Once()
+
+	require.NoError(t, service.NewService(mocks.NewMockClient(t), manager).UpdateTask(t.Context(), update))
+}
+
+func TestUpdateTaskClosing(t *testing.T) {
+	stray := time.Unix(1, 0)
+	update := task.Task{ID: "local-WHF-001", Title: "new", Status: task.StatusCanceled, ClosedSyncedAt: &stray}
+	want := update
+	want.ClosedSyncedAt = nil
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().
+		GetTask(mock.Anything, "local-WHF-001").
+		Return(task.Task{ID: "local-WHF-001", Originated: task.OriginLocal}, nil).
+		Once()
+	manager.EXPECT().UpdateLocalTask(mock.Anything, closedBetween(want, time.Now())).Return(nil).Once()
 
 	require.NoError(t, service.NewService(mocks.NewMockClient(t), manager).UpdateTask(t.Context(), update))
 }
@@ -299,32 +396,60 @@ func TestUpdateTaskPropagatesWriteFailure(t *testing.T) {
 
 func TestUpdateTaskStatus(t *testing.T) {
 	failure := errors.New("write failed")
+	before := time.Now()
+	sinceBefore := mock.MatchedBy(func(at time.Time) bool { return !at.Before(before) && !at.After(time.Now()) })
 
 	manager := mocks.NewMockManager(t)
 	manager.EXPECT().
-		UpdateLocalTaskStatus(mock.Anything, "local-WHF-001", task.Status(task.StatusDone)).
+		UpdateLocalTaskStatus(mock.Anything, "local-WHF-001", task.Status(task.StatusDone), sinceBefore).
 		Return(nil).
 		Once()
 	manager.EXPECT().
-		UpdateLocalTaskStatus(mock.Anything, "jira-WHF-1", task.Status(task.StatusDone)).
+		UpdateLocalTaskStatus(mock.Anything, "jira-WHF-1", task.Status(task.StatusDone), sinceBefore).
 		Return(db.ErrLocalTaskToSetStatusNotFound).
 		Once()
 	manager.EXPECT().
-		UpdateLocalTaskStatus(mock.Anything, "BROKEN", task.Status(task.StatusDone)).
+		UpdateLocalTaskStatus(mock.Anything, "BROKEN", task.Status(task.StatusDone), sinceBefore).
 		Return(failure).
 		Once()
 
 	svc := service.NewService(mocks.NewMockClient(t), manager)
 
-	require.NoError(t, svc.UpdateTaskStatus(t.Context(), "local-WHF-001", task.StatusDone))
+	require.NoError(t, svc.UpdateTaskStatus(t.Context(), "local-WHF-001", task.StatusDone, nil))
 
-	err := svc.UpdateTaskStatus(t.Context(), "jira-WHF-1", task.StatusDone)
+	err := svc.UpdateTaskStatus(t.Context(), "jira-WHF-1", task.StatusDone, nil)
 	require.ErrorIs(t, err, service.ErrLocalTaskToSetStatusNotFound)
 	require.ErrorContains(t, err, "id=jira-WHF-1")
 
-	err = svc.UpdateTaskStatus(t.Context(), "BROKEN", task.StatusDone)
+	err = svc.UpdateTaskStatus(t.Context(), "BROKEN", task.StatusDone, nil)
 	require.ErrorIs(t, err, failure)
 	require.NotErrorIs(t, err, service.ErrLocalTaskToSetStatusNotFound)
+}
+
+func TestUpdateTaskStatusWithClosedAt(t *testing.T) {
+	closedAt := time.Date(2026, 10, 21, 9, 30, 0, 0, time.UTC)
+
+	manager := mocks.NewMockManager(t)
+	manager.EXPECT().
+		UpdateLocalTaskStatus(mock.Anything, "local-WHF-001", task.Status(task.StatusCanceled), closedAt).
+		Return(nil).
+		Once()
+
+	svc := service.NewService(mocks.NewMockClient(t), manager)
+	require.NoError(t, svc.UpdateTaskStatus(t.Context(), "local-WHF-001", task.StatusCanceled, &closedAt))
+}
+
+func TestUpdateTaskStatusRejectsClosedAtForOpenStatus(t *testing.T) {
+	closedAt := time.Date(2026, 10, 21, 9, 30, 0, 0, time.UTC)
+
+	// No expectations: nothing may be stored.
+	svc := service.NewService(mocks.NewMockClient(t), mocks.NewMockManager(t))
+
+	for _, status := range []task.Status{task.StatusTodo, task.StatusInProgress} {
+		err := svc.UpdateTaskStatus(t.Context(), "local-WHF-001", status, &closedAt)
+		require.ErrorIs(t, err, service.ErrClosedAtForOpenStatus)
+		require.ErrorContains(t, err, "status="+string(status))
+	}
 }
 
 func TestUpdateTaskStatusRejectsUnknownStatus(t *testing.T) {
@@ -332,7 +457,7 @@ func TestUpdateTaskStatusRejectsUnknownStatus(t *testing.T) {
 	svc := service.NewService(mocks.NewMockClient(t), mocks.NewMockManager(t))
 
 	for _, status := range []task.Status{"", "x"} {
-		err := svc.UpdateTaskStatus(t.Context(), "local-WHF-001", status)
+		err := svc.UpdateTaskStatus(t.Context(), "local-WHF-001", status, nil)
 		require.ErrorIs(t, err, service.ErrUnknownTaskStatusToSet)
 	}
 }

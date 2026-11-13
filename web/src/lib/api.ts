@@ -19,6 +19,10 @@ export interface TaskListItem extends TaskSummary {
   done_todo_count: number
   /** position orders Today; null until the tasks are first reordered. */
   position: number | null
+  /** closed_at is when the task was last closed; null while open or when unknown. */
+  closed_at: string | null
+  /** closed_since_last_sync is whether the latest Atlassian sync saw the task close. */
+  closed_since_last_sync: boolean
 }
 
 export interface TaskDetail extends TaskSummary {
@@ -191,8 +195,9 @@ export const api = {
   createTask: (t: TaskInput) => request<{ id: string }>('POST', '/api/tasks', t).then((r) => r.id),
   updateTask: (id: string, t: TaskInput) => request<void>('PUT', `/api/tasks/${enc(id)}`, t),
   deleteTask: (id: string) => request<void>('DELETE', `/api/tasks/${enc(id)}`),
-  setTaskStatus: (id: string, status: TaskStatus) =>
-    request<void>('PUT', `/api/tasks/${enc(id)}/status`, { status }),
+  /** setTaskStatus sets a local task's status; closedAt restores the closing time when undoing a reopen. */
+  setTaskStatus: (id: string, status: TaskStatus, closedAt?: string) =>
+    request<void>('PUT', `/api/tasks/${enc(id)}/status`, closedAt ? { status, closed_at: closedAt } : { status }),
   reorderTasks: (ids: string[]) => request<void>('PUT', '/api/tasks/order', { ids }),
   syncTask: (id: string) => request<TaskSync>('POST', `/api/tasks/${enc(id)}/sync`),
 

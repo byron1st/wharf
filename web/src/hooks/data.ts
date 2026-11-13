@@ -12,6 +12,7 @@ import {
   type TodoFilter,
   type TodoInput,
 } from '@/lib/api'
+import { isClosedStatus } from '@/lib/dates'
 import { reportSaveError } from '@/lib/errors'
 
 export const keys = {
@@ -89,6 +90,13 @@ function patchTodo(qc: QueryClient, id: number, fn: (t: Todo) => Todo | null) {
       return next ? [next] : []
     }),
   )
+}
+
+/** nextClosedAt is the closing time the server keeps for t after a status change, as the server decides it. */
+function nextClosedAt(t: TaskListItem, status: TaskStatus, closedAt?: string): string | null {
+  if (!isClosedStatus(status)) return null
+  if (isClosedStatus(t.status)) return t.closed_at
+  return closedAt ?? new Date().toISOString()
 }
 
 /** patchCounts moves a task's todo counts, so group progress follows a change before the refetch. */
@@ -320,14 +328,16 @@ export function useTaskActions() {
 
   const setStatus = useMutation({
     mutationKey: ['task-save'],
-    mutationFn: ({ task, status }: { task: { id: string }; status: TaskStatus }) =>
-      queued(`task-${task.id}`, () => api.setTaskStatus(task.id, status)),
-    onMutate: async ({ task, status }) => {
+    mutationFn: ({ task, status, closedAt }: { task: { id: string }; status: TaskStatus; closedAt?: string }) =>
+      queued(`task-${task.id}`, () => api.setTaskStatus(task.id, status, closedAt)),
+    onMutate: async ({ task, status, closedAt }) => {
       await qc.cancelQueries({ queryKey: keys.tasks })
       await qc.cancelQueries({ queryKey: keys.task(task.id) })
       const snap = snapshot(qc)
       qc.setQueryData<TaskDetail>(keys.task(task.id), (old) => (old ? { ...old, status } : old))
-      qc.setQueryData<TaskListItem[]>(keys.tasks, (old) => old?.map((t) => (t.id === task.id ? { ...t, status } : t)))
+      qc.setQueryData<TaskListItem[]>(keys.tasks, (old) =>
+        old?.map((t) => (t.id === task.id ? { ...t, status, closed_at: nextClosedAt(t, status, closedAt) } : t)),
+      )
       return snap
     },
     onError: (err, vars, snap) => {
@@ -359,7 +369,12 @@ export function useTaskActions() {
   return {
     update: (task: TaskDetail, patch: Partial<TaskInput>) => update.mutate({ task, patch }),
     /** setStatus changes only the status of a local task. */
-    setStatus: (task: { id: string }, status: TaskStatus) => setStatus.mutate({ task, status }),
+    /** setStatus sets a local task's status; closedAt brings back an earlier closing time, for undoing a reopen. */
+    setStatus: (task: { id: string }, status: TaskStatus, closedAt?: string) =>
+      setStatus.mutate({ task, status, closedAt }),
+    /** setStatusAsync is setStatus resolving once the server stored it; a failure is already reported. */
+    setStatusAsync: (task: { id: string }, status: TaskStatus, closedAt?: string) =>
+      setStatus.mutateAsync({ task, status, closedAt }),
     /** reorder stores ids, every task in Today's order, as the task positions. */
     reorder: (ids: string[]) => reorder.mutate(ids),
     updateAsync: (task: TaskDetail, patch: Partial<TaskInput>) => update.mutateAsync({ task, patch }),

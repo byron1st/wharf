@@ -25,9 +25,12 @@ type taskRequest struct {
 	LinkedIDs   []string    `json:"linked_ids"`
 }
 
-// taskStatusRequest is the body of PUT /tasks/{id}/status.
+// taskStatusRequest is the body of PUT /tasks/{id}/status. ClosedAt is
+// optional and allowed only with a closed status: it restores the closing
+// time of a task reopened by mistake.
 type taskStatusRequest struct {
-	Status task.Status `json:"status"`
+	Status   task.Status `json:"status"`
+	ClosedAt *time.Time  `json:"closed_at"`
 }
 
 // taskOrderRequest is the body of PUT /tasks/order.
@@ -45,14 +48,17 @@ type taskSummary struct {
 	DueDate     *time.Time  `json:"due_date"`
 }
 
-// taskListItem is a summary with the task's todo counts and its position on
-// Today, for GET /api/tasks.
+// taskListItem is a summary with the task's todo counts, its position on
+// Today, when it was closed, and whether the latest sync saw it close, for
+// GET /api/tasks.
 type taskListItem struct {
 	taskSummary
 
-	TodoCount     int  `json:"todo_count"`
-	DoneTodoCount int  `json:"done_todo_count"`
-	Position      *int `json:"position"`
+	TodoCount           int        `json:"todo_count"`
+	DoneTodoCount       int        `json:"done_todo_count"`
+	Position            *int       `json:"position"`
+	ClosedAt            *time.Time `json:"closed_at"`
+	ClosedSinceLastSync bool       `json:"closed_since_last_sync"`
 }
 
 type taskListResponse struct {

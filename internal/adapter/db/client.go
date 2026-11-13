@@ -75,7 +75,7 @@ type Manager interface {
 	ListTasksByIDs(ctx context.Context, ids []string) ([]task.Task, error)
 	GetTask(ctx context.Context, id string) (task.Task, error)
 	UpdateLocalTask(ctx context.Context, t task.Task) error
-	UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status) error
+	UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status, closedAt time.Time) error
 	SetTaskPositions(ctx context.Context, ids []string) error
 	DeleteTask(ctx context.Context, id string) error
 	CreateTodo(ctx context.Context, t todo.Todo) (int64, error)
@@ -128,6 +128,10 @@ func NewManager(url, password string, migrations fs.FS) Manager {
 // The exception is a local parent: a non-local task that declares no parent
 // keeps a local parent, so a local task can hold a Jira task as its child
 // across syncs. A declared parent still replaces it.
+//
+// ClosedAt is stored as given. ClosedSyncedAt is stored only when the upsert
+// closes a stored task that was open; it is kept while the task stays closed
+// and cleared when the task is open, so a new task never gets it.
 func (m *manager) UpsertTasks(ctx context.Context, tasks []task.Task) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -248,6 +252,8 @@ func (m *manager) GetTask(ctx context.Context, id string) (task.Task, error) {
 // UpsertTasks all of its children and its links in both directions, which is
 // how GetTask reads them. A link another task declared to t.ID is dropped
 // unless t.LinkedIDs lists it; a Jira task declares it again on its next sync.
+// t.ClosedAt is stored only when the update closes a task that was open; a
+// task that stays closed keeps its closing time, and an open one has none.
 // It fails with ErrLocalTaskToUpdateNotFound when no local task has t.ID.
 func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 	if err := m.checkConnected(); err != nil {
@@ -263,6 +269,7 @@ func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 			Status:      string(t.Status),
 			StartDate:   toNullTime(t.StartDate),
 			DueDate:     toNullTime(t.DueDate),
+			ClosedAt:    toNullTime(t.ClosedAt),
 			ID:          t.ID,
 		})
 		if err != nil {
@@ -286,14 +293,18 @@ func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 }
 
 // UpdateLocalTaskStatus sets the status of the stored local task id, leaving
-// its other fields and relations as they are. It fails with
+// its other fields and relations as they are. closedAt becomes its closing
+// time only when status closes a task that was open; a task that stays closed
+// keeps its closing time, and an open one has none. It fails with
 // ErrLocalTaskToSetStatusNotFound when no local task has id.
-func (m *manager) UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status) error {
+func (m *manager) UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status, closedAt time.Time) error {
 	if err := m.checkConnected(); err != nil {
 		return err
 	}
 
-	updated, err := m.queries.UpdateLocalTaskStatus(ctx, UpdateLocalTaskStatusParams{Status: string(status), ID: id})
+	params := UpdateLocalTaskStatusParams{Status: string(status), ClosedAt: closedAt.UTC(), ID: id}
+
+	updated, err := m.queries.UpdateLocalTaskStatus(ctx, params)
 	if err != nil {
 		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpdateLocalTaskStatus, err), id)
 	}
@@ -625,13 +636,15 @@ func storeRelations(ctx context.Context, queries *Queries, t task.Task) error {
 
 func toUpsertTaskParams(t task.Task) UpsertTaskParams {
 	return UpsertTaskParams{
-		ID:          t.ID,
-		Originated:  string(t.Originated),
-		Title:       t.Title,
-		Description: t.Description,
-		Status:      string(t.Status),
-		StartDate:   toNullTime(t.StartDate),
-		DueDate:     toNullTime(t.DueDate),
+		ID:             t.ID,
+		Originated:     string(t.Originated),
+		Title:          t.Title,
+		Description:    t.Description,
+		Status:         string(t.Status),
+		StartDate:      toNullTime(t.StartDate),
+		DueDate:        toNullTime(t.DueDate),
+		ClosedAt:       toNullTime(t.ClosedAt),
+		ClosedSyncedAt: toNullTime(t.ClosedSyncedAt),
 	}
 }
 
@@ -646,14 +659,16 @@ func fromTasks(rows []Task) []task.Task {
 
 func fromTask(row Task) task.Task {
 	return task.Task{
-		ID:          row.ID,
-		Originated:  task.Origin(row.Originated),
-		Title:       row.Title,
-		Description: row.Description,
-		Status:      task.Status(row.Status),
-		StartDate:   fromNullTime(row.StartDate),
-		DueDate:     fromNullTime(row.DueDate),
-		Position:    fromNullInt(row.Position),
+		ID:             row.ID,
+		Originated:     task.Origin(row.Originated),
+		Title:          row.Title,
+		Description:    row.Description,
+		Status:         task.Status(row.Status),
+		StartDate:      fromNullTime(row.StartDate),
+		DueDate:        fromNullTime(row.DueDate),
+		Position:       fromNullInt(row.Position),
+		ClosedAt:       fromNullTime(row.ClosedAt),
+		ClosedSyncedAt: fromNullTime(row.ClosedSyncedAt),
 	}
 }
 

@@ -8,3 +8,8 @@ const (
 	StatusDone       = "done"
 	StatusCanceled   = "canceled"
 )
+
+// Closed reports whether s is done or canceled.
+func (s Status) Closed() bool {
+	return s == StatusDone || s == StatusCanceled
+}

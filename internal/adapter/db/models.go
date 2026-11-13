@@ -40,14 +40,16 @@ type ServiceDeskRequest struct {
 }
 
 type Task struct {
-	ID          string
-	Originated  string
-	Title       string
-	Description string
-	Status      string
-	StartDate   sql.NullTime
-	DueDate     sql.NullTime
-	Position    sql.NullInt64
+	ID             string
+	Originated     string
+	Title          string
+	Description    string
+	Status         string
+	StartDate      sql.NullTime
+	DueDate        sql.NullTime
+	Position       sql.NullInt64
+	ClosedAt       sql.NullTime
+	ClosedSyncedAt sql.NullTime
 }
 
 type TaskHierarchy struct {

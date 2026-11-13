@@ -1,16 +1,26 @@
 -- name: UpsertTask :exec
+-- 'done' and 'canceled' are the closed task.Status values. closed_synced_at
+-- takes the given sync time only when this upsert closes a stored open task,
+-- is kept while the task stays closed, and is cleared when it opens again.
 INSERT INTO tasks (
-    id, originated, title, description, status, start_date, due_date
+    id, originated, title, description, status, start_date, due_date, closed_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    sqlc.arg(id), sqlc.arg(originated), sqlc.arg(title), sqlc.arg(description),
+    sqlc.arg(status), sqlc.narg(start_date), sqlc.narg(due_date), sqlc.narg(closed_at)
 )
 ON CONFLICT (id) DO UPDATE SET
-    originated  = excluded.originated,
-    title       = excluded.title,
-    description = excluded.description,
-    status      = excluded.status,
-    start_date  = excluded.start_date,
-    due_date    = excluded.due_date;
+    originated       = excluded.originated,
+    title            = excluded.title,
+    description      = excluded.description,
+    status           = excluded.status,
+    start_date       = excluded.start_date,
+    due_date         = excluded.due_date,
+    closed_at        = excluded.closed_at,
+    closed_synced_at = CASE
+        WHEN excluded.status NOT IN ('done', 'canceled') THEN NULL
+        WHEN tasks.status IN ('done', 'canceled') THEN tasks.closed_synced_at
+        ELSE sqlc.narg(closed_synced_at)::timestamptz
+    END;
 
 -- name: DeleteTaskParent :exec
 DELETE FROM task_hierarchies WHERE child_id = $1;
@@ -70,16 +80,32 @@ SELECT task_links.task_id AS id FROM task_links WHERE task_links.linked_id = sql
 ORDER BY id;
 
 -- name: UpdateLocalTask :execrows
+-- closed_at takes the given time only when the update closes an open task,
+-- is kept while the task stays closed, and is cleared when it opens. SET
+-- expressions read the row as it was before the update.
 UPDATE tasks SET
-    title       = $1,
-    description = $2,
-    status      = $3,
-    start_date  = $4,
-    due_date    = $5
-WHERE id = $6 AND originated = 'local';
+    title       = sqlc.arg(title),
+    description = sqlc.arg(description),
+    status      = sqlc.arg(status),
+    start_date  = sqlc.narg(start_date),
+    due_date    = sqlc.narg(due_date),
+    closed_at   = CASE
+        WHEN sqlc.arg(status)::text NOT IN ('done', 'canceled') THEN NULL
+        WHEN status IN ('done', 'canceled') THEN closed_at
+        ELSE sqlc.narg(closed_at)::timestamptz
+    END
+WHERE id = sqlc.arg(id) AND originated = 'local';
 
 -- name: UpdateLocalTaskStatus :execrows
-UPDATE tasks SET status = $1 WHERE id = $2 AND originated = 'local';
+-- closed_at changes as in UpdateLocalTask.
+UPDATE tasks SET
+    status    = sqlc.arg(status),
+    closed_at = CASE
+        WHEN sqlc.arg(status)::text NOT IN ('done', 'canceled') THEN NULL
+        WHEN status IN ('done', 'canceled') THEN closed_at
+        ELSE sqlc.arg(closed_at)::timestamptz
+    END
+WHERE id = sqlc.arg(id) AND originated = 'local';
 
 -- name: UpdateTaskPosition :exec
 UPDATE tasks SET position = $1 WHERE id = $2;

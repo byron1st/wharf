@@ -38,7 +38,7 @@ var header = http.Header{
 // searchBody returns the exact search request body for the page token.
 func searchBody(token string) []byte {
 	body := `{"jql":"assignee = currentUser() AND statusCategory != done",` +
-		`"fields":["summary","description","status","duedate","parent","subtasks","issuelinks","customfield_10015"],` +
+		`"fields":["summary","description","status","statuscategorychangedate","duedate","parent","subtasks","issuelinks","customfield_10015"],` +
 		`"maxResults":100`
 	if token != "" {
 		body += `,"nextPageToken":"` + token + `"`
@@ -139,6 +139,7 @@ func TestGetMyTasks(t *testing.T) {
 			Status:      task.StatusDone,
 			StartDate:   date(t, "2026-09-01"),
 			DueDate:     date(t, "2026-09-05"),
+			ClosedAt:    new(time.Date(2026, 9, 4, 9, 30, 12, 345e6, time.UTC)),
 		},
 		{
 			ID:          "jira-WHF-4",
@@ -146,6 +147,7 @@ func TestGetMyTasks(t *testing.T) {
 			Title:       "Migrate legacy cron jobs",
 			Description: "Superseded by WHF-2.",
 			Status:      task.StatusCanceled,
+			ClosedAt:    new(time.Date(2026, 9, 2, 9, 0, 0, 0, time.UTC)),
 		},
 	}, tasks)
 }
@@ -321,6 +323,7 @@ func TestGetMyTasksSkipsBadItems(t *testing.T) {
 			Title:       "Migrate legacy cron jobs",
 			Description: "Superseded by WHF-2.",
 			Status:      task.StatusCanceled,
+			ClosedAt:    new(time.Date(2026, 9, 2, 9, 0, 0, 0, time.UTC)),
 		},
 	}, tasks)
 	require.ErrorIs(t, err, atlassian.ErrMissingWorkItemKey)
@@ -532,7 +535,7 @@ func TestCheck(t *testing.T) {
 
 func TestGetTask(t *testing.T) {
 	issueURL := siteURL + "/rest/api/3/issue/WHF-1?fields=" +
-		"summary%2Cdescription%2Cstatus%2Cduedate%2Cparent%2Csubtasks%2Cissuelinks%2Ccustomfield_10015"
+		"summary%2Cdescription%2Cstatus%2Cstatuscategorychangedate%2Cduedate%2Cparent%2Csubtasks%2Cissuelinks%2Ccustomfield_10015"
 
 	m := mocks.NewMockHTTPClient(t)
 	m.EXPECT().Get(t.Context(), issueURL, header).Return([]byte(fixture(t, "view_todo.json")), nil).Once()

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -24,6 +25,28 @@ import (
 
 func request(key, category string) servicedesk.Request {
 	return servicedesk.Request{Key: key, Title: key, Status: category, StatusCategory: category}
+}
+
+// stamped matches the tasks a full sync upserts: want, each carrying the same
+// ClosedSyncedAt, the time of the sync.
+func stamped(want []task.Task) any {
+	return mock.MatchedBy(func(got []task.Task) bool {
+		if len(got) != len(want) {
+			return false
+		}
+
+		bare := make([]task.Task, 0, len(got))
+		for _, g := range got {
+			if g.ClosedSyncedAt == nil || !g.ClosedSyncedAt.Equal(*got[0].ClosedSyncedAt) {
+				return false
+			}
+
+			g.ClosedSyncedAt = nil
+			bare = append(bare, g)
+		}
+
+		return assert.ObjectsAreEqual(want, bare)
+	})
 }
 
 func TestSyncAtlassian(t *testing.T) {
@@ -49,7 +72,13 @@ func TestSyncAtlassian(t *testing.T) {
 		Return([]servicedesk.Request{request("SD-1", "NEW"), request("SD-2", "NEW")}, nil).
 		Once()
 	manager.EXPECT().ListTasks(mock.Anything).Return(tasks, nil).Once()
-	manager.EXPECT().UpsertTasks(mock.Anything, tasks).Return(nil).Once()
+
+	var upserted []task.Task
+
+	manager.EXPECT().UpsertTasks(mock.Anything, stamped(tasks)).
+		Run(func(_ context.Context, ts []task.Task) { upserted = ts }).
+		Return(nil).
+		Once()
 	manager.EXPECT().UpsertServiceDeskRequests(mock.Anything, fetched).Return(nil).Once()
 	manager.EXPECT().CreateAtlassianSync(mock.Anything, mock.Anything).
 		Run(func(_ context.Context, r atlassiansync.Record) { recorded = r }).
@@ -63,6 +92,8 @@ func TestSyncAtlassian(t *testing.T) {
 	require.WithinRange(t, got.Record.SyncedAt, before.UTC(), time.Now().UTC())
 	require.Equal(t, time.UTC, got.Record.SyncedAt.Location())
 	require.Equal(t, recorded, got.Record)
+	require.Equal(t, recorded.SyncedAt, *upserted[0].ClosedSyncedAt)
+	require.Nil(t, tasks[0].ClosedSyncedAt, "the fetched tasks are not stamped in place")
 
 	got.Record.SyncedAt = time.Time{}
 	require.Equal(t, service.AtlassianSync{
@@ -142,7 +173,7 @@ func TestSyncAtlassianRefetchesDroppedJiraTasks(t *testing.T) {
 	manager := mocks.NewMockManager(t)
 	manager.EXPECT().ListServiceDeskRequests(mock.Anything, false).Return(nil, nil).Once()
 	manager.EXPECT().ListTasks(mock.Anything).Return(stored, nil).Once()
-	manager.EXPECT().UpsertTasks(mock.Anything, []task.Task{searched, finished}).Return(nil).Once()
+	manager.EXPECT().UpsertTasks(mock.Anything, stamped([]task.Task{searched, finished})).Return(nil).Once()
 	manager.EXPECT().UpsertServiceDeskRequests(mock.Anything, []servicedesk.Request{}).Return(nil).Once()
 	manager.EXPECT().CreateAtlassianSync(mock.Anything, mock.Anything).Return(nil).Once()
 
@@ -181,7 +212,7 @@ func TestSyncAtlassianStopsRefetchingOnRequestFailures(t *testing.T) {
 			manager := mocks.NewMockManager(t)
 			manager.EXPECT().ListServiceDeskRequests(mock.Anything, false).Return(nil, nil).Once()
 			manager.EXPECT().ListTasks(mock.Anything).Return(stored, nil).Once()
-			manager.EXPECT().UpsertTasks(mock.Anything, []task.Task{searched}).Return(nil).Once()
+			manager.EXPECT().UpsertTasks(mock.Anything, stamped([]task.Task{searched})).Return(nil).Once()
 			manager.EXPECT().UpsertServiceDeskRequests(mock.Anything, []servicedesk.Request{}).Return(nil).Once()
 			manager.EXPECT().CreateAtlassianSync(mock.Anything, mock.Anything).Return(nil).Once()
 
@@ -231,18 +262,18 @@ func TestSyncAtlassianStorageFailures(t *testing.T) {
 		"tasks": func(m *mocks.MockManager) {
 			m.EXPECT().ListServiceDeskRequests(mock.Anything, false).Return(nil, nil).Once()
 			m.EXPECT().ListTasks(mock.Anything).Return(nil, nil).Once()
-			m.EXPECT().UpsertTasks(mock.Anything, tasks).Return(failure).Once()
+			m.EXPECT().UpsertTasks(mock.Anything, stamped(tasks)).Return(failure).Once()
 		},
 		"requests": func(m *mocks.MockManager) {
 			m.EXPECT().ListServiceDeskRequests(mock.Anything, false).Return(nil, nil).Once()
 			m.EXPECT().ListTasks(mock.Anything).Return(nil, nil).Once()
-			m.EXPECT().UpsertTasks(mock.Anything, tasks).Return(nil).Once()
+			m.EXPECT().UpsertTasks(mock.Anything, stamped(tasks)).Return(nil).Once()
 			m.EXPECT().UpsertServiceDeskRequests(mock.Anything, requests).Return(failure).Once()
 		},
 		"record": func(m *mocks.MockManager) {
 			m.EXPECT().ListServiceDeskRequests(mock.Anything, false).Return(nil, nil).Once()
 			m.EXPECT().ListTasks(mock.Anything).Return(nil, nil).Once()
-			m.EXPECT().UpsertTasks(mock.Anything, tasks).Return(nil).Once()
+			m.EXPECT().UpsertTasks(mock.Anything, stamped(tasks)).Return(nil).Once()
 			m.EXPECT().UpsertServiceDeskRequests(mock.Anything, requests).Return(nil).Once()
 			m.EXPECT().CreateAtlassianSync(mock.Anything, mock.Anything).Return(failure).Once()
 		},
