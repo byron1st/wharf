@@ -308,7 +308,7 @@ function NewCardTodo({ task, onDone }: { task: TaskListItem; onDone: () => void 
           if (e.key === 'Enter' && !e.nativeEvent.isComposing) add()
           if (e.key === 'Escape') onDone()
         }}
-        className="h-8 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-muted"
+        className="h-8 min-w-0 flex-1 bg-transparent px-0.5 text-[13px] outline-none placeholder:text-ink-muted"
       />
       <button
         type="button"
