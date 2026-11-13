@@ -18,6 +18,7 @@ var (
 	ErrUnknownStatusCategory  = errors.New("atlassian: unknown status category")
 	ErrFailedToParseStartDate = errors.New("atlassian: failed to parse start date")
 	ErrFailedToParseDueDate   = errors.New("atlassian: failed to parse due date")
+	ErrFailedToParseClosedAt  = errors.New("atlassian: failed to parse status category change date")
 	ErrWorkItemNotFound       = errors.New("atlassian: work item not found")
 )
 
@@ -162,7 +163,10 @@ func (c *client) GetTask(ctx context.Context, key string) (task.Task, error) {
 
 // searchFields returns a fresh slice of the fields every search page returns.
 func searchFields() []string {
-	return []string{"summary", "description", "status", "duedate", "parent", "subtasks", "issuelinks", startDateField}
+	return []string{
+		"summary", "description", "status", "statuscategorychangedate", "duedate", "parent", "subtasks", "issuelinks",
+		startDateField,
+	}
 }
 
 type ViewWorkItem struct {
@@ -176,11 +180,12 @@ type ViewWorkItem struct {
 				Key StatusCategoryKey `json:"key"`
 			} `json:"statusCategory"`
 		} `json:"status"`
-		DueDate    string       `json:"duedate"`
-		StartDate  string       `json:"customfield_10015"`
-		Parent     *LinkedItem  `json:"parent"`
-		Subtasks   []LinkedItem `json:"subtasks"`
-		IssueLinks []IssueLink  `json:"issuelinks"`
+		StatusCategoryChangeDate string       `json:"statuscategorychangedate"`
+		DueDate                  string       `json:"duedate"`
+		StartDate                string       `json:"customfield_10015"`
+		Parent                   *LinkedItem  `json:"parent"`
+		Subtasks                 []LinkedItem `json:"subtasks"`
+		IssueLinks               []IssueLink  `json:"issuelinks"`
 	} `json:"fields"`
 }
 
@@ -217,6 +222,17 @@ func ToTask(item ViewWorkItem) (task.Task, error) {
 		dueDateErr = errors.Join(fmt.Errorf("%w: key=%s", ErrFailedToParseDueDate, item.Key), dueDateErr)
 	}
 
+	var (
+		closedAt    *time.Time
+		closedAtErr error
+	)
+	if status.Closed() {
+		closedAt, closedAtErr = parseDateTime(f.StatusCategoryChangeDate)
+		if closedAtErr != nil {
+			closedAtErr = errors.Join(fmt.Errorf("%w: key=%s", ErrFailedToParseClosedAt, item.Key), closedAtErr)
+		}
+	}
+
 	var parentID string
 	if f.Parent != nil && f.Parent.Key != "" {
 		parentID = task.NewID(task.OriginJira, f.Parent.Key)
@@ -251,7 +267,8 @@ func ToTask(item ViewWorkItem) (task.Task, error) {
 		ParentID:    parentID,
 		ChildrenIDs: childrenIDs,
 		LinkedIDs:   linkedIDs,
-	}, errors.Join(statusErr, startDateErr, dueDateErr)
+		ClosedAt:    closedAt,
+	}, errors.Join(statusErr, startDateErr, dueDateErr, closedAtErr)
 }
 
 func parseDate(value string) (*time.Time, error) {
@@ -263,6 +280,30 @@ func parseDate(value string) (*time.Time, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return &t, nil
+}
+
+// jiraDateTimeLayout is how Jira writes date-time fields, such as
+// "2026-10-23T14:05:09.123+0900". The fraction is optional when parsing.
+const jiraDateTimeLayout = "2006-01-02T15:04:05.999999999-0700"
+
+// parseDateTime returns a Jira date-time at UTC. It also takes RFC 3339, whose
+// offset has a colon.
+func parseDateTime(value string) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+
+	t, err := time.Parse(jiraDateTimeLayout, value)
+	if err != nil {
+		var rfcErr error
+		if t, rfcErr = time.Parse(time.RFC3339Nano, value); rfcErr != nil {
+			return nil, err
+		}
+	}
+
+	t = t.UTC()
 
 	return &t, nil
 }

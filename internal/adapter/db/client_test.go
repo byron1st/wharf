@@ -189,7 +189,10 @@ func TestInitialMigrationSchema(t *testing.T) {
 
 	require.Equal(
 		t,
-		[]string{"id", "originated", "title", "description", "status", "start_date", "due_date", "position"},
+		[]string{
+			"id", "originated", "title", "description", "status", "start_date", "due_date", "position",
+			"closed_at", "closed_synced_at",
+		},
 		columns("tasks"),
 	)
 	require.Equal(t, []string{"child_id", "parent_id"}, columns("task_hierarchies"))
@@ -747,12 +750,12 @@ func TestUpdateLocalTaskStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, manager.UpsertTasks(context.Background(), []task.Task{newTask("J1")}))
 
-	require.NoError(t, manager.UpdateLocalTaskStatus(context.Background(), id, task.StatusDone))
+	require.NoError(t, manager.UpdateLocalTaskStatus(context.Background(), id, task.StatusDone, time.Now()))
 	require.Equal(t, readTask{originated: "local", title: "local", status: "done"}, read(t, dsn, id))
 	require.Equal(t, []string{"C1<" + id}, relations(t, dsn))
 
 	for _, missing := range []string{"J1", "local-WHF-404"} {
-		err := manager.UpdateLocalTaskStatus(context.Background(), missing, task.StatusDone)
+		err := manager.UpdateLocalTaskStatus(context.Background(), missing, task.StatusDone, time.Now())
 		require.ErrorIs(t, err, db.ErrLocalTaskToSetStatusNotFound)
 		require.ErrorContains(t, err, "id="+missing)
 	}
@@ -824,4 +827,181 @@ func TestDeleteTask(t *testing.T) {
 	err := manager.DeleteTask(context.Background(), "T1")
 	require.ErrorIs(t, err, db.ErrTaskToDeleteNotFound)
 	require.ErrorContains(t, err, "id=T1")
+}
+
+// closedTimes reads the closing times of the stored task id through
+// ListTasks.
+func closedTimes(t *testing.T, manager db.Manager, id string) (closedAt, closedSyncedAt *time.Time) {
+	t.Helper()
+
+	tasks, err := manager.ListTasks(context.Background())
+	require.NoError(t, err)
+
+	for _, stored := range tasks {
+		if stored.ID == id {
+			return stored.ClosedAt, stored.ClosedSyncedAt
+		}
+	}
+
+	require.FailNow(t, "task not stored", "id=%s", id)
+
+	return nil, nil
+}
+
+func requireTime(t *testing.T, want time.Time, got *time.Time) {
+	t.Helper()
+
+	require.NotNil(t, got)
+	require.True(t, want.Equal(*got), "want %s, got %s", want, got)
+	require.Equal(t, time.UTC, got.Location())
+}
+
+func TestClosedAtMigrationLeavesStoredTasksUnknown(t *testing.T) {
+	dsn := newDatabase(t)
+
+	initial := projectMigrationsWith(t, nil)
+	delete(initial, "migrations/0002_add_task_closed_at.sql")
+	require.NoError(t, dbManager(t, dsn, initial).Migrate(context.Background()))
+
+	_, err := open(t, dsn).ExecContext(
+		context.Background(),
+		"INSERT INTO tasks (id, originated, title, status) VALUES ('local-WHF-001', 'local', 'old', 'done')",
+	)
+	require.NoError(t, err)
+
+	manager := dbManager(t, dsn, scripts.Migrations())
+	require.NoError(t, manager.Migrate(context.Background()))
+
+	closedAt, closedSyncedAt := closedTimes(t, manager, "local-WHF-001")
+	require.Nil(t, closedAt)
+	require.Nil(t, closedSyncedAt)
+}
+
+func TestUpsertTasksClosedTimes(t *testing.T) {
+	manager := newManager(t)
+	ctx := context.Background()
+
+	sync1 := time.Date(2026, 10, 20, 9, 0, 0, 0, time.FixedZone("KST", 9*3600))
+	sync2 := sync1.Add(24 * time.Hour)
+	sync3 := sync2.Add(24 * time.Hour)
+	closed := time.Date(2026, 10, 21, 3, 4, 5, 0, time.UTC)
+
+	upsert := func(status task.Status, closedAt, syncedAt *time.Time) {
+		t.Helper()
+
+		j := newTask("jira-J")
+		j.Status, j.ClosedAt, j.ClosedSyncedAt = status, closedAt, syncedAt
+		require.NoError(t, manager.UpsertTasks(ctx, []task.Task{j}))
+	}
+
+	// A new task never gets a sync time, closed or not.
+	upsert(task.StatusDone, &closed, &sync1)
+
+	closedAt, closedSyncedAt := closedTimes(t, manager, "jira-J")
+	requireTime(t, closed, closedAt)
+	require.Nil(t, closedSyncedAt)
+
+	upsert(task.StatusTodo, nil, &sync1)
+
+	closedAt, closedSyncedAt = closedTimes(t, manager, "jira-J")
+	require.Nil(t, closedAt)
+	require.Nil(t, closedSyncedAt)
+
+	// Closing a stored open task records the sync time.
+	upsert(task.StatusDone, &closed, &sync2)
+
+	closedAt, closedSyncedAt = closedTimes(t, manager, "jira-J")
+	requireTime(t, closed, closedAt)
+	requireTime(t, sync2, closedSyncedAt)
+
+	// Staying closed keeps it, even across done and canceled.
+	upsert(task.StatusCanceled, &closed, &sync3)
+
+	_, closedSyncedAt = closedTimes(t, manager, "jira-J")
+	requireTime(t, sync2, closedSyncedAt)
+
+	// Closing without a sync time, as a single-task sync does, records none.
+	upsert(task.StatusInProgress, nil, nil)
+	upsert(task.StatusDone, &closed, nil)
+
+	_, closedSyncedAt = closedTimes(t, manager, "jira-J")
+	require.Nil(t, closedSyncedAt)
+}
+
+func TestUpdateLocalTaskStatusClosedAt(t *testing.T) {
+	manager := newManager(t)
+	ctx := context.Background()
+
+	at := func(day int) time.Time { return time.Date(2026, 10, day, 9, 0, 0, 0, time.FixedZone("KST", 9*3600)) }
+
+	id, err := manager.CreateLocalTask(ctx, newTask("ignored"))
+	require.NoError(t, err)
+
+	// Open to closed records the given time.
+	require.NoError(t, manager.UpdateLocalTaskStatus(ctx, id, task.StatusDone, at(20)))
+	closedAt, _ := closedTimes(t, manager, id)
+	requireTime(t, at(20), closedAt)
+
+	// Closed to closed keeps it.
+	require.NoError(t, manager.UpdateLocalTaskStatus(ctx, id, task.StatusCanceled, at(21)))
+	closedAt, _ = closedTimes(t, manager, id)
+	requireTime(t, at(20), closedAt)
+
+	// Closed to open clears it.
+	require.NoError(t, manager.UpdateLocalTaskStatus(ctx, id, task.StatusTodo, at(22)))
+	closedAt, _ = closedTimes(t, manager, id)
+	require.Nil(t, closedAt)
+
+	// Open to open keeps none.
+	require.NoError(t, manager.UpdateLocalTaskStatus(ctx, id, task.StatusInProgress, at(23)))
+	closedAt, _ = closedTimes(t, manager, id)
+	require.Nil(t, closedAt)
+
+	// A task closed with no known time stays unknown while it stays closed.
+	legacy := newTask("ignored")
+	legacy.Status = task.StatusDone
+	legacyID, err := manager.CreateLocalTask(ctx, legacy)
+	require.NoError(t, err)
+	require.NoError(t, manager.UpdateLocalTaskStatus(ctx, legacyID, task.StatusCanceled, at(24)))
+	closedAt, _ = closedTimes(t, manager, legacyID)
+	require.Nil(t, closedAt)
+}
+
+func TestUpdateLocalTaskClosedAt(t *testing.T) {
+	manager := newManager(t)
+	ctx := context.Background()
+
+	first := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+	second := first.Add(time.Hour)
+
+	id, err := manager.CreateLocalTask(ctx, newTask("ignored"))
+	require.NoError(t, err)
+
+	update := func(status task.Status, closedAt *time.Time) {
+		t.Helper()
+
+		u := newTask(id)
+		u.Status, u.ClosedAt = status, closedAt
+		require.NoError(t, manager.UpdateLocalTask(ctx, u))
+	}
+
+	update(task.StatusDone, &first)
+
+	closedAt, _ := closedTimes(t, manager, id)
+	requireTime(t, first, closedAt)
+
+	update(task.StatusCanceled, &second)
+
+	closedAt, _ = closedTimes(t, manager, id)
+	requireTime(t, first, closedAt)
+
+	update(task.StatusTodo, &second)
+
+	closedAt, _ = closedTimes(t, manager, id)
+	require.Nil(t, closedAt)
+
+	update(task.StatusDone, &second)
+
+	closedAt, _ = closedTimes(t, manager, id)
+	requireTime(t, second, closedAt)
 }

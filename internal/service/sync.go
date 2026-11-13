@@ -36,7 +36,8 @@ var (
 // Stored Jira tasks that are still open but missing from the search, such as
 // ones done in Jira since the last sync, are fetched again one by one; one
 // that fails to fetch keeps its stored copy and counts as a failed issue, and
-// an HTTP or network failure stops the rest of the refetch.
+// an HTTP or network failure stops the rest of the refetch. A stored open task
+// this sync finds closed records the sync's time as its ClosedSyncedAt.
 func (s *service) SyncAtlassian(ctx context.Context) (AtlassianSync, error) {
 	// A nil slice with an error is a failed fetch; see atlassian.Client.
 	tasks, taskErr := s.jira.GetMyTasks(ctx)
@@ -61,9 +62,12 @@ func (s *service) SyncAtlassian(ctx context.Context) (AtlassianSync, error) {
 
 	refetched, refetchErrs := s.refetchDroppedTasks(ctx, stored, tasks)
 
-	toStore := tasks
-	if len(refetched) > 0 {
-		toStore = slices.Concat(tasks, refetched)
+	// A copy, so stamping the tasks below leaves the client's slice alone.
+	toStore := append(slices.Clone(tasks), refetched...)
+
+	syncedAt := s.now().UTC()
+	for i := range toStore {
+		toStore[i].ClosedSyncedAt = &syncedAt
 	}
 
 	if err := s.db.UpsertTasks(ctx, toStore); err != nil {
@@ -79,7 +83,7 @@ func (s *service) SyncAtlassian(ctx context.Context) (AtlassianSync, error) {
 	taskErrs, requestErrs := append(unwrapAll(taskErr), refetchErrs...), unwrapAll(requestErr)
 
 	record := atlassiansync.Record{
-		SyncedAt:        s.now().UTC(),
+		SyncedAt:        syncedAt,
 		Issues:          len(toStore),
 		IssueFailures:   len(taskErrs),
 		OpenRequests:    open,

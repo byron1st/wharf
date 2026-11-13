@@ -168,8 +168,11 @@ export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, 
 
 /** isTodayTask is whether Today lists a task: any open one, and a done or canceled one only while it has todos for today. */
 export function isTodayTask(task: { status: TaskStatus }, hasTodayTodos: boolean): boolean {
-  return hasTodayTodos || (task.status !== 'done' && task.status !== 'canceled')
+  return hasTodayTodos || !isClosedStatus(task.status)
 }
+
+/** isClosedStatus is whether a task status is done or canceled. */
+export const isClosedStatus = (s: TaskStatus) => s === 'done' || s === 'canceled'
 
 /** isSent reports whether a reminder already went off; wharf keeps no sent flag. */
 export const isSent = (at: string, now: Date) => new Date(at).getTime() <= now.getTime()
@@ -227,4 +230,31 @@ export function startOfToday(now: Date): string {
   const d = new Date(now)
   d.setHours(0, 0, 0, 0)
   return d.toISOString()
+}
+
+export type ClosedGroup = 'this-week' | 'last-week' | 'earlier'
+
+/** weekStart is the Monday of the week of a calendar date; weeks start on Monday. */
+export function weekStart(s: string): string {
+  return addDays(s, -((parseYmd(s).getDay() + 6) % 7))
+}
+
+/** closedGroup puts a closing time in this week, last week, or earlier; an unknown time is earlier. */
+export function closedGroup(closedAt: string | null, today: string): ClosedGroup {
+  if (!closedAt) return 'earlier'
+  const day = ymd(new Date(closedAt))
+  const monday = weekStart(today)
+  if (day >= monday) return 'this-week'
+  if (day >= addDays(monday, -7)) return 'last-week'
+  return 'earlier'
+}
+
+/** closedLabel is "Closed today", "Closed yesterday" or "Closed Oct 23", plus " in Jira"; just "Closed" when unknown. */
+export function closedLabel(closedAt: string | null, today: string, jira: boolean): string {
+  const where = jira ? ' in Jira' : ''
+  if (!closedAt) return `Closed${where}`
+  const day = ymd(new Date(closedAt))
+  const n = diffDays(day, today)
+  const when = n === 0 ? 'today' : n === 1 ? 'yesterday' : monthDay(day)
+  return `Closed ${when}${where}`
 }

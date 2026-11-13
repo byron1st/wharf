@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   atLocal,
+  closedGroup,
+  closedLabel,
   compareTodayTasks,
   doneLabel,
   reorderedIDs,
@@ -12,6 +14,7 @@ import {
   reminderSummary,
   shortDay,
   sortReminders,
+  weekStart,
   whenPill,
 } from './dates'
 
@@ -197,5 +200,35 @@ describe('reorderedIDs', () => {
   it('is null when nothing would move', () => {
     expect(reorderedIDs(tasks, 'B', 'C')).toBeNull()
     expect(reorderedIDs(tasks, 'D', null)).toBeNull()
+  })
+})
+
+describe('closed tasks', () => {
+  // Local noon, so the calendar day does not depend on the test's time zone.
+  const at = (day: string) => atLocal(day, '12:00').toISOString()
+
+  it('starts weeks on Monday', () => {
+    expect(weekStart('2026-10-26')).toBe('2026-10-26')
+    expect(weekStart('2026-10-29')).toBe('2026-10-26')
+    expect(weekStart('2026-11-01')).toBe('2026-10-26')
+  })
+
+  it('groups by the week of the closing day', () => {
+    expect(closedGroup(at('2026-10-26'), '2026-10-28')).toBe('this-week')
+    expect(closedGroup(at('2026-10-25'), '2026-10-28')).toBe('last-week')
+    expect(closedGroup(at('2026-10-19'), '2026-10-28')).toBe('last-week')
+    expect(closedGroup(at('2026-10-18'), '2026-10-28')).toBe('earlier')
+    expect(closedGroup(null, '2026-10-28')).toBe('earlier')
+    // On a Sunday, the Monday six days before is still this week.
+    expect(closedGroup(at('2026-10-26'), '2026-11-01')).toBe('this-week')
+  })
+
+  it('says when a task closed, and where for Jira', () => {
+    expect(closedLabel(at(today), today, false)).toBe('Closed today')
+    expect(closedLabel(at('2026-10-25'), today, false)).toBe('Closed yesterday')
+    expect(closedLabel(at('2026-10-23'), today, false)).toBe('Closed Oct 23')
+    expect(closedLabel(at('2026-10-19'), today, true)).toBe('Closed Oct 19 in Jira')
+    expect(closedLabel(null, today, false)).toBe('Closed')
+    expect(closedLabel(null, today, true)).toBe('Closed in Jira')
   })
 })

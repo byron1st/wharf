@@ -27,6 +27,9 @@ type TaskSync struct {
 type TaskSummary struct {
 	Task  task.Task
 	Todos todo.Count
+	// ClosedSinceLastSync is whether the latest Atlassian sync saw the task,
+	// stored and open before, close.
+	ClosedSinceLastSync bool
 }
 
 // TaskDetail is a task with its relations and the stored tasks they point at.

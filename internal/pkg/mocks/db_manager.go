@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
 	"github.com/byron1st/wharf/internal/pkg/servicedesk"
@@ -1194,16 +1195,16 @@ func (_c *MockManager_UpdateLocalTask_Call) RunAndReturn(run func(ctx context.Co
 }
 
 // UpdateLocalTaskStatus provides a mock function for the type MockManager
-func (_mock *MockManager) UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status) error {
-	ret := _mock.Called(ctx, id, status)
+func (_mock *MockManager) UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status, closedAt time.Time) error {
+	ret := _mock.Called(ctx, id, status, closedAt)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateLocalTaskStatus")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, task.Status) error); ok {
-		r0 = returnFunc(ctx, id, status)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, task.Status, time.Time) error); ok {
+		r0 = returnFunc(ctx, id, status, closedAt)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1219,11 +1220,12 @@ type MockManager_UpdateLocalTaskStatus_Call struct {
 //   - ctx context.Context
 //   - id string
 //   - status task.Status
-func (_e *MockManager_Expecter) UpdateLocalTaskStatus(ctx any, id any, status any) *MockManager_UpdateLocalTaskStatus_Call {
-	return &MockManager_UpdateLocalTaskStatus_Call{Call: _e.mock.On("UpdateLocalTaskStatus", ctx, id, status)}
+//   - closedAt time.Time
+func (_e *MockManager_Expecter) UpdateLocalTaskStatus(ctx any, id any, status any, closedAt any) *MockManager_UpdateLocalTaskStatus_Call {
+	return &MockManager_UpdateLocalTaskStatus_Call{Call: _e.mock.On("UpdateLocalTaskStatus", ctx, id, status, closedAt)}
 }
 
-func (_c *MockManager_UpdateLocalTaskStatus_Call) Run(run func(ctx context.Context, id string, status task.Status)) *MockManager_UpdateLocalTaskStatus_Call {
+func (_c *MockManager_UpdateLocalTaskStatus_Call) Run(run func(ctx context.Context, id string, status task.Status, closedAt time.Time)) *MockManager_UpdateLocalTaskStatus_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1237,10 +1239,15 @@ func (_c *MockManager_UpdateLocalTaskStatus_Call) Run(run func(ctx context.Conte
 		if args[2] != nil {
 			arg2 = args[2].(task.Status)
 		}
+		var arg3 time.Time
+		if args[3] != nil {
+			arg3 = args[3].(time.Time)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -1251,7 +1258,7 @@ func (_c *MockManager_UpdateLocalTaskStatus_Call) Return(err error) *MockManager
 	return _c
 }
 
-func (_c *MockManager_UpdateLocalTaskStatus_Call) RunAndReturn(run func(ctx context.Context, id string, status task.Status) error) *MockManager_UpdateLocalTaskStatus_Call {
+func (_c *MockManager_UpdateLocalTaskStatus_Call) RunAndReturn(run func(ctx context.Context, id string, status task.Status, closedAt time.Time) error) *MockManager_UpdateLocalTaskStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }

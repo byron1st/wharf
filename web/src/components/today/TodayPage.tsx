@@ -5,9 +5,10 @@ import { keys, useRequests, useTaskActions, useTasks, useTodoActions, useTodos }
 import { useNow } from '@/hooks/useNow'
 import type { TaskListItem, TaskStatus, Todo } from '@/lib/api'
 import { compareTodayTasks, isTodayTask, isTodayTodo, reorderedIDs, startOfToday } from '@/lib/dates'
-import { Header } from './Header'
+import { Header, type Layout } from './Header'
 import { RequestInspector } from './RequestInspector'
 import { RequestsCard } from './RequestsCard'
+import { TaskCards } from './TaskCards'
 import { TaskInspector } from './TaskInspector'
 import { TodoInspector } from './TodoInspector'
 import { TodosCard, type Selection, type TodoGroup } from './TodosCard'
@@ -21,6 +22,16 @@ function selectionOf(params: URLSearchParams): Selection {
   const req = params.get('req')
   if (req) return { kind: 'req', id: req }
   return null
+}
+
+/** useLayout is the Today layout, remembered per browser; anything but a saved "card" is the List view. */
+function useLayout() {
+  const [layout, setLayout] = useState<Layout>(() => (localStorage.getItem('wharf.layout') === 'card' ? 'card' : 'list'))
+  const set = (l: Layout) => {
+    localStorage.setItem('wharf.layout', l)
+    setLayout(l)
+  }
+  return [layout, set] as const
 }
 
 /** toggled returns a copy of s with v added, or removed when on is false. */
@@ -39,6 +50,7 @@ export function TodayPage() {
   const [params, setParams] = useSearchParams()
   const selection = selectionOf(params)
   const [adding, setAdding] = useState<string | null>(null)
+  const [layout, setLayout] = useLayout()
   const { create, setStatus, reorder } = useTaskActions()
   const { update } = useTodoActions()
   // Todos checked and tasks whose status changed in this visit stay where
@@ -118,19 +130,38 @@ export function TodayPage() {
 
   return (
     <main className="box-border flex min-h-screen flex-col gap-4 px-8 pt-7 pb-10">
-      <Header onCreateTask={createTask} onSettings={() => navigate('/settings/general', { state: { back: location.search } })} />
+      <Header
+        layout={layout}
+        onLayoutChange={setLayout}
+        onCreateTask={createTask}
+        onClosed={() => navigate('/closed', { state: { back: location.search } })}
+        onSettings={() => navigate('/settings/general', { state: { back: location.search } })}
+      />
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
-          <TodosCard
-            groups={groups}
-            selection={selection}
-            onSelect={select}
-            adding={adding}
-            setAdding={setAdding}
-            onToggleDone={toggleDone}
-            onSetStatus={changeStatus}
-            onMove={move}
-          />
+          {layout === 'card' ? (
+            <TaskCards
+              groups={groups}
+              selection={selection}
+              onSelect={select}
+              adding={adding}
+              setAdding={setAdding}
+              onToggleDone={toggleDone}
+              onSetStatus={changeStatus}
+              onMove={move}
+            />
+          ) : (
+            <TodosCard
+              groups={groups}
+              selection={selection}
+              onSelect={select}
+              adding={adding}
+              setAdding={setAdding}
+              onToggleDone={toggleDone}
+              onSetStatus={changeStatus}
+              onMove={move}
+            />
+          )}
         </div>
         <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3">
           <RequestsCard requests={requests} selection={selection} onSelect={select} />

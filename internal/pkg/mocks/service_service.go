@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/byron1st/wharf/internal/pkg/atlassiansync"
 	"github.com/byron1st/wharf/internal/pkg/servicedesk"
@@ -988,16 +989,16 @@ func (_c *MockService_UpdateTask_Call) RunAndReturn(run func(ctx context.Context
 }
 
 // UpdateTaskStatus provides a mock function for the type MockService
-func (_mock *MockService) UpdateTaskStatus(ctx context.Context, id string, status task.Status) error {
-	ret := _mock.Called(ctx, id, status)
+func (_mock *MockService) UpdateTaskStatus(ctx context.Context, id string, status task.Status, closedAt *time.Time) error {
+	ret := _mock.Called(ctx, id, status, closedAt)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateTaskStatus")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, task.Status) error); ok {
-		r0 = returnFunc(ctx, id, status)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, task.Status, *time.Time) error); ok {
+		r0 = returnFunc(ctx, id, status, closedAt)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1013,11 +1014,12 @@ type MockService_UpdateTaskStatus_Call struct {
 //   - ctx context.Context
 //   - id string
 //   - status task.Status
-func (_e *MockService_Expecter) UpdateTaskStatus(ctx any, id any, status any) *MockService_UpdateTaskStatus_Call {
-	return &MockService_UpdateTaskStatus_Call{Call: _e.mock.On("UpdateTaskStatus", ctx, id, status)}
+//   - closedAt *time.Time
+func (_e *MockService_Expecter) UpdateTaskStatus(ctx any, id any, status any, closedAt any) *MockService_UpdateTaskStatus_Call {
+	return &MockService_UpdateTaskStatus_Call{Call: _e.mock.On("UpdateTaskStatus", ctx, id, status, closedAt)}
 }
 
-func (_c *MockService_UpdateTaskStatus_Call) Run(run func(ctx context.Context, id string, status task.Status)) *MockService_UpdateTaskStatus_Call {
+func (_c *MockService_UpdateTaskStatus_Call) Run(run func(ctx context.Context, id string, status task.Status, closedAt *time.Time)) *MockService_UpdateTaskStatus_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1031,10 +1033,15 @@ func (_c *MockService_UpdateTaskStatus_Call) Run(run func(ctx context.Context, i
 		if args[2] != nil {
 			arg2 = args[2].(task.Status)
 		}
+		var arg3 *time.Time
+		if args[3] != nil {
+			arg3 = args[3].(*time.Time)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -1045,7 +1052,7 @@ func (_c *MockService_UpdateTaskStatus_Call) Return(err error) *MockService_Upda
 	return _c
 }
 
-func (_c *MockService_UpdateTaskStatus_Call) RunAndReturn(run func(ctx context.Context, id string, status task.Status) error) *MockService_UpdateTaskStatus_Call {
+func (_c *MockService_UpdateTaskStatus_Call) RunAndReturn(run func(ctx context.Context, id string, status task.Status, closedAt *time.Time) error) *MockService_UpdateTaskStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }

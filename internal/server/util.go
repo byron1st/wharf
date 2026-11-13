@@ -30,6 +30,7 @@ var errorStatuses = []struct {
 	{err: service.ErrTaskToDeleteNotFound, status: http.StatusNotFound},
 	{err: service.ErrTaskNotLocal, status: http.StatusConflict},
 	{err: service.ErrUnknownTaskStatusToSet, status: http.StatusBadRequest},
+	{err: service.ErrClosedAtForOpenStatus, status: http.StatusBadRequest},
 	{err: service.ErrLocalTaskToSetStatusNotFound, status: http.StatusNotFound},
 	{err: service.ErrEmptyTaskIDToReorder, status: http.StatusBadRequest},
 	{err: service.ErrDuplicateTaskIDToReorder, status: http.StatusBadRequest},

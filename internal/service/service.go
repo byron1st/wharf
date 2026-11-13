@@ -30,6 +30,7 @@ var (
 	ErrTaskToDeleteNotFound             = errors.New("service: task to delete not found")
 	ErrUnknownTaskStatusToSet           = errors.New("service: unknown task status to set")
 	ErrLocalTaskToSetStatusNotFound     = errors.New("service: local task to set status not found")
+	ErrClosedAtForOpenStatus            = errors.New("service: closing time given for an open status")
 	ErrEmptyTaskIDToReorder             = errors.New("service: task id to reorder is empty")
 	ErrDuplicateTaskIDToReorder         = errors.New("service: task id to reorder is duplicated")
 	ErrTodoToLinkNotFound               = errors.New("service: todo to link not found")
@@ -51,7 +52,7 @@ type Service interface {
 	CreateTask(ctx context.Context, t task.Task) (string, error)
 	UpdateTask(ctx context.Context, t task.Task) error
 	DeleteTask(ctx context.Context, id string) error
-	UpdateTaskStatus(ctx context.Context, id string, status task.Status) error
+	UpdateTaskStatus(ctx context.Context, id string, status task.Status, closedAt *time.Time) error
 	ReorderTasks(ctx context.Context, ids []string) error
 	LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
 	UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
@@ -73,7 +74,7 @@ func NewService(jira atlassian.Client, db db.Manager) Service {
 }
 
 // ListTasks returns every stored task in ID order, without relations, each
-// with its todo counts.
+// with its todo counts and whether the latest Atlassian sync saw it close.
 func (s *service) ListTasks(ctx context.Context) ([]TaskSummary, error) {
 	tasks, err := s.db.ListTasks(ctx)
 	if err != nil {
@@ -85,9 +86,22 @@ func (s *service) ListTasks(ctx context.Context) ([]TaskSummary, error) {
 		return nil, err
 	}
 
+	// Before the first sync no task can have closed since it.
+	last, err := s.db.GetLastAtlassianSync(ctx)
+	synced := err == nil
+
+	if err != nil && !errors.Is(err, db.ErrAtlassianSyncNotFound) {
+		return nil, err
+	}
+
 	summaries := make([]TaskSummary, 0, len(tasks))
 	for _, t := range tasks {
-		summaries = append(summaries, TaskSummary{Task: t, Todos: counts[t.ID]})
+		summaries = append(summaries, TaskSummary{
+			Task:  t,
+			Todos: counts[t.ID],
+			ClosedSinceLastSync: synced && t.Status.Closed() && t.ClosedSyncedAt != nil &&
+				t.ClosedSyncedAt.Equal(last.SyncedAt),
+		})
 	}
 
 	return summaries, nil
@@ -140,12 +154,14 @@ func (s *service) GetTask(ctx context.Context, id string) (TaskDetail, error) {
 
 // CreateTask validates t and stores it as a new local task with its
 // relations, returning its ID. t.ID and t.Originated are ignored, and an empty
-// status becomes todo.
+// status becomes todo. A task created closed is closed now.
 func (s *service) CreateTask(ctx context.Context, t task.Task) (string, error) {
 	t, err := normalize(t)
 	if err != nil {
 		return "", err
 	}
+
+	t.ClosedAt, t.ClosedSyncedAt = s.closingTime(t.Status), nil
 
 	return s.db.CreateLocalTask(ctx, t)
 }
@@ -156,12 +172,15 @@ func (s *service) CreateTask(ctx context.Context, t task.Task) (string, error) {
 // ErrTaskToUpdateNotFound when no task has t.ID, with ErrTaskNotLocal when
 // the task is not local, since a sync would overwrite it, and with
 // ErrLocalTaskToUpdateNotFound when it stops being a local task before the
-// write.
+// write. A task the update closes is closed now; one that stays closed keeps
+// its closing time.
 func (s *service) UpdateTask(ctx context.Context, t task.Task) error {
 	t, err := normalize(t)
 	if err != nil {
 		return err
 	}
+
+	t.ClosedAt, t.ClosedSyncedAt = s.closingTime(t.Status), nil
 
 	if t.ParentID == t.ID || slices.Contains(t.ChildrenIDs, t.ID) || slices.Contains(t.LinkedIDs, t.ID) {
 		return fmt.Errorf("%w: id=%s", ErrTaskReferencesItself, t.ID)
@@ -202,18 +221,31 @@ func (s *service) DeleteTask(ctx context.Context, id string) error {
 }
 
 // UpdateTaskStatus sets the status of the local task id, leaving its other
-// fields and relations as they are. It fails with ErrUnknownTaskStatusToSet
-// for a status other than todo, in-progress, done, and canceled, and with
+// fields and relations as they are. A status that closes an open task closes
+// it at closedAt, or now when closedAt is nil, so undoing a reopen can bring
+// back the earlier closing time; a task that stays closed keeps its closing
+// time. It fails with ErrUnknownTaskStatusToSet for a status other than todo,
+// in-progress, done, and canceled, with ErrClosedAtForOpenStatus when
+// closedAt comes with an open status, and with
 // ErrLocalTaskToSetStatusNotFound when no local task has id, since a sync
 // would overwrite the status of any other task.
-func (s *service) UpdateTaskStatus(ctx context.Context, id string, status task.Status) error {
+func (s *service) UpdateTaskStatus(ctx context.Context, id string, status task.Status, closedAt *time.Time) error {
 	switch status {
 	case task.StatusTodo, task.StatusInProgress, task.StatusDone, task.StatusCanceled:
 	default:
 		return fmt.Errorf("%w: status=%s", ErrUnknownTaskStatusToSet, status)
 	}
 
-	err := s.db.UpdateLocalTaskStatus(ctx, id, status)
+	if closedAt != nil && !status.Closed() {
+		return fmt.Errorf("%w: status=%s", ErrClosedAtForOpenStatus, status)
+	}
+
+	at := s.now()
+	if closedAt != nil {
+		at = *closedAt
+	}
+
+	err := s.db.UpdateLocalTaskStatus(ctx, id, status, at)
 	if errors.Is(err, db.ErrLocalTaskToSetStatusNotFound) {
 		return fmt.Errorf("%w: id=%s", ErrLocalTaskToSetStatusNotFound, id)
 	}
@@ -295,6 +327,17 @@ func normalize(t task.Task) (task.Task, error) {
 	}
 
 	return t, nil
+}
+
+// closingTime returns now for a closed status and nil for an open one.
+func (s *service) closingTime(status task.Status) *time.Time {
+	if !status.Closed() {
+		return nil
+	}
+
+	now := s.now().UTC()
+
+	return &now
 }
 
 // pick returns the tasks in stored among ids, in ids order.
