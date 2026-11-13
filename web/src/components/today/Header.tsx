@@ -1,4 +1,4 @@
-import { Archive, CircleAlert, Plus, RefreshCw, Settings } from 'lucide-react'
+import { Archive, CircleAlert, LayoutDashboard, List, Plus, RefreshCw, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Kbd, OriginBadge } from '@/components/common/badges'
 import { Button } from '@/components/ui/button'
@@ -157,11 +157,59 @@ function NewTaskButton({ onCreate }: { onCreate: (title: string) => Promise<void
   )
 }
 
+export type Layout = 'list' | 'card'
+
+/** LayoutTabs switches Today between the List and Card views. */
+function LayoutTabs({ layout, onChange }: { layout: Layout; onChange: (layout: Layout) => void }) {
+  const tabs = [
+    { value: 'list' as const, label: 'List', title: 'List view', Icon: List },
+    { value: 'card' as const, label: 'Card', title: 'Card view', Icon: LayoutDashboard },
+  ]
+  return (
+    <div
+      role="tablist"
+      aria-label="Today layout"
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+        e.preventDefault()
+        const next = layout === 'list' ? 'card' : 'list'
+        onChange(next)
+        e.currentTarget.querySelector<HTMLElement>(`[data-layout="${next}"]`)?.focus()
+      }}
+      className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-bg-muted p-0.5"
+    >
+      {tabs.map(({ value, label, title, Icon }) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          data-layout={value}
+          aria-selected={layout === value}
+          tabIndex={layout === value ? 0 : -1}
+          title={title}
+          onClick={() => onChange(value)}
+          className={cn(
+            'flex h-[26px] items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium',
+            layout === value ? 'bg-white text-ink shadow-xs' : 'text-ink-muted hover:text-ink',
+          )}
+        >
+          <Icon size={14} />
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function Header({
+  layout,
+  onLayoutChange,
   onCreateTask,
   onClosed,
   onSettings,
 }: {
+  layout: Layout
+  onLayoutChange: (layout: Layout) => void
   onCreateTask: (title: string) => Promise<void>
   onClosed: () => void
   onSettings: () => void
@@ -170,6 +218,7 @@ export function Header({
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-3">
       <h1 className="m-0 text-[22px] leading-[28px] font-semibold tracking-[-0.02em]">Wharf</h1>
+      <LayoutTabs layout={layout} onChange={onLayoutChange} />
       <div className="ml-auto flex items-center gap-3">
         <SyncButton />
         <NewTaskButton onCreate={onCreateTask} />

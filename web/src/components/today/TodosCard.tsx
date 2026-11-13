@@ -28,9 +28,9 @@ export interface TodoGroup {
 }
 
 const ROW = 'grid grid-cols-[28px_minmax(0,1fr)_104px_104px] items-center gap-3 px-4'
-const STATUSES: TaskStatus[] = ['todo', 'in-progress', 'done', 'canceled']
+export const STATUSES: TaskStatus[] = ['todo', 'in-progress', 'done', 'canceled']
 /** END is the droppable ID of the "move to the end" area. */
-const END = '__end'
+export const END = '__end'
 
 function useCollapsed() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
@@ -374,7 +374,8 @@ function TaskStatusButton({ task, onSetStatus }: { task: TaskListItem; onSetStat
   )
 }
 
-function GripIcon() {
+/** GripIcon is the six-dot drag handle. */
+export function GripIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       {[6, 12, 18].map((y) => (
