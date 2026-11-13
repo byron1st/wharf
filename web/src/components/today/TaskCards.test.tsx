@@ -213,13 +213,12 @@ describe('TaskCards', () => {
     expect(onSetStatus).toHaveBeenCalledWith(local, 'done')
   })
 
-  it('disables a Jira task’s status chip', () => {
+  it('shows a Jira task’s status chip read-only', () => {
     renderCards([{ task: task('jira-SEC-142'), todos: [] }])
 
-    const chip = screen.getByRole('button', { name: 'Status: In progress' })
-    expect(chip).toHaveAttribute('aria-disabled', 'true')
-    fireEvent.click(chip)
-    expect(screen.queryByRole('menu')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Status:/ })).toBeNull()
+    const chip = screen.getByRole('img', { name: 'Status: In progress' })
+    expect(chip).toHaveTextContent('In progress')
     expect(chip).toHaveAttribute('title', 'In progress · from Jira')
   })
 

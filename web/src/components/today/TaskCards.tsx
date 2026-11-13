@@ -29,22 +29,16 @@ const CHIP: Record<TaskStatus, string> = {
 
 const chip = 'flex h-6 items-center gap-[5px] rounded-full border pr-2 pl-[5px] text-[12px] font-medium whitespace-nowrap'
 
-/** StatusChip is a card's labeled status pill; it opens the status menu of a local task and is disabled for a Jira one. */
+/** StatusChip is a card's labeled status pill; it opens the status menu of a local task and is read-only for a Jira one. */
 function StatusChip({ task, onSetStatus }: { task: TaskListItem; onSetStatus: (status: TaskStatus) => void }) {
   const [open, setOpen] = useState(false)
   const label = STATUS_LABEL[task.status]
   if (task.originated !== 'local') {
     return (
-      <button
-        type="button"
-        aria-disabled
-        aria-label={`Status: ${label}`}
-        title={`${label} · from Jira`}
-        className={cn(chip, CHIP[task.status], 'cursor-default')}
-      >
+      <span role="img" aria-label={`Status: ${label}`} title={`${label} · from Jira`} className={cn(chip, CHIP[task.status])}>
         <StatusIcon status={task.status} />
         {label}
-      </button>
+      </span>
     )
   }
   return (
@@ -367,9 +361,9 @@ function TaskCard({
       className={cn(
         'flex min-w-0 flex-col rounded-xl border bg-white',
         dropHere
-          ? 'border-accent shadow-[0_0_0_2px_rgba(15,118,110,0.35)]'
+          ? 'border-accent shadow-ring-drop'
           : isSel
-            ? 'border-[#5eead4] shadow-ring'
+            ? 'border-accent-line-strong shadow-ring'
             : 'border-border shadow-xs',
         dragging && 'opacity-45',
       )}

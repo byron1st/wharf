@@ -27,6 +27,7 @@
   --color-accent-hover: #115e59;
   --color-accent-tint: #f0fdfa;
   --color-accent-line: #99f6e4;
+  --color-accent-line-strong: #5eead4;
   --color-accent-ink: #115e59;
   --color-accent-halo: rgba(15, 118, 110, 0.15);
   --color-on-accent: #ffffff;
@@ -79,6 +80,7 @@
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
   --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-ring: 0 0 0 3px var(--color-accent-halo);
+  --shadow-ring-drop: 0 0 0 2px rgba(15, 118, 110, 0.35);
   --shadow-ring-violet: 0 0 0 3px rgba(124, 58, 237, 0.14);
   --shadow-ring-red: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
