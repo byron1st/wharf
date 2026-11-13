@@ -115,7 +115,7 @@ function CardTodo({
         >
           {todo.description}
         </span>
-        <span className="flex flex-wrap items-center gap-1.5">
+        <span className="flex flex-wrap items-center gap-1.5 leading-[normal]">
           {when && (
             <span className={cn('rounded-[5px] px-1.5 py-px text-[11px] font-medium whitespace-nowrap', toneClass[when.tone])}>
               {when.label}
@@ -308,7 +308,7 @@ function NewCardTodo({ task, onDone }: { task: TaskListItem; onDone: () => void 
           if (e.key === 'Enter' && !e.nativeEvent.isComposing) add()
           if (e.key === 'Escape') onDone()
         }}
-        className="h-[30px] min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-muted"
+        className="h-8 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-muted"
       />
       <button
         type="button"
@@ -386,7 +386,7 @@ function TaskCard({
           <StatusChip task={task} onSetStatus={(s) => onSetStatus(task, s)} />
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <OriginDot origin={task.originated} className="size-2" />
-            <span className="font-mono text-[12px] whitespace-nowrap text-ink-secondary">{key}</span>
+            <span title={key} className="truncate font-mono text-[12px] text-ink-secondary">{key}</span>
           </span>
           <span className={cn('ml-auto shrink-0 rounded-md px-[7px] py-px text-[12px] font-medium whitespace-nowrap', toneClass[due.tone])}>
             {due.label}

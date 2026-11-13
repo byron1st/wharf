@@ -336,6 +336,28 @@ describe('TaskCards', () => {
     expect(saves).toHaveLength(0)
   })
 
+  it('does not click the checkbox a drag began and ended on', async () => {
+    stubSaves()
+    stubRects([], [1, 2])
+    const first = todo(1)
+    const { onToggleDone } = renderCards([{ task: task('local-WHF-003'), todos: [first, todo(2)] }])
+    const box = screen.getByRole('checkbox', { name: 'Todo 1' })
+
+    const text = screen.getByText('Todo 1')
+    const at = (y: number) => ({ clientX: 100, clientY: y, isPrimary: true, button: 0 })
+    fireEvent.pointerDown(text, at(22))
+    fireEvent.pointerMove(text, at(28))
+    fireEvent.pointerMove(text, at(22))
+    fireEvent.pointerUp(text, at(22))
+    fireEvent.click(box)
+    expect(onToggleDone).not.toHaveBeenCalled()
+
+    // dnd-kit swallows clicks for 50ms after a drag.
+    await new Promise((r) => setTimeout(r, 60))
+    fireEvent.click(box)
+    expect(onToggleDone).toHaveBeenCalledWith(first, true)
+  })
+
   it('shows the empty message when there are no tasks', () => {
     renderCards([])
 
