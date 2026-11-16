@@ -134,6 +134,25 @@ describe('Settings › Atlassian Cloud › Sync automatically', () => {
     expect(radio('6 h')).toHaveAttribute('aria-checked', 'true')
   })
 
+  it('keeps a later pick when an earlier one fails to save', async () => {
+    let release!: () => void
+    const held = new Promise<void>((r) => (release = r))
+    const saved = serve(60, async (body) => {
+      if ((body as { interval_minutes: number }).interval_minutes !== 180) return new Response(null, { status: 204 })
+      await held
+      return new Response(JSON.stringify({ error: 'boom' }), { status: 500 })
+    })
+    renderAtlassian()
+
+    await userEvent.click(await screen.findByRole('radio', { name: '3 h' }))
+    await userEvent.click(radio('6 h'))
+    release()
+
+    await waitFor(() => expect(saved).toEqual([{ interval_minutes: 180 }, { interval_minutes: 360 }]))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(radio('6 h')).toHaveAttribute('aria-checked', 'true')
+  })
+
   it('says automatic syncs wait for a connection while Atlassian Cloud is not set up', async () => {
     serve(60, undefined, '')
     renderAtlassian()

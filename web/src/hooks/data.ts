@@ -49,18 +49,23 @@ export const useAtlassianSettings = () => useQuery({ queryKey: keys.atlassian, q
 export const useAtlassianSyncInterval = () =>
   useQuery({ queryKey: keys.atlassianSync, queryFn: api.atlassianSyncInterval })
 
+/** intervalPicks counts interval picks, so only the latest one's failure rereads the stored interval. */
+let intervalPicks = 0
+
 /**
  * useSaveAtlassianSyncInterval shows a picked interval at once and saves picks one after another, so quick
- * picks reach the server in order. A failed save throws after rereading the stored interval.
+ * picks reach the server in order. A failed save throws; when no later pick is pending it first rereads the
+ * stored interval, since an earlier pick's reread would hide the later one.
  */
 export function useSaveAtlassianSyncInterval() {
   const qc = useQueryClient()
   return async (minutes: number) => {
+    const pick = ++intervalPicks
     qc.setQueryData(keys.atlassianSync, minutes)
     try {
       await queued('atlassianSync', () => api.saveAtlassianSyncInterval(minutes))
     } catch (err) {
-      void qc.invalidateQueries({ queryKey: keys.atlassianSync })
+      if (pick === intervalPicks) void qc.invalidateQueries({ queryKey: keys.atlassianSync })
       throw err
     }
   }
