@@ -175,3 +175,65 @@ func TestAppSettingsRoutesErrors(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Contains(t, rec.Body.String(), `"code":"invalid_config_file"`)
 }
+
+func TestAtlassianSyncSettingsRoutes(t *testing.T) {
+	settings := mocks.NewMockSettings(t)
+	settings.EXPECT().GetAtlassianSyncInterval(mock.Anything).Return(time.Hour, nil).Once()
+	settings.EXPECT().SaveAtlassianSyncInterval(mock.Anything, 3*time.Hour).Return(nil).Once()
+	settings.EXPECT().SaveAtlassianSyncInterval(mock.Anything, time.Duration(0)).Return(nil).Once()
+
+	rec := serveSettings(t, settings, http.MethodGet, "/api/settings/atlassian/sync", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"interval_minutes":60}`, rec.Body.String())
+
+	rec = serveSettings(t, settings, http.MethodPut, "/api/settings/atlassian/sync", `{"interval_minutes":180}`)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+
+	rec = serveSettings(t, settings, http.MethodPut, "/api/settings/atlassian/sync", `{"interval_minutes":0}`)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestAtlassianSyncSettingsRouteRejectsInvalidBody(t *testing.T) {
+	for name, tc := range map[string]struct {
+		body, want string
+		status     int
+	}{
+		"malformed":     {`{"interval_minutes":`, "server: failed to decode settings request", http.StatusBadRequest},
+		"unknown field": {`{"minutes":60}`, "server: failed to decode settings request", http.StatusBadRequest},
+		"negative":      {`{"interval_minutes":-60}`, "server: failed to decode settings request", http.StatusBadRequest},
+		"overflowing": {
+			`{"interval_minutes":9223372036854775807}`, "server: failed to decode settings request", http.StatusBadRequest,
+		},
+		"missing":  {`{}`, "server: sync settings request has no interval_minutes", http.StatusBadRequest},
+		"null":     {`{"interval_minutes":null}`, "server: sync settings request has no interval_minutes", http.StatusBadRequest},
+		"trailing": {`{"interval_minutes":60} {}`, "server: settings request has trailing data", http.StatusBadRequest},
+		"too large": {
+			`{"interval_minutes":60` + strings.Repeat(" ", 1<<16) + `}`,
+			"server: settings request is too large",
+			http.StatusRequestEntityTooLarge,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			// No expectation: the mock fails the test if it is called.
+			rec := serveSettings(t, mocks.NewMockSettings(t), http.MethodPut, "/api/settings/atlassian/sync", tc.body)
+			require.Equal(t, tc.status, rec.Code)
+			require.Contains(t, rec.Body.String(), tc.want)
+		})
+	}
+}
+
+func TestAtlassianSyncSettingsRoutesMapErrors(t *testing.T) {
+	settings := mocks.NewMockSettings(t)
+	settings.EXPECT().GetAtlassianSyncInterval(mock.Anything).Return(0, errors.New("db down")).Once()
+	settings.EXPECT().
+		SaveAtlassianSyncInterval(mock.Anything, 45*time.Minute).
+		Return(service.ErrInvalidAtlassianSyncInterval).
+		Once()
+
+	rec := serveSettings(t, settings, http.MethodGet, "/api/settings/atlassian/sync", "")
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	rec = serveSettings(t, settings, http.MethodPut, "/api/settings/atlassian/sync", `{"interval_minutes":45}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "service: invalid atlassian sync interval")
+}

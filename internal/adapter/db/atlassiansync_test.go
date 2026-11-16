@@ -59,3 +59,35 @@ func TestAtlassianSyncsCanceled(t *testing.T) {
 	_, err = manager.CountTodosByTask(ctx)
 	require.ErrorIs(t, err, db.ErrFailedToCountTodosByTask)
 }
+
+func TestAtlassianSyncInterval(t *testing.T) {
+	manager, _ := newDBManager(t, scripts.Migrations())
+	ctx := context.Background()
+
+	got, err := manager.GetAtlassianSyncInterval(ctx)
+	require.NoError(t, err)
+	require.Equal(t, time.Hour, got)
+
+	for _, interval := range []time.Duration{3 * time.Hour, 0} {
+		require.NoError(t, manager.SetAtlassianSyncInterval(ctx, interval))
+
+		got, err = manager.GetAtlassianSyncInterval(ctx)
+		require.NoError(t, err)
+		require.Equal(t, interval, got)
+	}
+}
+
+func TestAtlassianSyncIntervalCanceled(t *testing.T) {
+	manager, _ := newDBManager(t, scripts.Migrations())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := manager.GetAtlassianSyncInterval(ctx)
+	require.ErrorIs(t, err, db.ErrFailedToGetAtlassianSyncInterval)
+	require.ErrorIs(t, err, context.Canceled)
+
+	err = manager.SetAtlassianSyncInterval(ctx, time.Hour)
+	require.ErrorIs(t, err, db.ErrFailedToSetAtlassianSyncInterval)
+	require.ErrorIs(t, err, context.Canceled)
+}

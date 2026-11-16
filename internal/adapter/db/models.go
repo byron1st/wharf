@@ -19,6 +19,11 @@ type AtlassianSync struct {
 	RequestFailures int64
 }
 
+type AtlassianSyncSetting struct {
+	ID              bool
+	IntervalMinutes int64
+}
+
 type Counter struct {
 	Name  string
 	Value int64

@@ -511,6 +511,66 @@ func (_c *MockManager_DeleteTodo_Call) RunAndReturn(run func(ctx context.Context
 	return _c
 }
 
+// GetAtlassianSyncInterval provides a mock function for the type MockManager
+func (_mock *MockManager) GetAtlassianSyncInterval(ctx context.Context) (time.Duration, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAtlassianSyncInterval")
+	}
+
+	var r0 time.Duration
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (time.Duration, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) time.Duration); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockManager_GetAtlassianSyncInterval_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAtlassianSyncInterval'
+type MockManager_GetAtlassianSyncInterval_Call struct {
+	*mock.Call
+}
+
+// GetAtlassianSyncInterval is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockManager_Expecter) GetAtlassianSyncInterval(ctx any) *MockManager_GetAtlassianSyncInterval_Call {
+	return &MockManager_GetAtlassianSyncInterval_Call{Call: _e.mock.On("GetAtlassianSyncInterval", ctx)}
+}
+
+func (_c *MockManager_GetAtlassianSyncInterval_Call) Run(run func(ctx context.Context)) *MockManager_GetAtlassianSyncInterval_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_GetAtlassianSyncInterval_Call) Return(duration time.Duration, err error) *MockManager_GetAtlassianSyncInterval_Call {
+	_c.Call.Return(duration, err)
+	return _c
+}
+
+func (_c *MockManager_GetAtlassianSyncInterval_Call) RunAndReturn(run func(ctx context.Context) (time.Duration, error)) *MockManager_GetAtlassianSyncInterval_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetLastAtlassianSync provides a mock function for the type MockManager
 func (_mock *MockManager) GetLastAtlassianSync(ctx context.Context) (atlassiansync.Record, error) {
 	ret := _mock.Called(ctx)
@@ -1013,6 +1073,63 @@ func (_c *MockManager_Migrate_Call) Return(err error) *MockManager_Migrate_Call 
 }
 
 func (_c *MockManager_Migrate_Call) RunAndReturn(run func(ctx context.Context) error) *MockManager_Migrate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetAtlassianSyncInterval provides a mock function for the type MockManager
+func (_mock *MockManager) SetAtlassianSyncInterval(ctx context.Context, interval time.Duration) error {
+	ret := _mock.Called(ctx, interval)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetAtlassianSyncInterval")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, time.Duration) error); ok {
+		r0 = returnFunc(ctx, interval)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockManager_SetAtlassianSyncInterval_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetAtlassianSyncInterval'
+type MockManager_SetAtlassianSyncInterval_Call struct {
+	*mock.Call
+}
+
+// SetAtlassianSyncInterval is a helper method to define mock.On call
+//   - ctx context.Context
+//   - interval time.Duration
+func (_e *MockManager_Expecter) SetAtlassianSyncInterval(ctx any, interval any) *MockManager_SetAtlassianSyncInterval_Call {
+	return &MockManager_SetAtlassianSyncInterval_Call{Call: _e.mock.On("SetAtlassianSyncInterval", ctx, interval)}
+}
+
+func (_c *MockManager_SetAtlassianSyncInterval_Call) Run(run func(ctx context.Context, interval time.Duration)) *MockManager_SetAtlassianSyncInterval_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Duration
+		if args[1] != nil {
+			arg1 = args[1].(time.Duration)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockManager_SetAtlassianSyncInterval_Call) Return(err error) *MockManager_SetAtlassianSyncInterval_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockManager_SetAtlassianSyncInterval_Call) RunAndReturn(run func(ctx context.Context, interval time.Duration) error) *MockManager_SetAtlassianSyncInterval_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -64,6 +64,8 @@ var (
 	ErrFailedToCreateAtlassianSync            = errors.New("db: failed to create atlassian sync")
 	ErrAtlassianSyncNotFound                  = errors.New("db: atlassian sync not found")
 	ErrFailedToGetAtlassianSync               = errors.New("db: failed to get atlassian sync")
+	ErrFailedToGetAtlassianSyncInterval       = errors.New("db: failed to get atlassian sync interval")
+	ErrFailedToSetAtlassianSyncInterval       = errors.New("db: failed to set atlassian sync interval")
 )
 
 // localTaskCounter is the counters row seeded by the initial migration.
@@ -92,6 +94,8 @@ type Manager interface {
 	ListServiceDeskRequests(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error)
 	CreateAtlassianSync(ctx context.Context, r atlassiansync.Record) error
 	GetLastAtlassianSync(ctx context.Context) (atlassiansync.Record, error)
+	GetAtlassianSyncInterval(ctx context.Context) (time.Duration, error)
+	SetAtlassianSyncInterval(ctx context.Context, interval time.Duration) error
 
 	// DB Management
 
@@ -576,6 +580,36 @@ func (m *manager) GetLastAtlassianSync(ctx context.Context) (atlassiansync.Recor
 		ClosedRequests:  int(row.ClosedRequests),
 		RequestFailures: int(row.RequestFailures),
 	}, nil
+}
+
+// GetAtlassianSyncInterval returns how long after the last Atlassian sync the
+// next automatic one is due, shared by every device; 0 means automatic syncs
+// are off.
+func (m *manager) GetAtlassianSyncInterval(ctx context.Context) (time.Duration, error) {
+	if err := m.checkConnected(); err != nil {
+		return 0, err
+	}
+
+	minutes, err := m.queries.GetAtlassianSyncInterval(ctx)
+	if err != nil {
+		return 0, errors.Join(ErrFailedToGetAtlassianSyncInterval, err)
+	}
+
+	return time.Duration(minutes) * time.Minute, nil
+}
+
+// SetAtlassianSyncInterval stores interval, in whole minutes, as the one
+// GetAtlassianSyncInterval returns.
+func (m *manager) SetAtlassianSyncInterval(ctx context.Context, interval time.Duration) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	if err := m.queries.SetAtlassianSyncInterval(ctx, int64(interval/time.Minute)); err != nil {
+		return fmt.Errorf("%w: interval=%s", errors.Join(ErrFailedToSetAtlassianSyncInterval, err), interval)
+	}
+
+	return nil
 }
 
 // inTx runs fn in a transaction, after taking the write lock described at

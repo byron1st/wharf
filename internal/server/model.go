@@ -158,6 +158,18 @@ type atlassianSettingsBody struct {
 	APIToken string `json:"api_token"`
 }
 
+// atlassianSyncSettingsRequest is the body of PUT /api/settings/atlassian/sync.
+// IntervalMinutes is a pointer so a request without it is rejected rather
+// than read as 0, which turns automatic syncs off, and a uint16 so a value
+// that would overflow a time.Duration fails to decode.
+type atlassianSyncSettingsRequest struct {
+	IntervalMinutes *uint16 `json:"interval_minutes"`
+}
+
+type atlassianSyncSettingsResponse struct {
+	IntervalMinutes int64 `json:"interval_minutes"`
+}
+
 type atlassianCheckResponse struct {
 	CheckedAt time.Time `json:"checked_at"`
 }

@@ -262,3 +262,18 @@ export function closedLabel(closedAt: string | null, today: string, jira: boolea
   const when = n === 0 ? 'today' : n === 1 ? 'yesterday' : monthDay(day)
   return `Closed ${when}${where}`
 }
+
+/**
+ * nextAutoSyncLabel says when the server next syncs Atlassian on its own:
+ * minutes after the last sync, manual or automatic. A sync already due, or
+ * the first one, runs at the server's next check, within a minute.
+ */
+export function nextAutoSyncLabel(lastSyncedAt: string | null, minutes: number, now: Date): string {
+  if (!lastSyncedAt) return 'within a minute'
+  const at = new Date(new Date(lastSyncedAt).getTime() + minutes * 60_000)
+  if (at.getTime() <= now.getTime()) return 'within a minute'
+  const today = ymd(now)
+  const day = ymd(at)
+  const when = day === today ? 'today' : day === addDays(today, 1) ? 'tomorrow' : monthDay(day)
+  return `${when} ${hhmm(at)}`
+}
