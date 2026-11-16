@@ -186,7 +186,9 @@ describe('ClosedTasksDialog', () => {
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(puts[0]).toEqual({ url: '/api/tasks/local-WHF-005/status', body: { status: 'todo' } })
 
+    // Canceling again deletes its 3 todos, so Undo asks first.
     await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel and delete todos' }))
     await waitFor(() => expect(puts).toHaveLength(2))
     expect(puts[1]).toEqual({
       url: '/api/tasks/local-WHF-005/status',
@@ -194,6 +196,27 @@ describe('ClosedTasksDialog', () => {
     })
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     await waitFor(() => expect(sections()[1]).toEqual({ label: 'Last week2', keys: ['WHF-002', 'WHF-005'] }))
+  })
+
+  it('sends nothing when an Undo that would delete todos is kept, and undoes a done task at once', async () => {
+    const user = userEvent.setup()
+    const { puts } = renderDialog()
+    await user.click(await screen.findByRole('button', { name: 'Reopen WHF-005' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Cancel WHF-005?' })
+    expect(confirm).toHaveTextContent('Canceling deletes its 3 todos.')
+    await user.click(within(confirm).getByRole('button', { name: 'Keep task' }))
+    expect(puts).toHaveLength(1)
+    expect(screen.getByRole('status')).toHaveTextContent('WHF-005 reopened as Todo.')
+
+    await user.click(await screen.findByRole('button', { name: 'Reopen WHF-002' }))
+    await waitFor(() => expect(puts).toHaveLength(2))
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(puts).toHaveLength(3))
+    expect(puts[2]).toMatchObject({ url: '/api/tasks/local-WHF-002/status', body: { status: 'done' } })
+    expect(screen.queryByRole('dialog', { name: /^Cancel / })).toBeNull()
   })
 
   it('keeps the row and shows no notice when the reopen fails', async () => {

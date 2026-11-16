@@ -1227,3 +1227,26 @@ func TestUpsertTasksClosesTodos(t *testing.T) {
 	todos, _ := stored(t, dsn)
 	require.Len(t, todos, 5)
 }
+
+func TestUpdateLocalTaskStatusCanceledToDoneCompletesTodosNow(t *testing.T) {
+	manager, _ := newClosingManager(t)
+	ctx := context.Background()
+
+	id, err := manager.CreateLocalTask(ctx, newTask("ignored"))
+	require.NoError(t, err)
+
+	canceledAt := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, manager.UpdateLocalTaskStatus(ctx, id, task.StatusCanceled, canceledAt))
+	create(t, manager, todo.Todo{TaskID: id, Description: "later"})
+
+	// The task keeps its closing time, but the todo was not done back then.
+	before := time.Now().Add(-time.Minute)
+	require.NoError(t, manager.UpdateLocalTaskStatus(ctx, id, task.StatusDone, time.Now()))
+
+	closedAt, _ := closedTimes(t, manager, id)
+	requireTime(t, canceledAt, closedAt)
+
+	later := completedAt(t, manager, id, "later")
+	require.NotNil(t, later)
+	require.True(t, later.After(before), "completed at %s", later)
+}

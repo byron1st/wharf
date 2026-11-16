@@ -38,6 +38,7 @@ var (
 	ErrLocalTaskToSetStatusNotFound         = errors.New("db: local task to set status not found")
 	ErrFailedToUpdateTaskPosition           = errors.New("db: failed to update task position")
 	ErrFailedToGetTaskStatus                = errors.New("db: failed to get task status")
+	ErrFailedToListTaskStatuses             = errors.New("db: failed to list task statuses")
 	ErrFailedToCompleteTodosOfTask          = errors.New("db: failed to complete todos of task")
 	ErrFailedToDeleteTaskChildren           = errors.New("db: failed to delete task children")
 	ErrFailedToDeleteLocalTaskLinks         = errors.New("db: failed to delete links of local task")
@@ -136,7 +137,8 @@ func NewManager(url, password string, migrations fs.FS) Manager {
 // and cleared when the task is open, so a new task never gets it.
 //
 // A stored task whose status changes to done has its open todos completed at
-// its closing time (now when unknown), and one whose status changes to
+// its closing time (now when unknown, or when it was canceled and keeps that
+// earlier closing time), and one whose status changes to
 // canceled has all of its todos deleted. A task whose status stays as it was
 // keeps its todos.
 func (m *manager) UpsertTasks(ctx context.Context, tasks []task.Task) error {
@@ -149,17 +151,17 @@ func (m *manager) UpsertTasks(ctx context.Context, tasks []task.Task) error {
 	}
 
 	return m.inTx(ctx, func(queries *Queries) error {
-		for _, t := range tasks {
-			prev, err := taskStatus(ctx, queries, t.ID)
-			if err != nil {
-				return err
-			}
+		statuses, err := taskStatuses(ctx, queries, tasks)
+		if err != nil {
+			return err
+		}
 
+		for _, t := range tasks {
 			if err := storeTask(ctx, queries, t); err != nil {
 				return err
 			}
 
-			if err := closeTodos(ctx, queries, t.ID, prev, t.Status); err != nil {
+			if err := closeTodos(ctx, queries, t.ID, statuses[t.ID], t.Status); err != nil {
 				return err
 			}
 		}
@@ -640,9 +642,33 @@ func taskStatus(ctx context.Context, queries *Queries, id string) (task.Status, 
 	return task.Status(status), nil
 }
 
+// taskStatuses maps the ID of each stored task among tasks to its status.
+func taskStatuses(ctx context.Context, queries *Queries, tasks []task.Task) (map[string]task.Status, error) {
+	ids := make([]string, len(tasks))
+	for i, t := range tasks {
+		ids[i] = t.ID
+	}
+
+	// Marshaling a []string cannot fail.
+	encoded, _ := json.Marshal(ids)
+
+	rows, err := queries.ListTaskStatusesByIDs(ctx, string(encoded))
+	if err != nil {
+		return nil, errors.Join(ErrFailedToListTaskStatuses, err)
+	}
+
+	statuses := make(map[string]task.Status, len(rows))
+	for _, r := range rows {
+		statuses[r.ID] = task.Status(r.Status)
+	}
+
+	return statuses, nil
+}
+
 // closeTodos tidies the todos of task id when its status changes from prev
 // to next: becoming done completes its open todos at the task's closing
-// time, and becoming canceled deletes all of them. Any other change, or none,
+// time, or now when it was already closed and keeps an earlier closing time,
+// and becoming canceled deletes all of them. Any other change, or none,
 // leaves them as they are.
 func closeTodos(ctx context.Context, queries *Queries, id string, prev, next task.Status) error {
 	if prev == next {
@@ -651,7 +677,8 @@ func closeTodos(ctx context.Context, queries *Queries, id string, prev, next tas
 
 	switch next {
 	case task.StatusDone:
-		if err := queries.CompleteTodosOfTask(ctx, id); err != nil {
+		params := CompleteTodosOfTaskParams{AtClosing: !prev.Closed(), TaskID: id}
+		if err := queries.CompleteTodosOfTask(ctx, params); err != nil {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToCompleteTodosOfTask, err), id)
 		}
 	case task.StatusCanceled:

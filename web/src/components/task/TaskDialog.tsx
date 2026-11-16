@@ -11,6 +11,7 @@ import { dueTone, StatusSelect } from '@/components/today/TaskInspector'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useAtlassianSettings, useTask, useTaskActions } from '@/hooks/data'
+import { useKeptTasks } from '@/hooks/useKeptTasks'
 import { useNow } from '@/hooks/useNow'
 import { useSyncTask } from '@/hooks/useSync'
 import { taskKey, type TaskDetail, type TaskInput } from '@/lib/api'
@@ -82,6 +83,7 @@ function Body({
   useEffect(() => onEditing(editing ? () => setDraft(null) : null), [editing, onEditing])
 
   const { guard, dialog } = useCancelConfirm()
+  const { keep } = useKeptTasks()
 
   const save = () => {
     if (draft && !saving) guard(task, draft.status, () => void commit(draft))
@@ -91,6 +93,8 @@ function Body({
     setSaving(true)
     try {
       await updateAsync(task, { ...next, title: next.title.trim() || task.title })
+      // A task closed here stays on Today until the next visit.
+      if (next.status !== task.status) keep(task.id)
       setDraft(null)
     } catch {
       // updateAsync already undid the change and showed the toast.

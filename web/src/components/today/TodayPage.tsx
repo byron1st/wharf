@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useCancelConfirm } from '@/components/common/CancelConfirm'
 import { keys, useRequests, useTaskActions, useTasks, useTodoActions, useTodos } from '@/hooks/data'
+import { useKeptTasks } from '@/hooks/useKeptTasks'
 import { useNow } from '@/hooks/useNow'
 import type { TaskListItem, TaskStatus, Todo } from '@/lib/api'
 import { compareTodayTasks, isTodayTask, isTodayTodo, reorderedIDs, startOfToday } from '@/lib/dates'
@@ -58,7 +59,7 @@ export function TodayPage() {
   // Todos checked and tasks whose status changed in this visit stay where
   // they are instead of leaving Today; the next visit tidies them away.
   const [keptTodos, setKeptTodos] = useState<Set<number>>(() => new Set())
-  const [keptTasks, setKeptTasks] = useState<Set<string>>(() => new Set())
+  const { kept: keptTasks, keep: keepTask } = useKeptTasks()
 
   const { data: tasks = [] } = useTasks()
   const { data: open = [] } = useTodos({ is_done: false })
@@ -94,8 +95,6 @@ export function TodayPage() {
     update(todo, { is_done: done })
     setKeptTodos((s) => toggled(s, todo.id, done))
   }
-
-  const keepTask = (id: string) => setKeptTasks((s) => toggled(s, id, true))
 
   const changeStatus = (task: TaskListItem, status: TaskStatus) =>
     guard(task, status, () => {
@@ -191,7 +190,6 @@ export function TodayPage() {
                   onClose={close}
                   onOpen={openTask}
                   onSelectTask={(id) => select({ kind: 'task', id })}
-                  onStatusChange={keepTask}
                 />
               )}
               {selection.kind === 'req' && selectedReq && (

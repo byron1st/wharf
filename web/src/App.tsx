@@ -5,6 +5,7 @@ import { ClosedTasksDialog, NO_CLOSED_FILTERS } from '@/components/closed/Closed
 import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { TaskDialog } from '@/components/task/TaskDialog'
 import { TodayPage } from '@/components/today/TodayPage'
+import { KeptTasksProvider } from '@/hooks/useKeptTasks'
 import { ClockContext, useTicker } from '@/hooks/useNow'
 import { SyncProvider } from '@/hooks/useSync'
 
@@ -47,6 +48,7 @@ export function App() {
   return (
     <ClockContext.Provider value={clock}>
       <SyncProvider>
+        <KeptTasksProvider>
         <TodayPage />
         {task && (
           <TaskDialog
@@ -70,6 +72,7 @@ export function App() {
             onClose={close}
           />
         )}
+        </KeptTasksProvider>
         <Toaster position="bottom-right" visibleToasts={3} gap={10} toastOptions={{ unstyled: true }} />
       </SyncProvider>
     </ClockContext.Provider>

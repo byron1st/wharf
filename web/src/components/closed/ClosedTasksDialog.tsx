@@ -2,6 +2,7 @@ import { Dialog as D } from 'radix-ui'
 import { Lock, RotateCcw, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { OriginDot, StatusIcon } from '@/components/common/badges'
+import { useCancelConfirm } from '@/components/common/CancelConfirm'
 import { Button } from '@/components/ui/button'
 import { useTaskActions, useTasks } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
@@ -137,6 +138,7 @@ export function ClosedTasksDialog({
   const { today } = useNow()
   const { data: tasks = [] } = useTasks()
   const { setStatus, setStatusAsync } = useTaskActions()
+  const { guard, dialog } = useCancelConfirm()
   const [reopened, setReopened] = useState<Reopened | null>(null)
   const set = (patch: Partial<ClosedFilters>) => onFilters({ ...filters, ...patch })
 
@@ -162,10 +164,13 @@ export function ClosedTasksDialog({
     )
   }
 
+  // Undoing a reopen of a canceled task deletes the todos added since, so it asks as canceling does.
   const undo = () => {
     if (!reopened) return
-    setStatus({ id: reopened.id }, reopened.status, reopened.closedAt ?? undefined)
-    setReopened(null)
+    guard({ id: reopened.id, status: 'todo' }, reopened.status, () => {
+      setStatus({ id: reopened.id }, reopened.status, reopened.closedAt ?? undefined)
+      setReopened(null)
+    })
   }
 
   return (
@@ -284,6 +289,7 @@ export function ClosedTasksDialog({
                 </div>
               )}
             </div>
+            {dialog}
           </D.Content>
         </D.Overlay>
       </D.Portal>

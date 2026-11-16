@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { KeptTasksProvider } from '@/hooks/useKeptTasks'
 import type { TaskListItem, Todo } from '@/lib/api'
 import { TodayPage } from './TodayPage'
 
@@ -149,7 +150,9 @@ describe('TodayPage closed tasks', () => {
     render(
       <QueryClientProvider client={qc}>
         <MemoryRouter initialEntries={[url]}>
-          <TodayPage />
+          <KeptTasksProvider>
+            <TodayPage />
+          </KeptTasksProvider>
         </MemoryRouter>
       </QueryClientProvider>,
     )
