@@ -295,9 +295,11 @@ export function useTaskActions() {
       if (snap) restore(qc, snap)
       reportSaveError(err, 'task', () => update.mutate(vars))
     },
-    onSettled: (_d, _e, { task }) => {
+    onSettled: (_d, _e, { task, patch }) => {
       void qc.invalidateQueries({ queryKey: keys.task(task.id) })
       void qc.invalidateQueries({ queryKey: keys.tasks })
+      // Closing a task completes or deletes its todos on the server.
+      if (patch.status !== undefined) void qc.invalidateQueries({ queryKey: keys.allTodos })
     },
   })
 
@@ -347,6 +349,8 @@ export function useTaskActions() {
     onSettled: (_d, _e, { task }) => {
       void qc.invalidateQueries({ queryKey: keys.task(task.id) })
       void qc.invalidateQueries({ queryKey: keys.tasks })
+      // Closing a task completes or deletes its todos on the server.
+      void qc.invalidateQueries({ queryKey: keys.allTodos })
     },
   })
 

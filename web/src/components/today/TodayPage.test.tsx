@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { TaskListItem } from '@/lib/api'
+import type { TaskListItem, Todo } from '@/lib/api'
 import { TodayPage } from './TodayPage'
 
 const task: TaskListItem = {
@@ -100,5 +100,111 @@ describe('TodayPage layout', () => {
     renderPage()
 
     expect(tabs().getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true')
+  })
+})
+
+describe('TodayPage closed tasks', () => {
+  const at = (id: string, status: TaskListItem['status'], title: string, todoCount = 0): TaskListItem => ({
+    ...task,
+    id,
+    status,
+    title,
+    todo_count: todoCount,
+  })
+  const openTodo = (id: number, taskID: string): Todo => ({
+    id,
+    task_id: taskID,
+    description: `todo ${id}`,
+    note: '',
+    is_done: false,
+    completed_at: null,
+    start_date: null,
+    end_date: null,
+    reminders: [],
+    position: 0,
+    service_desk_requests: [],
+  })
+
+  /** renderWith serves tasks and todos, and records each status change. */
+  function renderWith(tasks: TaskListItem[], todos: Todo[]) {
+    const puts: { url: string; body: unknown }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          puts.push({ url, body: JSON.parse(String(init.body)) })
+          return new Response(null, { status: 204 })
+        }
+        if (url.startsWith('/api/tasks')) return new Response(JSON.stringify({ tasks }))
+        if (url.startsWith('/api/todos')) return new Response(JSON.stringify({ todos: url.includes('is_done=false') ? todos : [] }))
+        return new Response(JSON.stringify({ requests: [], last_sync: null }))
+      }),
+    )
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <TodayPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    return puts
+  }
+
+  it('hides done and canceled tasks even with open todos for today', async () => {
+    renderWith(
+      [at('local-WHF-001', 'todo', 'Open task'), at('local-WHF-002', 'done', 'Done task', 1), at('local-WHF-004', 'canceled', 'Canceled task', 1)],
+      [openTodo(1, 'local-WHF-002'), openTodo(2, 'local-WHF-004')],
+    )
+
+    expect(await screen.findByText('Open task')).toBeInTheDocument()
+    expect(screen.queryByText('Done task')).toBeNull()
+    expect(screen.queryByText('Canceled task')).toBeNull()
+    expect(screen.queryByText('todo 1')).toBeNull()
+    expect(screen.queryByText('todo 2')).toBeNull()
+  })
+
+  it('asks before canceling a task with todos, and sends nothing when kept', async () => {
+    const user = userEvent.setup()
+    const puts = renderWith([at('local-WHF-001', 'todo', 'Open task', 2)], [openTodo(1, 'local-WHF-001')])
+
+    await user.click(await screen.findByRole('button', { name: 'Status: Todo' }))
+    await user.click(screen.getByRole('menuitem', { name: /Canceled/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Cancel WHF-001?' })
+    expect(dialog).toHaveTextContent('Canceling deletes its 2 todos.')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Keep task' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(puts).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'Status: Todo' }))
+    await user.click(screen.getByRole('menuitem', { name: /Canceled/ }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel and delete todos' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toEqual({ url: '/api/tasks/local-WHF-001/status', body: { status: 'canceled' } })
+    // A task closed in this visit stays until the next one.
+    expect(screen.getByText('Open task')).toBeInTheDocument()
+  })
+
+  it('cancels a task without todos without asking', async () => {
+    const user = userEvent.setup()
+    const puts = renderWith([at('local-WHF-001', 'todo', 'Empty task')], [])
+
+    await user.click(await screen.findByRole('button', { name: 'Status: Todo' }))
+    await user.click(screen.getByRole('menuitem', { name: /Canceled/ }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(puts[0].body).toEqual({ status: 'canceled' })
+  })
+
+  it('closes a task with todos as done without asking', async () => {
+    const user = userEvent.setup()
+    const puts = renderWith([at('local-WHF-001', 'todo', 'Busy task', 1)], [openTodo(1, 'local-WHF-001')])
+
+    await user.click(await screen.findByRole('button', { name: 'Status: Todo' }))
+    await user.click(screen.getByRole('menuitem', { name: /Done/ }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(puts[0].body).toEqual({ status: 'done' })
   })
 })

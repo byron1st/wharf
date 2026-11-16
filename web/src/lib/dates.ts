@@ -166,9 +166,9 @@ export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, 
   return !t.is_done && (!t.start_date || t.start_date <= today)
 }
 
-/** isTodayTask is whether Today lists a task: any open one, and a done or canceled one only while it has todos for today. */
-export function isTodayTask(task: { status: TaskStatus }, hasTodayTodos: boolean): boolean {
-  return hasTodayTodos || !isClosedStatus(task.status)
+/** isTodayTask is whether Today lists a task: only an open one, whatever its todos. */
+export function isTodayTask(task: { status: TaskStatus }): boolean {
+  return !isClosedStatus(task.status)
 }
 
 /** isClosedStatus is whether a task status is done or canceled. */
