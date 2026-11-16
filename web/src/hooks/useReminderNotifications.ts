@@ -1,12 +1,19 @@
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
-import { useTodos } from '@/hooks/data'
+import { keys } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
-import { taskKey } from '@/lib/api'
+import { api, taskKey } from '@/lib/api'
 import { dueReminders, reminderLabel } from '@/lib/dates'
 
 /** canNotify reports whether the browser has the Notification API and the user allowed it. */
 const canNotify = () => typeof Notification !== 'undefined' && Notification.permission === 'granted'
+
+/** POLL_MS refetches open todos, so reminders changed on another device apply even in a background tab. */
+const POLL_MS = 60_000
+
+/** CATCH_UP_MS bounds how late a reminder may still notify, so waking from sleep doesn't replay every missed one. */
+const CATCH_UP_MS = 5 * 60_000
 
 /** requestNotificationPermission asks once for permission to notify; call it from a user gesture. */
 export function requestNotificationPermission() {
@@ -19,17 +26,24 @@ export function requestNotificationPermission() {
  * useReminderNotifications shows a browser notification for each open todo's
  * reminder when it goes off while the app is open. It checks on every clock
  * tick, so a reminder fires within a minute boundary of its time; clicking the
- * notification focuses the app on the todo's task.
+ * notification focuses the app on the todo's task. Reminders more than
+ * CATCH_UP_MS late, such as those missed while the machine slept, are skipped.
  */
 export function useReminderNotifications() {
   const { now } = useNow()
   const navigate = useNavigate()
-  const { data: todos } = useTodos({ is_done: false })
+  const filter = { is_done: false }
+  const { data: todos } = useQuery({
+    queryKey: keys.todos(filter),
+    queryFn: () => api.listTodos(filter),
+    refetchInterval: POLL_MS,
+    refetchIntervalInBackground: true,
+  })
   const since = useRef(now)
 
   useEffect(() => {
     if (!todos) return
-    const from = since.current
+    const from = new Date(Math.max(since.current.getTime(), now.getTime() - CATCH_UP_MS))
     since.current = now
     if (!canNotify()) return
     for (const todo of todos) {

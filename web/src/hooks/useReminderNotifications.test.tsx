@@ -85,6 +85,31 @@ describe('useReminderNotifications', () => {
     expect(shown).toHaveLength(1)
   })
 
+  it('skips reminders missed for longer than the catch-up window', async () => {
+    const shown = stubNotification('granted')
+    const { tick, qc } = setup()
+    await waitFor(() => expect(qc.getQueryData(['todos', { is_done: false }])).toBeDefined())
+    // Waking at 15:10 after sleeping since 14:07: 14:08 is too late, 15:00 is too.
+    tick('15:10')
+    expect(shown).toEqual([])
+  })
+
+  it('still notifies a reminder a few minutes late', async () => {
+    const shown = stubNotification('granted')
+    const { tick, qc } = setup()
+    await waitFor(() => expect(qc.getQueryData(['todos', { is_done: false }])).toBeDefined())
+    tick('14:12')
+    expect(shown.map((n) => n.options?.tag)).toEqual([`wharf-reminder-7-${todo.reminders[0]}`])
+  })
+
+  it('polls open todos so reminders changed on another device apply', async () => {
+    stubNotification('granted')
+    const { qc } = setup()
+    await waitFor(() => expect(qc.getQueryData(['todos', { is_done: false }])).toBeDefined())
+    const query = qc.getQueryCache().find({ queryKey: ['todos', { is_done: false }] })!
+    expect(query.observers[0].options).toMatchObject({ refetchInterval: 60_000, refetchIntervalInBackground: true })
+  })
+
   it('stays silent without permission', async () => {
     const shown = stubNotification('denied')
     const { tick, qc } = setup()
