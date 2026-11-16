@@ -5,7 +5,9 @@ import { ClosedTasksDialog, NO_CLOSED_FILTERS } from '@/components/closed/Closed
 import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { TaskDialog } from '@/components/task/TaskDialog'
 import { TodayPage } from '@/components/today/TodayPage'
+import { KeptTasksProvider } from '@/hooks/useKeptTasks'
 import { ClockContext, useTicker } from '@/hooks/useNow'
+import { useReminderNotifications } from '@/hooks/useReminderNotifications'
 import { SyncProvider } from '@/hooks/useSync'
 
 /** NavState is what a modal URL carries: the Today search to return to, and whether a task was opened from Closed tasks. */
@@ -32,6 +34,13 @@ export function App() {
   const settings = /^\/settings(?:\/(general|atlassian))?\/?$/.exec(location.pathname)
   const closed = /^\/closed\/?$/.test(location.pathname)
 
+  // Like the Settings shortcut, a reminder's task returns to the Today URL it was opened over.
+  useReminderNotifications(clock.now, (id) =>
+    navigate(`/task/${encodeURIComponent(id)}`, {
+      state: { back: location.pathname === '/' ? location.search : back },
+    }),
+  )
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
@@ -47,29 +56,31 @@ export function App() {
   return (
     <ClockContext.Provider value={clock}>
       <SyncProvider>
-        <TodayPage />
-        {task && (
-          <TaskDialog
-            id={decodeURIComponent(task[1])}
-            onClose={fromClosed ? () => navigate('/closed', { state: { back } }) : close}
-            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed } })}
-          />
-        )}
-        {closed && (
-          <ClosedTasksDialog
-            filters={closedFilters}
-            onFilters={setClosedFilters}
-            onClose={close}
-            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed: true } })}
-          />
-        )}
-        {settings && (
-          <SettingsDialog
-            tab={settings[1] === 'atlassian' ? 'atlassian' : 'general'}
-            onTab={(tab) => navigate(`/settings/${tab}`, { replace: true, state: { back } })}
-            onClose={close}
-          />
-        )}
+        <KeptTasksProvider>
+          <TodayPage />
+          {task && (
+            <TaskDialog
+              id={decodeURIComponent(task[1])}
+              onClose={fromClosed ? () => navigate('/closed', { state: { back } }) : close}
+              onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed } })}
+            />
+          )}
+          {closed && (
+            <ClosedTasksDialog
+              filters={closedFilters}
+              onFilters={setClosedFilters}
+              onClose={close}
+              onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed: true } })}
+            />
+          )}
+          {settings && (
+            <SettingsDialog
+              tab={settings[1] === 'atlassian' ? 'atlassian' : 'general'}
+              onTab={(tab) => navigate(`/settings/${tab}`, { replace: true, state: { back } })}
+              onClose={close}
+            />
+          )}
+        </KeptTasksProvider>
         <Toaster position="bottom-right" visibleToasts={3} gap={10} toastOptions={{ unstyled: true }} />
       </SyncProvider>
     </ClockContext.Provider>

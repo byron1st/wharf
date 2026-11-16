@@ -2,6 +2,7 @@ import { Dialog as D } from 'radix-ui'
 import { Copy, ExternalLink, Lock, MoreHorizontal, Pencil, RefreshCw, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { OriginBadge, STATUS_LABEL, StatusBadge, StatusIcon } from '@/components/common/badges'
+import { useCancelConfirm } from '@/components/common/CancelConfirm'
 import { Relations } from '@/components/common/Relations'
 import { Markdown } from '@/components/markdown/Markdown'
 import { MarkdownEditor, MdIcon, ModeTabs } from '@/components/markdown/MarkdownEditor'
@@ -10,6 +11,7 @@ import { dueTone, StatusSelect } from '@/components/today/TaskInspector'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useAtlassianSettings, useTask, useTaskActions } from '@/hooks/data'
+import { useKeptTasks } from '@/hooks/useKeptTasks'
 import { useNow } from '@/hooks/useNow'
 import { useSyncTask } from '@/hooks/useSync'
 import { taskKey, type TaskDetail, type TaskInput } from '@/lib/api'
@@ -80,11 +82,20 @@ function Body({
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...(d ?? draftOf(task)), ...patch }))
   useEffect(() => onEditing(editing ? () => setDraft(null) : null), [editing, onEditing])
 
-  const save = async () => {
-    if (!draft || saving) return
+  const { guard, dialog } = useCancelConfirm()
+  const { keep } = useKeptTasks()
+
+  const save = () => {
+    if (draft && !saving) guard(task, draft.status, () => void commit(draft))
+  }
+
+  const commit = async (next: Draft) => {
     setSaving(true)
+    // A task closed here stays on Today until the next visit; keep it before
+    // the optimistic update so Today never drops it.
+    if (next.status !== task.status) keep(task.id)
     try {
-      await updateAsync(task, { ...draft, title: draft.title.trim() || task.title })
+      await updateAsync(task, { ...next, title: next.title.trim() || task.title })
       setDraft(null)
     } catch {
       // updateAsync already undid the change and showed the toast.
@@ -98,7 +109,7 @@ function Body({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
-        void save()
+        save()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -161,7 +172,7 @@ function Body({
               <Button variant="outline" onClick={() => setDraft(null)}>
                 Cancel
               </Button>
-              <Button onClick={() => void save()} disabled={saving} className="px-4">
+              <Button onClick={save} disabled={saving} className="px-4">
                 Save changes
                 <kbd className="rounded bg-white/20 px-[5px] font-mono text-[11px]">⌘↵</kbd>
               </Button>
@@ -364,6 +375,7 @@ function Body({
           </Card>
         </div>
       </div>
+      {dialog}
     </>
   )
 }

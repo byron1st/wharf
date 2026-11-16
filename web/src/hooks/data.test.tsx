@@ -270,3 +270,34 @@ describe('useTaskActions().setStatus and reorder', () => {
     )
   })
 })
+
+describe('useTaskActions() status changes', () => {
+  function setup() {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })))
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidated = vi.spyOn(qc, 'invalidateQueries')
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    const { result } = renderHook(() => useTaskActions(), { wrapper })
+    const todosRefetched = () => invalidated.mock.calls.some(([f]) => f?.queryKey === keys.allTodos)
+    return { result, invalidated, todosRefetched }
+  }
+
+  it('refetches the todos once the server stores a status, since closing changes them', async () => {
+    const { result, invalidated, todosRefetched } = setup()
+
+    await act(() => result.current.setStatusAsync(task, 'canceled'))
+    await waitFor(() => expect(invalidated).toHaveBeenCalled())
+    expect(todosRefetched()).toBe(true)
+  })
+
+  it('refetches the todos after a task update that sets the status, and not after other updates', async () => {
+    const { result, invalidated, todosRefetched } = setup()
+
+    await act(() => result.current.updateAsync(task, { title: 'renamed' }))
+    await waitFor(() => expect(invalidated).toHaveBeenCalled())
+    expect(todosRefetched()).toBe(false)
+
+    await act(() => result.current.updateAsync(task, { status: 'done' }))
+    await waitFor(() => expect(todosRefetched()).toBe(true))
+  })
+})

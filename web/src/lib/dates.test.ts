@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   atLocal,
+  nextAutoSyncLabel,
   closedGroup,
   closedLabel,
   compareTodayTasks,
   doneLabel,
+  dueReminders,
   reorderedIDs,
   dueTag,
   isTime,
@@ -66,17 +68,14 @@ describe('isTodayTodo', () => {
 })
 
 describe('isTodayTask', () => {
-  it('lists open tasks with or without todos for today', () => {
-    expect(isTodayTask({ status: 'todo' }, false)).toBe(true)
-    expect(isTodayTask({ status: 'in-progress' }, false)).toBe(true)
-    expect(isTodayTask({ status: 'in-progress' }, true)).toBe(true)
+  it('lists open tasks', () => {
+    expect(isTodayTask({ status: 'todo' })).toBe(true)
+    expect(isTodayTask({ status: 'in-progress' })).toBe(true)
   })
 
-  it('lists done and canceled tasks only while they have todos for today', () => {
-    expect(isTodayTask({ status: 'done' }, false)).toBe(false)
-    expect(isTodayTask({ status: 'canceled' }, false)).toBe(false)
-    expect(isTodayTask({ status: 'done' }, true)).toBe(true)
-    expect(isTodayTask({ status: 'canceled' }, true)).toBe(true)
+  it('never lists done and canceled tasks', () => {
+    expect(isTodayTask({ status: 'done' })).toBe(false)
+    expect(isTodayTask({ status: 'canceled' })).toBe(false)
   })
 })
 
@@ -230,5 +229,30 @@ describe('closed tasks', () => {
     expect(closedLabel(at('2026-10-19'), today, true)).toBe('Closed Oct 19 in Jira')
     expect(closedLabel(null, today, false)).toBe('Closed')
     expect(closedLabel(null, today, true)).toBe('Closed in Jira')
+  })
+})
+
+describe('dueReminders', () => {
+  it('keeps the reminders after since and up to now', () => {
+    const at = (t: string) => atLocal(today, t).toISOString()
+    const reminders = [at('14:05'), at('14:06'), at('14:07'), at('14:08')]
+    expect(dueReminders(reminders, atLocal(today, '14:05'), now)).toEqual([at('14:06'), at('14:07')])
+    expect(dueReminders(reminders, now, now)).toEqual([])
+  })
+})
+
+describe('nextAutoSyncLabel', () => {
+  const now = atLocal('2026-10-26', '14:30')
+  const last = atLocal('2026-10-26', '14:02').toISOString()
+
+  it.each([
+    { name: 'later today', last, minutes: 60, want: 'today 15:02' },
+    { name: 'tomorrow', last, minutes: 720, want: 'tomorrow 02:02' },
+    { name: 'already due', last, minutes: 15, want: 'within a minute' },
+    { name: 'due right now', last, minutes: 28, want: 'within a minute' },
+    { name: 'never synced', last: null, minutes: 60, want: 'within a minute' },
+    { name: 'after tomorrow', last: atLocal('2026-10-27', '23:30').toISOString(), minutes: 1440, want: 'Oct 28 23:30' },
+  ])('says $want when $name', ({ last, minutes, want }) => {
+    expect(nextAutoSyncLabel(last, minutes, now)).toBe(want)
   })
 })

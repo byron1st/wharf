@@ -196,6 +196,29 @@ describe('ClosedTasksDialog', () => {
     await waitFor(() => expect(sections()[1]).toEqual({ label: 'Last week2', keys: ['WHF-002', 'WHF-005'] }))
   })
 
+  it('asks before an Undo that would delete todos added since the reopen', async () => {
+    const user = userEvent.setup()
+    const tasks = fixtures()
+    const { puts } = renderDialog(tasks)
+    const reopen = await screen.findByRole('button', { name: 'Reopen WHF-005' })
+    // A todo added on Today after the reopen shows up in the task list refetched after it.
+    tasks.find((t) => t.id === 'local-WHF-005')!.todo_count = 4
+    await user.click(reopen)
+    await waitFor(() => expect(puts).toHaveLength(1))
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Cancel WHF-005?' })
+    expect(confirm).toHaveTextContent('Canceling deletes its 4 todos.')
+    await user.click(within(confirm).getByRole('button', { name: 'Keep task' }))
+    expect(puts).toHaveLength(1)
+    expect(screen.getByRole('status')).toHaveTextContent('WHF-005 reopened as Todo.')
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel and delete todos' }))
+    await waitFor(() => expect(puts).toHaveLength(2))
+    expect(puts[1]).toEqual({ url: '/api/tasks/local-WHF-005/status', body: { status: 'canceled', closed_at: at('2026-10-21') } })
+  })
+
   it('keeps the row and shows no notice when the reopen fails', async () => {
     const user = userEvent.setup()
     const { puts } = renderDialog(fixtures(), true)

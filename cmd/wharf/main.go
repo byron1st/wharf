@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/byron1st/wharf/internal/adapter/atlassian"
 	"github.com/byron1st/wharf/internal/adapter/db"
@@ -100,6 +101,7 @@ func run() (code int, restartWith string) {
 	svc := service.NewService(atls, dbMng)
 	settings := service.NewSettings(service.SettingsDeps{
 		Jira:   atls,
+		DB:     dbMng,
 		System: desktop,
 		App: service.AppSettings{
 			ConfigPath: cfgPath,
@@ -139,6 +141,13 @@ func run() (code int, restartWith string) {
 		},
 		Logger: logger,
 	})
+	autoSyncer := service.NewAutoSyncer(service.AutoSyncerDeps{
+		Service:  svc,
+		Settings: settings,
+		Every:    time.Minute,
+		Now:      time.Now,
+		Logger:   logger,
+	})
 	srv := server.New(server.NewHandler(svc, settings, updater, web.Dist(), logger), logger)
 
 	ln, err := net.Listen("tcp", cfg.Addr)
@@ -150,6 +159,7 @@ func run() (code int, restartWith string) {
 	logger.Info("server started", "addr", ln.Addr().String())
 
 	go updater.Run(ctx)
+	go autoSyncer.Run(ctx)
 
 	if err := srv.Run(ctx, ln); err != nil {
 		logger.Error("failed to run server", "error", err)

@@ -166,9 +166,9 @@ export function isTodayTodo(t: { is_done: boolean; start_date: string | null }, 
   return !t.is_done && (!t.start_date || t.start_date <= today)
 }
 
-/** isTodayTask is whether Today lists a task: any open one, and a done or canceled one only while it has todos for today. */
-export function isTodayTask(task: { status: TaskStatus }, hasTodayTodos: boolean): boolean {
-  return hasTodayTodos || !isClosedStatus(task.status)
+/** isTodayTask is whether Today lists a task: only an open one, whatever its todos. */
+export function isTodayTask(task: { status: TaskStatus }): boolean {
+  return !isClosedStatus(task.status)
 }
 
 /** isClosedStatus is whether a task status is done or canceled. */
@@ -176,6 +176,10 @@ export const isClosedStatus = (s: TaskStatus) => s === 'done' || s === 'canceled
 
 /** isSent reports whether a reminder already went off; wharf keeps no sent flag. */
 export const isSent = (at: string, now: Date) => new Date(at).getTime() <= now.getTime()
+
+/** dueReminders are the reminders that went off after since and up to now. */
+export const dueReminders = (reminders: string[], since: Date, now: Date) =>
+  reminders.filter((r) => !isSent(r, since) && isSent(r, now))
 
 /** sortReminders orders reminder instants by time, whatever their UTC offsets. */
 export const sortReminders = (reminders: string[]) =>
@@ -257,4 +261,19 @@ export function closedLabel(closedAt: string | null, today: string, jira: boolea
   const n = diffDays(day, today)
   const when = n === 0 ? 'today' : n === 1 ? 'yesterday' : monthDay(day)
   return `Closed ${when}${where}`
+}
+
+/**
+ * nextAutoSyncLabel says when the server next syncs Atlassian on its own:
+ * minutes after the last sync, manual or automatic. A sync already due, or
+ * the first one, runs at the server's next check, within a minute.
+ */
+export function nextAutoSyncLabel(lastSyncedAt: string | null, minutes: number, now: Date): string {
+  if (!lastSyncedAt) return 'within a minute'
+  const at = new Date(new Date(lastSyncedAt).getTime() + minutes * 60_000)
+  if (at.getTime() <= now.getTime()) return 'within a minute'
+  const today = ymd(now)
+  const day = ymd(at)
+  const when = day === today ? 'today' : day === addDays(today, 1) ? 'tomorrow' : monthDay(day)
+  return `${when} ${hhmm(at)}`
 }

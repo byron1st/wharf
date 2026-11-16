@@ -37,6 +37,9 @@ var (
 	ErrFailedToUpdateLocalTaskStatus        = errors.New("db: failed to update local task status")
 	ErrLocalTaskToSetStatusNotFound         = errors.New("db: local task to set status not found")
 	ErrFailedToUpdateTaskPosition           = errors.New("db: failed to update task position")
+	ErrFailedToGetTaskStatus                = errors.New("db: failed to get task status")
+	ErrFailedToListTaskStatuses             = errors.New("db: failed to list task statuses")
+	ErrFailedToCompleteTodosOfTask          = errors.New("db: failed to complete todos of task")
 	ErrFailedToDeleteTaskChildren           = errors.New("db: failed to delete task children")
 	ErrFailedToDeleteLocalTaskLinks         = errors.New("db: failed to delete links of local task")
 	ErrFailedToDeleteTask                   = errors.New("db: failed to delete task")
@@ -61,6 +64,8 @@ var (
 	ErrFailedToCreateAtlassianSync            = errors.New("db: failed to create atlassian sync")
 	ErrAtlassianSyncNotFound                  = errors.New("db: atlassian sync not found")
 	ErrFailedToGetAtlassianSync               = errors.New("db: failed to get atlassian sync")
+	ErrFailedToGetAtlassianSyncInterval       = errors.New("db: failed to get atlassian sync interval")
+	ErrFailedToSetAtlassianSyncInterval       = errors.New("db: failed to set atlassian sync interval")
 )
 
 // localTaskCounter is the counters row seeded by the initial migration.
@@ -89,6 +94,8 @@ type Manager interface {
 	ListServiceDeskRequests(ctx context.Context, includeClosed bool) ([]servicedesk.Request, error)
 	CreateAtlassianSync(ctx context.Context, r atlassiansync.Record) error
 	GetLastAtlassianSync(ctx context.Context) (atlassiansync.Record, error)
+	GetAtlassianSyncInterval(ctx context.Context) (time.Duration, error)
+	SetAtlassianSyncInterval(ctx context.Context, interval time.Duration) error
 
 	// DB Management
 
@@ -132,6 +139,12 @@ func NewManager(url, password string, migrations fs.FS) Manager {
 // ClosedAt is stored as given. ClosedSyncedAt is stored only when the upsert
 // closes a stored task that was open; it is kept while the task stays closed
 // and cleared when the task is open, so a new task never gets it.
+//
+// A stored task whose status changes to done has its open todos completed at
+// its closing time (now when unknown, or when it was canceled and keeps that
+// earlier closing time), and one whose status changes to
+// canceled has all of its todos deleted. A task whose status stays as it was
+// keeps its todos.
 func (m *manager) UpsertTasks(ctx context.Context, tasks []task.Task) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -142,8 +155,17 @@ func (m *manager) UpsertTasks(ctx context.Context, tasks []task.Task) error {
 	}
 
 	return m.inTx(ctx, func(queries *Queries) error {
+		statuses, err := taskStatuses(ctx, queries, tasks)
+		if err != nil {
+			return err
+		}
+
 		for _, t := range tasks {
 			if err := storeTask(ctx, queries, t); err != nil {
+				return err
+			}
+
+			if err := closeTodos(ctx, queries, t.ID, statuses[t.ID], t.Status); err != nil {
 				return err
 			}
 		}
@@ -254,7 +276,9 @@ func (m *manager) GetTask(ctx context.Context, id string) (task.Task, error) {
 // unless t.LinkedIDs lists it; a Jira task declares it again on its next sync.
 // t.ClosedAt is stored only when the update closes a task that was open; a
 // task that stays closed keeps its closing time, and an open one has none.
-// It fails with ErrLocalTaskToUpdateNotFound when no local task has t.ID.
+// A status change to done or canceled completes or deletes its todos as
+// UpsertTasks does. It fails with ErrLocalTaskToUpdateNotFound when no local
+// task has t.ID.
 func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -263,6 +287,11 @@ func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 	t.Originated = task.OriginLocal
 
 	return m.inTx(ctx, func(queries *Queries) error {
+		prev, err := taskStatus(ctx, queries, t.ID)
+		if err != nil {
+			return err
+		}
+
 		updated, err := queries.UpdateLocalTask(ctx, UpdateLocalTaskParams{
 			Title:       t.Title,
 			Description: t.Description,
@@ -288,15 +317,20 @@ func (m *manager) UpdateLocalTask(ctx context.Context, t task.Task) error {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteLocalTaskLinks, err), t.ID)
 		}
 
-		return storeRelations(ctx, queries, t)
+		if err := storeRelations(ctx, queries, t); err != nil {
+			return err
+		}
+
+		return closeTodos(ctx, queries, t.ID, prev, t.Status)
 	})
 }
 
 // UpdateLocalTaskStatus sets the status of the stored local task id, leaving
 // its other fields and relations as they are. closedAt becomes its closing
 // time only when status closes a task that was open; a task that stays closed
-// keeps its closing time, and an open one has none. It fails with
-// ErrLocalTaskToSetStatusNotFound when no local task has id.
+// keeps its closing time, and an open one has none. A status change to done
+// or canceled completes or deletes its todos as UpsertTasks does. It fails
+// with ErrLocalTaskToSetStatusNotFound when no local task has id.
 func (m *manager) UpdateLocalTaskStatus(ctx context.Context, id string, status task.Status, closedAt time.Time) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -304,16 +338,23 @@ func (m *manager) UpdateLocalTaskStatus(ctx context.Context, id string, status t
 
 	params := UpdateLocalTaskStatusParams{Status: string(status), ClosedAt: closedAt.UTC(), ID: id}
 
-	updated, err := m.queries.UpdateLocalTaskStatus(ctx, params)
-	if err != nil {
-		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpdateLocalTaskStatus, err), id)
-	}
+	return m.inTx(ctx, func(queries *Queries) error {
+		prev, err := taskStatus(ctx, queries, id)
+		if err != nil {
+			return err
+		}
 
-	if updated == 0 {
-		return fmt.Errorf("%w: id=%s", ErrLocalTaskToSetStatusNotFound, id)
-	}
+		updated, err := queries.UpdateLocalTaskStatus(ctx, params)
+		if err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToUpdateLocalTaskStatus, err), id)
+		}
 
-	return nil
+		if updated == 0 {
+			return fmt.Errorf("%w: id=%s", ErrLocalTaskToSetStatusNotFound, id)
+		}
+
+		return closeTodos(ctx, queries, id, prev, status)
+	})
 }
 
 // SetTaskPositions stores the index of each ID in ids as the position of
@@ -364,25 +405,7 @@ func (m *manager) DeleteTask(ctx context.Context, id string) error {
 			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskLinksOf, err), id)
 		}
 
-		// Links, reminders, and todos are found through task_todos, so it goes
-		// last.
-		if err := queries.DeleteTodoServiceDeskRequestsOfTask(ctx, id); err != nil {
-			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteServiceDeskLinksOfTask, err), id)
-		}
-
-		if err := queries.DeleteTodoRemindersOfTask(ctx, id); err != nil {
-			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTodoRemindersOfTask, err), id)
-		}
-
-		if err := queries.DeleteTodosOfTask(ctx, id); err != nil {
-			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTodosOfTask, err), id)
-		}
-
-		if err := queries.DeleteTaskTodosOfTask(ctx, id); err != nil {
-			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskTodosOfTask, err), id)
-		}
-
-		return nil
+		return removeTodosOfTask(ctx, queries, id)
 	})
 }
 
@@ -559,6 +582,36 @@ func (m *manager) GetLastAtlassianSync(ctx context.Context) (atlassiansync.Recor
 	}, nil
 }
 
+// GetAtlassianSyncInterval returns how long after the last Atlassian sync the
+// next automatic one is due, shared by every device; 0 means automatic syncs
+// are off.
+func (m *manager) GetAtlassianSyncInterval(ctx context.Context) (time.Duration, error) {
+	if err := m.checkConnected(); err != nil {
+		return 0, err
+	}
+
+	minutes, err := m.queries.GetAtlassianSyncInterval(ctx)
+	if err != nil {
+		return 0, errors.Join(ErrFailedToGetAtlassianSyncInterval, err)
+	}
+
+	return time.Duration(minutes) * time.Minute, nil
+}
+
+// SetAtlassianSyncInterval stores interval, in whole minutes, as the one
+// GetAtlassianSyncInterval returns.
+func (m *manager) SetAtlassianSyncInterval(ctx context.Context, interval time.Duration) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	if err := m.queries.SetAtlassianSyncInterval(ctx, int64(interval/time.Minute)); err != nil {
+		return fmt.Errorf("%w: interval=%s", errors.Join(ErrFailedToSetAtlassianSyncInterval, err), interval)
+	}
+
+	return nil
+}
+
 // inTx runs fn in a transaction, after taking the write lock described at
 // writeLockKey, and commits it when fn succeeds.
 func (m *manager) inTx(ctx context.Context, fn func(*Queries) error) error {
@@ -580,6 +633,90 @@ func (m *manager) inTx(ctx context.Context, fn func(*Queries) error) error {
 
 	if err := tx.Commit(); err != nil {
 		return errors.Join(ErrFailedToCommitTx, err)
+	}
+
+	return nil
+}
+
+// removeTodosOfTask deletes the todos of task id with their reminders,
+// service desk request links, and task_todos rows.
+func removeTodosOfTask(ctx context.Context, queries *Queries, id string) error {
+	// Links, reminders, and todos are found through task_todos, so it goes
+	// last.
+	if err := queries.DeleteTodoServiceDeskRequestsOfTask(ctx, id); err != nil {
+		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteServiceDeskLinksOfTask, err), id)
+	}
+
+	if err := queries.DeleteTodoRemindersOfTask(ctx, id); err != nil {
+		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTodoRemindersOfTask, err), id)
+	}
+
+	if err := queries.DeleteTodosOfTask(ctx, id); err != nil {
+		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTodosOfTask, err), id)
+	}
+
+	if err := queries.DeleteTaskTodosOfTask(ctx, id); err != nil {
+		return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToDeleteTaskTodosOfTask, err), id)
+	}
+
+	return nil
+}
+
+// taskStatus is the stored status of task id, or "" when it is not stored.
+func taskStatus(ctx context.Context, queries *Queries, id string) (task.Status, error) {
+	status, err := queries.GetTaskStatus(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToGetTaskStatus, err), id)
+	}
+
+	return task.Status(status), nil
+}
+
+// taskStatuses maps the ID of each stored task among tasks to its status.
+func taskStatuses(ctx context.Context, queries *Queries, tasks []task.Task) (map[string]task.Status, error) {
+	ids := make([]string, len(tasks))
+	for i, t := range tasks {
+		ids[i] = t.ID
+	}
+
+	// Marshaling a []string cannot fail.
+	encoded, _ := json.Marshal(ids)
+
+	rows, err := queries.ListTaskStatusesByIDs(ctx, string(encoded))
+	if err != nil {
+		return nil, errors.Join(ErrFailedToListTaskStatuses, err)
+	}
+
+	statuses := make(map[string]task.Status, len(rows))
+	for _, r := range rows {
+		statuses[r.ID] = task.Status(r.Status)
+	}
+
+	return statuses, nil
+}
+
+// closeTodos tidies the todos of task id when its status changes from prev
+// to next: becoming done completes its open todos at the task's closing
+// time, or now when it was already closed and keeps an earlier closing time,
+// and becoming canceled deletes all of them. Any other change, or none,
+// leaves them as they are.
+func closeTodos(ctx context.Context, queries *Queries, id string, prev, next task.Status) error {
+	if prev == next {
+		return nil
+	}
+
+	switch next {
+	case task.StatusDone:
+		params := CompleteTodosOfTaskParams{AtClosing: !prev.Closed(), TaskID: id}
+		if err := queries.CompleteTodosOfTask(ctx, params); err != nil {
+			return fmt.Errorf("%w: id=%s", errors.Join(ErrFailedToCompleteTodosOfTask, err), id)
+		}
+	case task.StatusCanceled:
+		return removeTodosOfTask(ctx, queries, id)
 	}
 
 	return nil

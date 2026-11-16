@@ -59,6 +59,8 @@ func NewHandler(
 	mux.HandleFunc("GET /api/settings/atlassian", getAtlassianSettings(settings))
 	mux.HandleFunc("PUT /api/settings/atlassian", saveAtlassianSettings(settings, logger))
 	mux.HandleFunc("POST /api/settings/atlassian/test", checkAtlassianSettings(settings, logger))
+	mux.HandleFunc("GET /api/settings/atlassian/sync", getAtlassianSyncSettings(settings, logger))
+	mux.HandleFunc("PUT /api/settings/atlassian/sync", saveAtlassianSyncSettings(settings, logger))
 	mux.HandleFunc("GET /api/settings/app", getAppSettings(settings))
 	mux.HandleFunc("POST /api/settings/app/config/choose", chooseConfigFile(settings, logger))
 	mux.HandleFunc("DELETE /api/settings/app/config/pending", clearPendingConfigFile(settings))

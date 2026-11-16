@@ -173,7 +173,8 @@ func (s *service) CreateTask(ctx context.Context, t task.Task) (string, error) {
 // the task is not local, since a sync would overwrite it, and with
 // ErrLocalTaskToUpdateNotFound when it stops being a local task before the
 // write. A task the update closes is closed now; one that stays closed keeps
-// its closing time.
+// its closing time. Changing the status to done completes the task's open
+// todos, and changing it to canceled deletes all of its todos.
 func (s *service) UpdateTask(ctx context.Context, t task.Task) error {
 	t, err := normalize(t)
 	if err != nil {
@@ -224,7 +225,9 @@ func (s *service) DeleteTask(ctx context.Context, id string) error {
 // fields and relations as they are. A status that closes an open task closes
 // it at closedAt, or now when closedAt is nil, so undoing a reopen can bring
 // back the earlier closing time; a task that stays closed keeps its closing
-// time. It fails with ErrUnknownTaskStatusToSet for a status other than todo,
+// time. Changing the status to done completes the task's open todos at its
+// closing time, and changing it to canceled deletes all of its todos. It
+// fails with ErrUnknownTaskStatusToSet for a status other than todo,
 // in-progress, done, and canceled, with ErrClosedAtForOpenStatus when
 // closedAt comes with an open status, and with
 // ErrLocalTaskToSetStatusNotFound when no local task has id, since a sync
