@@ -95,10 +95,12 @@ export function TodayPage() {
     setKeptTodos((s) => toggled(s, todo.id, done))
   }
 
+  const keepTask = (id: string) => setKeptTasks((s) => toggled(s, id, true))
+
   const changeStatus = (task: TaskListItem, status: TaskStatus) =>
     guard(task, status, () => {
       setStatus(task, status)
-      setKeptTasks((s) => toggled(s, task.id, true))
+      keepTask(task.id)
     })
 
   const move = (id: string, before: string | null) => {
@@ -189,6 +191,7 @@ export function TodayPage() {
                   onClose={close}
                   onOpen={openTask}
                   onSelectTask={(id) => select({ kind: 'task', id })}
+                  onStatusChange={keepTask}
                 />
               )}
               {selection.kind === 'req' && selectedReq && (

@@ -125,16 +125,21 @@ describe('TodayPage closed tasks', () => {
     service_desk_requests: [],
   })
 
-  /** renderWith serves tasks and todos, and records each status change. */
-  function renderWith(tasks: TaskListItem[], todos: Todo[]) {
+  /** renderWith serves tasks and todos at url, and records each status change. */
+  function renderWith(tasks: TaskListItem[], todos: Todo[], url = '/') {
     const puts: { url: string; body: unknown }[] = []
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         if (init?.method === 'PUT') {
-          puts.push({ url, body: JSON.parse(String(init.body)) })
+          const body = JSON.parse(String(init.body)) as { status: TaskListItem['status'] }
+          puts.push({ url, body })
+          // Serve the stored status from now on, as the server would.
+          tasks = tasks.map((t) => (url.startsWith(`/api/tasks/${t.id}`) ? { ...t, status: body.status } : t))
           return new Response(null, { status: 204 })
         }
+        const detail = tasks.find((t) => url === `/api/tasks/${t.id}`)
+        if (detail) return new Response(JSON.stringify({ ...detail, parent_id: null, children_ids: [], linked_ids: [], parent: null, children: [], linked: [] }))
         if (url.startsWith('/api/tasks')) return new Response(JSON.stringify({ tasks }))
         if (url.startsWith('/api/todos')) return new Response(JSON.stringify({ todos: url.includes('is_done=false') ? todos : [] }))
         return new Response(JSON.stringify({ requests: [], last_sync: null }))
@@ -143,7 +148,7 @@ describe('TodayPage closed tasks', () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[url]}>
           <TodayPage />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -207,4 +212,18 @@ describe('TodayPage closed tasks', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(puts[0].body).toEqual({ status: 'done' })
   })
+
+  it('keeps a task closed from the inspector on Today for this visit', async () => {
+    const user = userEvent.setup()
+    Element.prototype.hasPointerCapture ??= () => false
+    Element.prototype.scrollIntoView ??= () => {}
+    const puts = renderWith([at('local-WHF-001', 'todo', 'Open task')], [], '/?task=local-WHF-001')
+
+    const inspector = await screen.findByRole('complementary', { name: 'Inspector' })
+    await user.click(await within(inspector).findByRole('combobox', { name: 'Status' }))
+    await user.click(await screen.findByRole('option', { name: 'Done' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(within(screen.getByRole('region', { name: 'Todos' })).getByText('Open task')).toBeInTheDocument()
+  })
+
 })

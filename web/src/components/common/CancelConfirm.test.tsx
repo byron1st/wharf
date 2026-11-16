@@ -42,8 +42,8 @@ beforeAll(() => {
 
 afterEach(() => vi.unstubAllGlobals())
 
-/** renderWith shows ui for a task with todoCount todos and records each PUT. */
-function renderWith(ui: React.ReactNode, todoCount: number) {
+/** renderWith shows ui for a task with todoCount todos, or with the task list never loading for null, and records each PUT. */
+function renderWith(ui: React.ReactNode, todoCount: number | null) {
   const puts: { url: string; body: { status?: string } }[] = []
   vi.stubGlobal(
     'fetch',
@@ -52,14 +52,17 @@ function renderWith(ui: React.ReactNode, todoCount: number) {
         puts.push({ url, body: JSON.parse(String(init.body)) as { status?: string } })
         return new Response(null, { status: 204 })
       }
-      if (url === '/api/tasks') return new Response(JSON.stringify({ tasks: [listed(todoCount)] }))
+      if (url === '/api/tasks') {
+        if (todoCount === null) return new Promise<Response>(() => {})
+        return new Response(JSON.stringify({ tasks: [listed(todoCount)] }))
+      }
       if (url.startsWith('/api/tasks/')) return new Response(JSON.stringify(detail))
       if (url.startsWith('/api/todos')) return new Response(JSON.stringify({ todos: [] }))
       return new Response(JSON.stringify({}))
     }),
   )
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  qc.setQueryData(keys.tasks, [listed(todoCount)])
+  if (todoCount !== null) qc.setQueryData(keys.tasks, [listed(todoCount)])
   render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>{ui}</MemoryRouter>
@@ -103,6 +106,21 @@ describe('canceling from the Task inspector', () => {
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(puts[0].body.status).toBe('canceled')
+  })
+})
+
+describe('canceling before the task list loads', () => {
+  it('asks without a count rather than delete todos unasked', async () => {
+    const user = userEvent.setup()
+    const puts = renderWith(inspector, null)
+
+    await pickStatus(user, 'Canceled')
+    const dialog = await screen.findByRole('dialog', { name: 'Cancel WHF-001?' })
+    expect(dialog).toHaveTextContent('Canceling deletes its todos.')
+    expect(puts).toHaveLength(0)
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel and delete todos' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
   })
 })
 

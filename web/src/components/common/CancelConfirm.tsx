@@ -6,22 +6,25 @@ import { taskKey, type TaskStatus } from '@/lib/api'
 
 interface Pending {
   id: string
-  count: number
+  /** count is how many todos the task has, or null when the task list has not loaded it. */
+  count: number | null
   run: () => void
 }
 
 /**
  * useCancelConfirm guards a status change: canceling a task deletes its todos,
- * so a change to canceled for a task with todos waits for confirmation. guard
- * runs every other change at once. Render dialog where the hook is used.
+ * so a change to canceled waits for confirmation unless the task list shows
+ * the task has none. guard runs every other change at once. Render dialog
+ * where the hook is used.
  */
 export function useCancelConfirm() {
   const { data: tasks = [] } = useTasks()
   const [pending, setPending] = useState<Pending | null>(null)
 
   const guard = (task: { id: string; status: TaskStatus }, next: TaskStatus, run: () => void) => {
-    const count = tasks.find((t) => t.id === task.id)?.todo_count ?? 0
-    if (next === 'canceled' && task.status !== 'canceled' && count > 0) setPending({ id: task.id, count, run })
+    // An unknown count asks too, rather than delete todos unasked.
+    const count = tasks.find((t) => t.id === task.id)?.todo_count ?? null
+    if (next === 'canceled' && task.status !== 'canceled' && count !== 0) setPending({ id: task.id, count, run })
     else run()
   }
 
@@ -33,7 +36,9 @@ export function useCancelConfirm() {
             <div className="flex flex-col gap-1.5">
               <D.Title className="m-0 text-[17px] font-semibold tracking-[-0.01em]">Cancel {taskKey(pending.id)}?</D.Title>
               <D.Description className="m-0 text-[13px] leading-normal text-ink-muted">
-                Canceling deletes its {pending.count} todo{pending.count > 1 ? 's' : ''}. Reopening the task won’t bring them back.
+                Canceling deletes its{' '}
+                {pending.count === null ? 'todos' : `${pending.count} todo${pending.count > 1 ? 's' : ''}`}. Reopening the task won’t bring
+                them back.
               </D.Description>
             </div>
             <div className="flex justify-end gap-2">

@@ -72,7 +72,7 @@ function ReadField({ children, className }: { children: ReactNode; className?: s
   )
 }
 
-function LocalFields({ task }: { task: TaskDetail }) {
+function LocalFields({ task, onStatusChange }: { task: TaskDetail; onStatusChange?: (id: string) => void }) {
   const { today } = useNow()
   const { update } = useTaskActions()
   const { guard, dialog } = useCancelConfirm()
@@ -96,7 +96,12 @@ function LocalFields({ task }: { task: TaskDetail }) {
           <Label>Status</Label>
           <StatusSelect
             value={task.status}
-            onChange={(status) => guard(task, status, () => update(task, { status }))}
+            onChange={(status) =>
+              guard(task, status, () => {
+                update(task, { status })
+                onStatusChange?.(task.id)
+              })
+            }
             className="h-8 px-2"
             hideIcon
           />
@@ -187,11 +192,14 @@ export function TaskInspector({
   onClose,
   onOpen,
   onSelectTask,
+  onStatusChange,
 }: {
   id: string
   onClose: () => void
   onOpen: (id: string) => void
   onSelectTask: (id: string) => void
+  /** onStatusChange tells Today that a local task's status changed, so it stays for this visit. */
+  onStatusChange?: (id: string) => void
 }) {
   const { data: task, isError } = useTask(id)
   const { update, remove } = useTaskActions()
@@ -230,7 +238,7 @@ export function TaskInspector({
         </button>
       </InspectorHeader>
       <div className="flex flex-col gap-[18px] p-4">
-        {local ? <LocalFields key={task.id} task={task} /> : <JiraFields task={task} />}
+        {local ? <LocalFields key={task.id} task={task} onStatusChange={onStatusChange} /> : <JiraFields task={task} />}
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
