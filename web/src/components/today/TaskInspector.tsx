@@ -1,6 +1,7 @@
 import { ArrowUpRight, Lock, Trash2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { OriginBadge, STATUS_LABEL, StatusIcon } from '@/components/common/badges'
+import { useCancelConfirm } from '@/components/common/CancelConfirm'
 import { Relations } from '@/components/common/Relations'
 import { MarkdownEditor, MdIcon, ModeTabs } from '@/components/markdown/MarkdownEditor'
 import { Markdown } from '@/components/markdown/Markdown'
@@ -8,6 +9,7 @@ import { DateField } from '@/components/pickers/DateField'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { useSavingTask, useTask, useTaskActions } from '@/hooks/data'
 import { useDraft } from '@/hooks/useDraft'
+import { useKeptTasks } from '@/hooks/useKeptTasks'
 import { useNow } from '@/hooks/useNow'
 import { taskKey, type TaskDetail, type TaskStatus } from '@/lib/api'
 import { dayLabel, fromTaskDate, monthDay, toTaskDate } from '@/lib/dates'
@@ -74,6 +76,8 @@ function ReadField({ children, className }: { children: ReactNode; className?: s
 function LocalFields({ task }: { task: TaskDetail }) {
   const { today } = useNow()
   const { update } = useTaskActions()
+  const { guard, dialog } = useCancelConfirm()
+  const { keep } = useKeptTasks()
   const title = useDraft(task.title, (v) => v.trim() && update(task, { title: v.trim() }))
   const start = fromTaskDate(task.start_date)
   const due = fromTaskDate(task.due_date)
@@ -94,7 +98,12 @@ function LocalFields({ task }: { task: TaskDetail }) {
           <Label>Status</Label>
           <StatusSelect
             value={task.status}
-            onChange={(status) => update(task, { status })}
+            onChange={(status) =>
+              guard(task, status, () => {
+                update(task, { status })
+                keep(task.id)
+              })
+            }
             className="h-8 px-2"
             hideIcon
           />
@@ -131,6 +140,7 @@ function LocalFields({ task }: { task: TaskDetail }) {
           />
         </div>
       </div>
+      {dialog}
     </>
   )
 }

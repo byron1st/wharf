@@ -11,6 +11,31 @@ import (
 	"time"
 )
 
+const completeTodosOfTask = `-- name: CompleteTodosOfTask :exec
+UPDATE todos SET
+    is_done      = true,
+    completed_at = CASE
+        WHEN $1::boolean
+            THEN COALESCE((SELECT tasks.closed_at FROM tasks WHERE tasks.id = $2), now())
+        ELSE now()
+    END
+WHERE NOT todos.is_done
+  AND todos.id IN (SELECT task_todos.todo_id FROM task_todos WHERE task_todos.task_id = $2)
+`
+
+type CompleteTodosOfTaskParams struct {
+	AtClosing bool
+	TaskID    string
+}
+
+// With at_closing the open todos take the task's closing time, or now when it
+// is unknown; without it, as when a canceled task becomes done and keeps its
+// earlier closing time, they take now.
+func (q *Queries) CompleteTodosOfTask(ctx context.Context, arg CompleteTodosOfTaskParams) error {
+	_, err := q.db.ExecContext(ctx, completeTodosOfTask, arg.AtClosing, arg.TaskID)
+	return err
+}
+
 const countTaskTodos = `-- name: CountTaskTodos :one
 SELECT COUNT(*) FROM task_todos WHERE task_id = $1
 `
@@ -470,6 +495,17 @@ func (q *Queries) GetTask(ctx context.Context, id string) (GetTaskRow, error) {
 	return i, err
 }
 
+const getTaskStatus = `-- name: GetTaskStatus :one
+SELECT status FROM tasks WHERE id = $1
+`
+
+func (q *Queries) GetTaskStatus(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatus, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const incrementCounter = `-- name: IncrementCounter :one
 UPDATE counters SET value = value + 1 WHERE name = $1 RETURNING value
 `
@@ -592,6 +628,40 @@ func (q *Queries) ListTaskLinks(ctx context.Context, taskID string) ([]string, e
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskStatusesByIDs = `-- name: ListTaskStatusesByIDs :many
+SELECT id, status FROM tasks
+WHERE id IN (SELECT jsonb_array_elements_text(CAST($1::text AS jsonb)))
+`
+
+type ListTaskStatusesByIDsRow struct {
+	ID     string
+	Status string
+}
+
+// ids is a JSON array of task IDs, as in ListTasksByIDs.
+func (q *Queries) ListTaskStatusesByIDs(ctx context.Context, ids string) ([]ListTaskStatusesByIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTaskStatusesByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTaskStatusesByIDsRow
+	for rows.Next() {
+		var i ListTaskStatusesByIDsRow
+		if err := rows.Scan(&i.ID, &i.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

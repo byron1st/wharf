@@ -5,6 +5,7 @@ import { ClosedTasksDialog, NO_CLOSED_FILTERS } from '@/components/closed/Closed
 import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { TaskDialog } from '@/components/task/TaskDialog'
 import { TodayPage } from '@/components/today/TodayPage'
+import { KeptTasksProvider } from '@/hooks/useKeptTasks'
 import { ClockContext, useTicker } from '@/hooks/useNow'
 import { useReminderNotifications } from '@/hooks/useReminderNotifications'
 import { SyncProvider } from '@/hooks/useSync'
@@ -55,29 +56,31 @@ export function App() {
   return (
     <ClockContext.Provider value={clock}>
       <SyncProvider>
-        <TodayPage />
-        {task && (
-          <TaskDialog
-            id={decodeURIComponent(task[1])}
-            onClose={fromClosed ? () => navigate('/closed', { state: { back } }) : close}
-            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed } })}
-          />
-        )}
-        {closed && (
-          <ClosedTasksDialog
-            filters={closedFilters}
-            onFilters={setClosedFilters}
-            onClose={close}
-            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed: true } })}
-          />
-        )}
-        {settings && (
-          <SettingsDialog
-            tab={settings[1] === 'atlassian' ? 'atlassian' : 'general'}
-            onTab={(tab) => navigate(`/settings/${tab}`, { replace: true, state: { back } })}
-            onClose={close}
-          />
-        )}
+        <KeptTasksProvider>
+          <TodayPage />
+          {task && (
+            <TaskDialog
+              id={decodeURIComponent(task[1])}
+              onClose={fromClosed ? () => navigate('/closed', { state: { back } }) : close}
+              onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed } })}
+            />
+          )}
+          {closed && (
+            <ClosedTasksDialog
+              filters={closedFilters}
+              onFilters={setClosedFilters}
+              onClose={close}
+              onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed: true } })}
+            />
+          )}
+          {settings && (
+            <SettingsDialog
+              tab={settings[1] === 'atlassian' ? 'atlassian' : 'general'}
+              onTab={(tab) => navigate(`/settings/${tab}`, { replace: true, state: { back } })}
+              onClose={close}
+            />
+          )}
+        </KeptTasksProvider>
         <Toaster position="bottom-right" visibleToasts={3} gap={10} toastOptions={{ unstyled: true }} />
       </SyncProvider>
     </ClockContext.Provider>

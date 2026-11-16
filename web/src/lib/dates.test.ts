@@ -67,17 +67,14 @@ describe('isTodayTodo', () => {
 })
 
 describe('isTodayTask', () => {
-  it('lists open tasks with or without todos for today', () => {
-    expect(isTodayTask({ status: 'todo' }, false)).toBe(true)
-    expect(isTodayTask({ status: 'in-progress' }, false)).toBe(true)
-    expect(isTodayTask({ status: 'in-progress' }, true)).toBe(true)
+  it('lists open tasks', () => {
+    expect(isTodayTask({ status: 'todo' })).toBe(true)
+    expect(isTodayTask({ status: 'in-progress' })).toBe(true)
   })
 
-  it('lists done and canceled tasks only while they have todos for today', () => {
-    expect(isTodayTask({ status: 'done' }, false)).toBe(false)
-    expect(isTodayTask({ status: 'canceled' }, false)).toBe(false)
-    expect(isTodayTask({ status: 'done' }, true)).toBe(true)
-    expect(isTodayTask({ status: 'canceled' }, true)).toBe(true)
+  it('never lists done and canceled tasks', () => {
+    expect(isTodayTask({ status: 'done' })).toBe(false)
+    expect(isTodayTask({ status: 'canceled' })).toBe(false)
   })
 })
 

@@ -1,7 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { useCancelConfirm } from '@/components/common/CancelConfirm'
 import { keys, useRequests, useTaskActions, useTasks, useTodoActions, useTodos } from '@/hooks/data'
+import { useKeptTasks } from '@/hooks/useKeptTasks'
 import { useNow } from '@/hooks/useNow'
 import type { TaskListItem, TaskStatus, Todo } from '@/lib/api'
 import { compareTodayTasks, isTodayTask, isTodayTodo, reorderedIDs, startOfToday } from '@/lib/dates'
@@ -53,10 +55,11 @@ export function TodayPage() {
   const [layout, setLayout] = useLayout()
   const { create, setStatus, reorder } = useTaskActions()
   const { update } = useTodoActions()
+  const { guard, dialog } = useCancelConfirm()
   // Todos checked and tasks whose status changed in this visit stay where
   // they are instead of leaving Today; the next visit tidies them away.
   const [keptTodos, setKeptTodos] = useState<Set<number>>(() => new Set())
-  const [keptTasks, setKeptTasks] = useState<Set<string>>(() => new Set())
+  const { kept: keptTasks, keep: keepTask } = useKeptTasks()
 
   const { data: tasks = [] } = useTasks()
   const { data: open = [] } = useTodos({ is_done: false })
@@ -80,7 +83,7 @@ export function TodayPage() {
     const byTask = new Map<string, Todo[]>()
     for (const t of todayTodos) byTask.set(t.task_id, [...(byTask.get(t.task_id) ?? []), t])
     return tasks
-      .filter((t) => isTodayTask(t, byTask.has(t.id)) || adding === t.id || keptTasks.has(t.id))
+      .filter((t) => isTodayTask(t) || adding === t.id || keptTasks.has(t.id))
       .sort(compareTodayTasks)
       .map((task) => ({
         task,
@@ -93,10 +96,11 @@ export function TodayPage() {
     setKeptTodos((s) => toggled(s, todo.id, done))
   }
 
-  const changeStatus = (task: TaskListItem, status: TaskStatus) => {
-    setStatus(task, status)
-    setKeptTasks((s) => toggled(s, task.id, true))
-  }
+  const changeStatus = (task: TaskListItem, status: TaskStatus) =>
+    guard(task, status, () => {
+      setStatus(task, status)
+      keepTask(task.id)
+    })
 
   const move = (id: string, before: string | null) => {
     const ids = reorderedIDs(tasks, id, before)
@@ -210,6 +214,7 @@ export function TodayPage() {
           )}
         </div>
       </div>
+      {dialog}
     </main>
   )
 }

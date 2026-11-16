@@ -107,6 +107,28 @@ UPDATE tasks SET
     END
 WHERE id = sqlc.arg(id) AND originated = 'local';
 
+-- name: GetTaskStatus :one
+SELECT status FROM tasks WHERE id = $1;
+
+-- name: ListTaskStatusesByIDs :many
+-- ids is a JSON array of task IDs, as in ListTasksByIDs.
+SELECT id, status FROM tasks
+WHERE id IN (SELECT jsonb_array_elements_text(CAST(sqlc.arg(ids)::text AS jsonb)));
+
+-- name: CompleteTodosOfTask :exec
+-- With at_closing the open todos take the task's closing time, or now when it
+-- is unknown; without it, as when a canceled task becomes done and keeps its
+-- earlier closing time, they take now.
+UPDATE todos SET
+    is_done      = true,
+    completed_at = CASE
+        WHEN sqlc.arg(at_closing)::boolean
+            THEN COALESCE((SELECT tasks.closed_at FROM tasks WHERE tasks.id = sqlc.arg(task_id)), now())
+        ELSE now()
+    END
+WHERE NOT todos.is_done
+  AND todos.id IN (SELECT task_todos.todo_id FROM task_todos WHERE task_todos.task_id = sqlc.arg(task_id));
+
 -- name: UpdateTaskPosition :exec
 UPDATE tasks SET position = $1 WHERE id = $2;
 
