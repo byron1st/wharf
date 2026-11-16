@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
-import { keys, useAtlassianSettings } from '@/hooks/data'
+import { keys, useAtlassianSettings, useLastSync } from '@/hooks/data'
 import { ApiError, NetworkError, api, taskKey, type AtlassianSettings, type TaskSync } from '@/lib/api'
 import { serverDown } from '@/lib/errors'
 import { hhmm } from '@/lib/dates'
@@ -41,6 +41,22 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SyncStatus>('idle')
   const busy = useRef(false)
   const { data: atlassian } = useAtlassianSettings()
+  const { data: last } = useLastSync()
+  // seen is the synced_at of the last sync this page has shown data from;
+  // undefined until the first read.
+  const seen = useRef<string | null | undefined>(undefined)
+
+  // A sync this page did not run, such as the server's automatic one or
+  // another device's, changes the last sync: refetch everything else it may
+  // have changed.
+  useEffect(() => {
+    if (last === undefined) return
+    const at = last?.synced_at ?? null
+    if (seen.current !== undefined && at !== seen.current && !busy.current) {
+      void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== keys.lastSync[0] })
+    }
+    seen.current = at
+  }, [last, qc])
 
   function run() {
     if (busy.current) return
@@ -56,6 +72,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       (r) => {
         busy.current = false
         setStatus('idle')
+        seen.current = r.synced_at
         void qc.invalidateQueries()
         const failures = r.issue_failures + r.request_failures
         if (failures > 0) {

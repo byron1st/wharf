@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/byron1st/wharf/internal/adapter/atlassian"
+	"github.com/byron1st/wharf/internal/adapter/db"
 	"github.com/byron1st/wharf/internal/adapter/system"
 	"github.com/byron1st/wharf/internal/config"
 )
@@ -15,6 +17,7 @@ import (
 var (
 	ErrInvalidAtlassianSettings        = errors.New("service: invalid atlassian settings")
 	ErrInvalidAtlassianSettingsToCheck = errors.New("service: invalid atlassian settings to check")
+	ErrInvalidAtlassianSyncInterval    = errors.New("service: invalid atlassian sync interval")
 	ErrInvalidConfigFile               = errors.New("service: invalid config file")
 	ErrConfigChoiceCanceled            = errors.New("service: config file choice was canceled")
 	ErrUnsupportedOS                   = errors.New("service: not supported on this operating system")
@@ -46,6 +49,8 @@ type Settings interface {
 	GetAtlassianSettings(ctx context.Context) AtlassianSettings
 	SaveAtlassianSettings(ctx context.Context, a AtlassianSettings) error
 	CheckAtlassianSettings(ctx context.Context, a AtlassianSettings) (time.Time, error)
+	GetAtlassianSyncInterval(ctx context.Context) (time.Duration, error)
+	SaveAtlassianSyncInterval(ctx context.Context, interval time.Duration) error
 	GetAppSettings(ctx context.Context) AppSettings
 	ChooseConfigFile(ctx context.Context) (string, error)
 	ClearPendingConfigFile(ctx context.Context)
@@ -56,6 +61,7 @@ type Settings interface {
 // SettingsDeps are what NewSettings needs.
 type SettingsDeps struct {
 	Jira      atlassian.Client
+	DB        db.Manager
 	System    system.Desktop
 	App       AppSettings
 	Atlassian AtlassianSettings
@@ -66,6 +72,7 @@ type SettingsDeps struct {
 
 type settings struct {
 	jira    atlassian.Client
+	db      db.Manager
 	system  system.Desktop
 	restart func(configPath string)
 
@@ -79,6 +86,7 @@ type settings struct {
 func NewSettings(deps SettingsDeps) Settings {
 	return &settings{
 		jira:      deps.Jira,
+		db:        deps.DB,
 		system:    deps.System,
 		restart:   deps.Restart,
 		app:       deps.App,
@@ -137,6 +145,30 @@ func (s *settings) CheckAtlassianSettings(ctx context.Context, a AtlassianSettin
 	}
 
 	return time.Now().UTC(), nil
+}
+
+// atlassianSyncIntervals are the automatic sync intervals the settings screen
+// offers; 0 turns automatic syncs off.
+var atlassianSyncIntervals = []time.Duration{
+	0, 30 * time.Minute, time.Hour, 3 * time.Hour, 6 * time.Hour, 12 * time.Hour, 24 * time.Hour,
+}
+
+// GetAtlassianSyncInterval returns how long after the last sync, manual or
+// automatic, the next automatic sync is due; 0 means automatic syncs are off.
+// Every device shares it.
+func (s *settings) GetAtlassianSyncInterval(ctx context.Context) (time.Duration, error) {
+	return s.db.GetAtlassianSyncInterval(ctx)
+}
+
+// SaveAtlassianSyncInterval stores interval for every device. It fails with
+// ErrInvalidAtlassianSyncInterval unless interval is 0, 30 minutes, or 1, 3,
+// 6, 12 or 24 hours.
+func (s *settings) SaveAtlassianSyncInterval(ctx context.Context, interval time.Duration) error {
+	if !slices.Contains(atlassianSyncIntervals, interval) {
+		return fmt.Errorf("%w: interval=%s", ErrInvalidAtlassianSyncInterval, interval)
+	}
+
+	return s.db.SetAtlassianSyncInterval(ctx, interval)
 }
 
 // GetAppSettings returns the running server's settings.

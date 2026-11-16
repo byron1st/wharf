@@ -409,6 +409,17 @@ func (q *Queries) ExistsTodo(ctx context.Context, id int64) (bool, error) {
 	return exists, err
 }
 
+const getAtlassianSyncInterval = `-- name: GetAtlassianSyncInterval :one
+SELECT interval_minutes FROM atlassian_sync_settings
+`
+
+func (q *Queries) GetAtlassianSyncInterval(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getAtlassianSyncInterval)
+	var interval_minutes int64
+	err := row.Scan(&interval_minutes)
+	return interval_minutes, err
+}
+
 const getLastAtlassianSync = `-- name: GetLastAtlassianSync :one
 SELECT id, synced_at, issues, issue_failures, open_requests, closed_requests, request_failures FROM atlassian_syncs ORDER BY id DESC LIMIT 1
 `
@@ -868,6 +879,15 @@ func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]ListTod
 		return nil, err
 	}
 	return items, nil
+}
+
+const setAtlassianSyncInterval = `-- name: SetAtlassianSyncInterval :exec
+UPDATE atlassian_sync_settings SET interval_minutes = $1
+`
+
+func (q *Queries) SetAtlassianSyncInterval(ctx context.Context, intervalMinutes int64) error {
+	_, err := q.db.ExecContext(ctx, setAtlassianSyncInterval, intervalMinutes)
+	return err
 }
 
 const shiftTaskTodosDown = `-- name: ShiftTaskTodosDown :exec

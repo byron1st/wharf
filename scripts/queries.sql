@@ -288,3 +288,9 @@ INSERT INTO atlassian_syncs (
 
 -- name: GetLastAtlassianSync :one
 SELECT * FROM atlassian_syncs ORDER BY id DESC LIMIT 1;
+
+-- name: GetAtlassianSyncInterval :one
+SELECT interval_minutes FROM atlassian_sync_settings;
+
+-- name: SetAtlassianSyncInterval :exec
+UPDATE atlassian_sync_settings SET interval_minutes = $1;

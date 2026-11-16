@@ -23,6 +23,7 @@ export const keys = {
   requests: ['requests'] as const,
   lastSync: ['lastSync'] as const,
   atlassian: ['settings', 'atlassian'] as const,
+  atlassianSync: ['settings', 'atlassian', 'sync'] as const,
   app: ['settings', 'app'] as const,
   update: ['update'] as const,
 }
@@ -37,9 +38,16 @@ export const useTodos = (f: TodoFilter, enabled = true) =>
 
 export const useRequests = () => useQuery({ queryKey: keys.requests, queryFn: api.listRequests })
 
-export const useLastSync = () => useQuery({ queryKey: keys.lastSync, queryFn: api.lastSync })
+/** LAST_SYNC_POLL_MS is how often the last sync is re-read, so automatic syncs by the server show up. */
+export const LAST_SYNC_POLL_MS = 60_000
+
+export const useLastSync = () =>
+  useQuery({ queryKey: keys.lastSync, queryFn: api.lastSync, refetchInterval: LAST_SYNC_POLL_MS })
 
 export const useAtlassianSettings = () => useQuery({ queryKey: keys.atlassian, queryFn: api.atlassianSettings })
+
+export const useAtlassianSyncInterval = () =>
+  useQuery({ queryKey: keys.atlassianSync, queryFn: api.atlassianSyncInterval })
 
 export const useAppSettings = () => useQuery({ queryKey: keys.app, queryFn: api.appSettings })
 

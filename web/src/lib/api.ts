@@ -222,6 +222,11 @@ export const api = {
   saveAtlassianSettings: (s: AtlassianSettings) => request<void>('PUT', '/api/settings/atlassian', s),
   testAtlassianSettings: (s: AtlassianSettings) =>
     request<{ checked_at: string }>('POST', '/api/settings/atlassian/test', s),
+  /** atlassianSyncInterval is the minutes between automatic syncs, shared by every device; 0 is off. */
+  atlassianSyncInterval: () =>
+    request<{ interval_minutes: number }>('GET', '/api/settings/atlassian/sync').then((r) => r.interval_minutes),
+  saveAtlassianSyncInterval: (minutes: number) =>
+    request<void>('PUT', '/api/settings/atlassian/sync', { interval_minutes: minutes }),
 
   appSettings: () => request<AppSettings>('GET', '/api/settings/app'),
   chooseConfig: () =>

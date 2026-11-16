@@ -348,6 +348,10 @@ func TestMethodsRequireConnection(t *testing.T) {
 			_, err = manager.GetLastAtlassianSync(context.Background())
 			require.ErrorIs(t, err, db.ErrNotConnected)
 
+			_, err = manager.GetAtlassianSyncInterval(context.Background())
+			require.ErrorIs(t, err, db.ErrNotConnected)
+			require.ErrorIs(t, manager.SetAtlassianSyncInterval(context.Background(), time.Hour), db.ErrNotConnected)
+
 			require.ErrorIs(t, manager.Migrate(context.Background()), db.ErrNotConnected)
 			require.NoError(t, manager.Close())
 		})

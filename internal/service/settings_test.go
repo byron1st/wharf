@@ -25,6 +25,7 @@ var saved = service.AtlassianSettings{
 type settingsFixture struct {
 	settings  service.Settings
 	jira      *mocks.MockClient
+	db        *mocks.MockManager
 	desktop   *mocks.MockDesktop
 	path      string
 	restarted []string
@@ -36,9 +37,12 @@ func newSettings(t *testing.T) *settingsFixture {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	require.NoError(t, os.WriteFile(path, []byte("db_url = \"postgres://me@db.example.com/postgres\"\n"), 0o600))
 
-	f := &settingsFixture{jira: mocks.NewMockClient(t), desktop: mocks.NewMockDesktop(t), path: path}
+	f := &settingsFixture{
+		jira: mocks.NewMockClient(t), db: mocks.NewMockManager(t), desktop: mocks.NewMockDesktop(t), path: path,
+	}
 	f.settings = service.NewSettings(service.SettingsDeps{
 		Jira:   f.jira,
+		DB:     f.db,
 		System: f.desktop,
 		App: service.AppSettings{
 			ConfigPath: path,
@@ -256,4 +260,56 @@ func TestRestartServerRejectsInvalidConfig(t *testing.T) {
 	require.ErrorIs(t, err, service.ErrInvalidConfigFile)
 	require.ErrorIs(t, err, config.ErrUnknownConfigKeys)
 	require.Empty(t, f.restarted)
+}
+
+func TestGetAtlassianSyncInterval(t *testing.T) {
+	f := newSettings(t)
+	f.db.EXPECT().GetAtlassianSyncInterval(mock.Anything).Return(3*time.Hour, nil).Once()
+
+	got, err := f.settings.GetAtlassianSyncInterval(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 3*time.Hour, got)
+}
+
+func TestGetAtlassianSyncIntervalFailure(t *testing.T) {
+	f := newSettings(t)
+	dbErr := errors.New("db down")
+	f.db.EXPECT().GetAtlassianSyncInterval(mock.Anything).Return(0, dbErr).Once()
+
+	_, err := f.settings.GetAtlassianSyncInterval(t.Context())
+	require.ErrorIs(t, err, dbErr)
+}
+
+func TestSaveAtlassianSyncInterval(t *testing.T) {
+	for _, interval := range []time.Duration{
+		0, 30 * time.Minute, time.Hour, 3 * time.Hour, 6 * time.Hour, 12 * time.Hour, 24 * time.Hour,
+	} {
+		t.Run(interval.String(), func(t *testing.T) {
+			f := newSettings(t)
+			f.db.EXPECT().SetAtlassianSyncInterval(mock.Anything, interval).Return(nil).Once()
+
+			require.NoError(t, f.settings.SaveAtlassianSyncInterval(t.Context(), interval))
+		})
+	}
+}
+
+func TestSaveAtlassianSyncIntervalRejectsUnoffered(t *testing.T) {
+	for _, interval := range []time.Duration{
+		-time.Hour, time.Minute, 45 * time.Minute, 2 * time.Hour, 48 * time.Hour, time.Hour + time.Second,
+	} {
+		t.Run(interval.String(), func(t *testing.T) {
+			f := newSettings(t)
+
+			err := f.settings.SaveAtlassianSyncInterval(t.Context(), interval)
+			require.ErrorIs(t, err, service.ErrInvalidAtlassianSyncInterval)
+		})
+	}
+}
+
+func TestSaveAtlassianSyncIntervalFailure(t *testing.T) {
+	f := newSettings(t)
+	dbErr := errors.New("db down")
+	f.db.EXPECT().SetAtlassianSyncInterval(mock.Anything, time.Hour).Return(dbErr).Once()
+
+	require.ErrorIs(t, f.settings.SaveAtlassianSyncInterval(t.Context(), time.Hour), dbErr)
 }

@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Dialog as D } from 'radix-ui'
+import { Dialog as D, RadioGroup } from 'radix-ui'
 import {
   Check,
   CircleAlert,
   CircleCheck,
+  Clock,
   Diamond,
   ExternalLink,
   Eye,
@@ -22,12 +23,12 @@ import {
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { keys, useAppSettings, useAtlassianSettings, useLastSync } from '@/hooks/data'
+import { keys, useAppSettings, useAtlassianSettings, useAtlassianSyncInterval, useLastSync } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import { useSync } from '@/hooks/useSync'
 import { ApiError, NetworkError, api, type AtlassianSettings } from '@/lib/api'
 import { serverDown, waitForServer } from '@/lib/errors'
-import { hhmm, ymd } from '@/lib/dates'
+import { hhmm, nextAutoSyncLabel, ymd } from '@/lib/dates'
 import { notify } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { Updates } from './Updates'
@@ -179,6 +180,69 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
   )
 }
 
+/** AUTO_SYNC are the automatic sync intervals the server accepts, in minutes; 0 is off. */
+const AUTO_SYNC = [
+  { minutes: 0, label: 'Off', tip: 'Only sync when started', every: '' },
+  { minutes: 30, label: '30 min', tip: 'Sync every 30 minutes', every: 'every 30 minutes' },
+  { minutes: 60, label: '1 h', tip: 'Sync every hour', every: 'every hour' },
+  { minutes: 180, label: '3 h', tip: 'Sync every 3 hours', every: 'every 3 hours' },
+  { minutes: 360, label: '6 h', tip: 'Sync every 6 hours', every: 'every 6 hours' },
+  { minutes: 720, label: '12 h', tip: 'Sync every 12 hours', every: 'every 12 hours' },
+  { minutes: 1440, label: '24 h', tip: 'Sync every 24 hours', every: 'once a day' },
+]
+
+/** AutoSync picks how often the server syncs Atlassian Cloud on its own, saving each pick at once. */
+function AutoSync({ minutes, lastSyncedAt }: { minutes: number; lastSyncedAt: string | null }) {
+  const qc = useQueryClient()
+  const { now } = useNow()
+
+  const pick = async (value: string) => {
+    const next = Number(value)
+    qc.setQueryData(keys.atlassianSync, next)
+    try {
+      await api.saveAtlassianSyncInterval(next)
+    } catch (err) {
+      showError("Couldn't save the automatic sync interval", err)
+    } finally {
+      void qc.invalidateQueries({ queryKey: keys.atlassianSync })
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+        <span id="auto-sync-label" className="text-[13px] font-medium">
+          Sync automatically
+        </span>
+        <RadioGroup.Root
+          aria-labelledby="auto-sync-label"
+          orientation="horizontal"
+          value={String(minutes)}
+          onValueChange={(v) => void pick(v)}
+          className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-bg-muted p-0.5"
+        >
+          {AUTO_SYNC.map((o) => (
+            <RadioGroup.Item
+              key={o.minutes}
+              value={String(o.minutes)}
+              title={o.tip}
+              className="h-7 min-w-11 rounded-md px-2.5 text-[12.5px] font-medium whitespace-nowrap text-ink-muted tabular-nums outline-none hover:text-ink focus-visible:shadow-ring data-[state=checked]:bg-bg-surface data-[state=checked]:text-ink data-[state=checked]:shadow-xs"
+            >
+              {o.label}
+            </RadioGroup.Item>
+          ))}
+        </RadioGroup.Root>
+      </div>
+      <span className="flex items-center gap-1.5 text-[12px] text-ink-muted tabular-nums">
+        <Clock size={13} className="shrink-0" aria-hidden />
+        {minutes
+          ? `Next automatic sync ${nextAutoSyncLabel(lastSyncedAt, minutes, now)} · counted from the last sync, including manual ones.`
+          : 'Off — sync only runs from Sync now or the sync button in the Today header.'}
+      </span>
+    </div>
+  )
+}
+
 const input =
   'h-8 w-full rounded-md border border-border px-3 text-[13px] outline-none placeholder:text-ink-faint focus:border-accent focus:shadow-ring'
 
@@ -191,6 +255,7 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
   const qc = useQueryClient()
   const { today } = useNow()
   const { data: last } = useLastSync()
+  const { data: autoMinutes } = useAtlassianSyncInterval()
   const { status: syncStatus, run } = useSync()
   const [form, setForm] = useState<AtlassianSettings>(stored)
   const [showKey, setShowKey] = useState(false)
@@ -339,7 +404,13 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
       <section className="flex flex-col gap-4">
         <h3 className="m-0 flex items-baseline gap-2 text-[15px] font-semibold">
           Sync
-          <span className="text-[12px] font-normal text-ink-muted">Runs only when you start it</span>
+          {autoMinutes !== undefined && (
+            <span className="text-[12px] font-normal text-ink-muted">
+              {autoMinutes
+                ? `Runs ${AUTO_SYNC.find((o) => o.minutes === autoMinutes)?.every ?? `every ${autoMinutes} minutes`}, and whenever you start it`
+                : 'Runs only when you start it'}
+            </span>
+          )}
         </h3>
         <div className="flex items-center gap-4 rounded-xl border border-border px-5 py-4">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -374,6 +445,7 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
             {syncStatus === 'busy' ? 'Syncing…' : 'Sync now'}
           </Button>
         </div>
+        {autoMinutes !== undefined && <AutoSync minutes={autoMinutes} lastSyncedAt={last?.synced_at ?? null} />}
         <div className="flex flex-col gap-2">
           <span className="text-[14px] font-semibold">What a sync does</span>
           <ul className="m-0 flex list-none flex-col gap-2 p-0 text-[13px] text-ink-secondary">
