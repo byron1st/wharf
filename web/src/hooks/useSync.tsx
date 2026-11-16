@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { keys, useAtlassianSettings, useLastSync } from '@/hooks/data'
-import { ApiError, NetworkError, api, taskKey, type AtlassianSettings, type TaskSync } from '@/lib/api'
+import { ApiError, NetworkError, api, taskKey, type AtlassianSettings, type AtlassianSync, type TaskSync } from '@/lib/api'
 import { serverDown } from '@/lib/errors'
 import { hhmm } from '@/lib/dates'
 import { notify } from '@/lib/toast'
@@ -49,13 +49,21 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   // A sync this page did not run, such as the server's automatic one or
   // another device's, changes the last sync: refetch everything else it may
   // have changed.
-  useEffect(() => {
-    if (last === undefined) return
-    const at = last?.synced_at ?? null
-    if (seen.current !== undefined && at !== seen.current && !busy.current) {
+  const refreshIfChanged = (latest: AtlassianSync | null | undefined) => {
+    if (latest === undefined) return
+    const at = latest?.synced_at ?? null
+    if (seen.current !== undefined && at !== seen.current) {
       void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== keys.lastSync[0] })
     }
     seen.current = at
+  }
+
+  useEffect(() => {
+    // While this page syncs, a change waits: a successful sync refetches
+    // everything, and a failed one checks again.
+    if (!busy.current) refreshIfChanged(last)
+    // refreshIfChanged only reads refs and qc.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [last, qc])
 
   function run() {
@@ -98,6 +106,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       (err: unknown) => {
         busy.current = false
         setStatus('failed')
+        refreshIfChanged(qc.getQueryData<AtlassianSync | null>(keys.lastSync))
         if (err instanceof NetworkError) {
           notify.dismiss(SYNC_TOAST)
           serverDown()

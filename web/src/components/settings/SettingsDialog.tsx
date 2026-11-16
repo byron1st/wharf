@@ -23,7 +23,14 @@ import {
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { keys, useAppSettings, useAtlassianSettings, useAtlassianSyncInterval, useLastSync } from '@/hooks/data'
+import {
+  keys,
+  useAppSettings,
+  useAtlassianSettings,
+  useAtlassianSyncInterval,
+  useLastSync,
+  useSaveAtlassianSyncInterval,
+} from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import { useSync } from '@/hooks/useSync'
 import { ApiError, NetworkError, api, type AtlassianSettings } from '@/lib/api'
@@ -192,19 +199,23 @@ const AUTO_SYNC = [
 ]
 
 /** AutoSync picks how often the server syncs Atlassian Cloud on its own, saving each pick at once. */
-function AutoSync({ minutes, lastSyncedAt }: { minutes: number; lastSyncedAt: string | null }) {
-  const qc = useQueryClient()
+function AutoSync({
+  minutes,
+  lastSyncedAt,
+  connected,
+}: {
+  minutes: number
+  lastSyncedAt: string | null
+  connected: boolean
+}) {
+  const save = useSaveAtlassianSyncInterval()
   const { now } = useNow()
 
   const pick = async (value: string) => {
-    const next = Number(value)
-    qc.setQueryData(keys.atlassianSync, next)
     try {
-      await api.saveAtlassianSyncInterval(next)
+      await save(Number(value))
     } catch (err) {
       showError("Couldn't save the automatic sync interval", err)
-    } finally {
-      void qc.invalidateQueries({ queryKey: keys.atlassianSync })
     }
   }
 
@@ -235,7 +246,9 @@ function AutoSync({ minutes, lastSyncedAt }: { minutes: number; lastSyncedAt: st
       </div>
       <span className="flex items-center gap-1.5 text-[12px] text-ink-muted tabular-nums">
         <Clock size={13} className="shrink-0" aria-hidden />
-        {minutes
+        {minutes && !connected
+          ? 'Automatic syncs start once the connection above is saved.'
+          : minutes
           ? `Next automatic sync ${nextAutoSyncLabel(lastSyncedAt, minutes, now)} · counted from the last sync, including manual ones.`
           : 'Off — sync only runs from Sync now or the sync button in the Today header.'}
       </span>
@@ -445,7 +458,7 @@ function AtlassianForm({ stored }: { stored: AtlassianSettings }) {
             {syncStatus === 'busy' ? 'Syncing…' : 'Sync now'}
           </Button>
         </div>
-        {autoMinutes !== undefined && <AutoSync minutes={autoMinutes} lastSyncedAt={last?.synced_at ?? null} />}
+        {autoMinutes !== undefined && <AutoSync minutes={autoMinutes} lastSyncedAt={last?.synced_at ?? null} connected={!!stored.site_url} />}
         <div className="flex flex-col gap-2">
           <span className="text-[14px] font-semibold">What a sync does</span>
           <ul className="m-0 flex list-none flex-col gap-2 p-0 text-[13px] text-ink-secondary">

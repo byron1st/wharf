@@ -49,6 +49,23 @@ export const useAtlassianSettings = () => useQuery({ queryKey: keys.atlassian, q
 export const useAtlassianSyncInterval = () =>
   useQuery({ queryKey: keys.atlassianSync, queryFn: api.atlassianSyncInterval })
 
+/**
+ * useSaveAtlassianSyncInterval shows a picked interval at once and saves picks one after another, so quick
+ * picks reach the server in order. A failed save throws after rereading the stored interval.
+ */
+export function useSaveAtlassianSyncInterval() {
+  const qc = useQueryClient()
+  return async (minutes: number) => {
+    qc.setQueryData(keys.atlassianSync, minutes)
+    try {
+      await queued('atlassianSync', () => api.saveAtlassianSyncInterval(minutes))
+    } catch (err) {
+      void qc.invalidateQueries({ queryKey: keys.atlassianSync })
+      throw err
+    }
+  }
+}
+
 export const useAppSettings = () => useQuery({ queryKey: keys.app, queryFn: api.appSettings })
 
 /** useUpdateStatus re-reads the server's update check hourly; the server itself checks far less often. */

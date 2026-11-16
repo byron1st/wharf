@@ -19,7 +19,11 @@ const lastSync = {
 }
 
 /** serve answers the Atlassian tab's requests with the stored interval; save answers its PUT. */
-function serve(interval: number, save: (body: unknown) => Response = () => new Response(null, { status: 204 })) {
+function serve(
+  interval: number,
+  save: (body: unknown) => Response | Promise<Response> = () => new Response(null, { status: 204 }),
+  siteURL = 'https://example.atlassian.net',
+) {
   const saved: unknown[] = []
   vi.stubGlobal(
     'fetch',
@@ -28,14 +32,14 @@ function serve(interval: number, save: (body: unknown) => Response = () => new R
         if (init?.method === 'PUT') {
           const body = JSON.parse(String(init.body)) as unknown
           saved.push(body)
-          const res = save(body)
+          const res = await save(body)
           if (res.ok) interval = (body as { interval_minutes: number }).interval_minutes
           return res
         }
         return new Response(JSON.stringify({ interval_minutes: interval }))
       }
       if (url === '/api/settings/atlassian') {
-        return new Response(JSON.stringify({ site_url: 'https://example.atlassian.net', email: 'me@example.com', api_token: 't' }))
+        return new Response(JSON.stringify({ site_url: siteURL, email: 'me@example.com', api_token: 't' }))
       }
       if (url === '/api/sync/atlassian') return new Response(JSON.stringify({ last_sync: lastSync }))
       return new Response(null, { status: 404 })
@@ -108,6 +112,33 @@ describe('Settings › Atlassian Cloud › Sync automatically', () => {
     expect(
       screen.getByText('Off — sync only runs from Sync now or the sync button in the Today header.'),
     ).toBeInTheDocument()
+  })
+
+  it('saves quick picks one after another, in the order picked', async () => {
+    let release!: () => void
+    const held = new Promise<void>((r) => (release = r))
+    const saved = serve(60, async (body) => {
+      if ((body as { interval_minutes: number }).interval_minutes === 180) await held
+      return new Response(null, { status: 204 })
+    })
+    renderAtlassian()
+
+    await userEvent.click(await screen.findByRole('radio', { name: '3 h' }))
+    await userEvent.click(radio('6 h'))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(saved).toEqual([{ interval_minutes: 180 }])
+    expect(radio('6 h')).toHaveAttribute('aria-checked', 'true')
+
+    release()
+    await waitFor(() => expect(saved).toEqual([{ interval_minutes: 180 }, { interval_minutes: 360 }]))
+    expect(radio('6 h')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('says automatic syncs wait for a connection while Atlassian Cloud is not set up', async () => {
+    serve(60, undefined, '')
+    renderAtlassian()
+
+    expect(await screen.findByText('Automatic syncs start once the connection above is saved.')).toBeInTheDocument()
   })
 
   it('goes back to the stored interval when the save fails', async () => {

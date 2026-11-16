@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
+import { act } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LAST_SYNC_POLL_MS, keys, useTasks } from './data'
-import { SyncProvider } from './useSync'
+import { SyncProvider, useSync } from './useSync'
 
 const record = (synced_at: string) => ({
   synced_at,
@@ -16,16 +17,25 @@ const record = (synced_at: string) => ({
 
 function Tasks() {
   useTasks()
-  return null
+  const { run } = useSync()
+  return (
+    <button type="button" onClick={run}>
+      Sync now
+    </button>
+  )
 }
 
-/** renderSync serves the last sync from lastSyncs, one per read, and counts the task list reads. */
-function renderSync(lastSyncs: string[]) {
+/**
+ * renderSync serves the last sync from lastSyncs, one per read, answers a started sync with startSync, and counts
+ * the task list reads.
+ */
+function renderSync(lastSyncs: string[], startSync: () => Promise<Response> = () => new Promise(() => {})) {
   let reads = 0
   const taskReads = { count: 0 }
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/sync/atlassian' && init?.method === 'POST') return startSync()
       if (url === '/api/sync/atlassian') {
         const at = lastSyncs[Math.min(reads++, lastSyncs.length - 1)]
         return new Response(JSON.stringify({ last_sync: record(at) }))
@@ -81,5 +91,26 @@ describe('SyncProvider', () => {
     await new Promise((r) => setTimeout(r, 20))
 
     expect(taskReads.count).toBe(1)
+  })
+
+  it('refetches a sync recorded while its own sync failed at the next read', async () => {
+    let fail!: () => void
+    const failed = new Promise<Response>((r) => (fail = () => r(new Response(JSON.stringify({ error: 'boom' }), { status: 500 }))))
+    const { qc, taskReads } = renderSync(['2026-10-26T05:02:00Z', '2026-10-26T06:02:00Z'], () => failed)
+    await waitFor(() => expect(qc.getQueryData(keys.lastSync)).toBeDefined())
+    await waitFor(() => expect(taskReads.count).toBe(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sync now' }))
+    await qc.refetchQueries({ queryKey: keys.lastSync })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(taskReads.count).toBe(1)
+
+    await act(async () => {
+      fail()
+      await new Promise((r) => setTimeout(r, 20))
+    })
+    await qc.refetchQueries({ queryKey: keys.lastSync })
+
+    await waitFor(() => expect(taskReads.count).toBe(2))
   })
 })
