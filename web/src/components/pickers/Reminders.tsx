@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useNow } from '@/hooks/useNow'
+import { requestNotificationPermission } from '@/hooks/useReminderNotifications'
 import {
   addDays,
   atLocal,
@@ -163,6 +164,7 @@ export function Reminders({ reminders, end, onChange, layout }: RemindersProps) 
 
   const replace = (old: string | null, next: string | null) => {
     setOpen(null)
+    if (next) requestNotificationPermission()
     const list = sorted.filter((r) => r !== old)
     onChange(next ? sortReminders([...list, next]) : list)
   }

@@ -6,7 +6,14 @@ import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { TaskDialog } from '@/components/task/TaskDialog'
 import { TodayPage } from '@/components/today/TodayPage'
 import { ClockContext, useTicker } from '@/hooks/useNow'
+import { useReminderNotifications } from '@/hooks/useReminderNotifications'
 import { SyncProvider } from '@/hooks/useSync'
+
+/** ReminderNotifications runs useReminderNotifications under the shared clock. */
+function ReminderNotifications() {
+  useReminderNotifications()
+  return null
+}
 
 /** NavState is what a modal URL carries: the Today search to return to, and whether a task was opened from Closed tasks. */
 interface NavState {
@@ -47,6 +54,7 @@ export function App() {
   return (
     <ClockContext.Provider value={clock}>
       <SyncProvider>
+        <ReminderNotifications />
         <TodayPage />
         {task && (
           <TaskDialog
