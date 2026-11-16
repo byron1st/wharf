@@ -6,6 +6,7 @@ import { SettingsDialog } from '@/components/settings/SettingsDialog'
 import { TaskDialog } from '@/components/task/TaskDialog'
 import { TodayPage } from '@/components/today/TodayPage'
 import { ClockContext, useTicker } from '@/hooks/useNow'
+import { useReminderNotifications } from '@/hooks/useReminderNotifications'
 import { SyncProvider } from '@/hooks/useSync'
 
 /** NavState is what a modal URL carries: the Today search to return to, and whether a task was opened from Closed tasks. */
@@ -31,6 +32,13 @@ export function App() {
   const task = /^\/task\/(.+)$/.exec(location.pathname)
   const settings = /^\/settings(?:\/(general|atlassian))?\/?$/.exec(location.pathname)
   const closed = /^\/closed\/?$/.test(location.pathname)
+
+  // Like the Settings shortcut, a reminder's task returns to the Today URL it was opened over.
+  useReminderNotifications(clock.now, (id) =>
+    navigate(`/task/${encodeURIComponent(id)}`, {
+      state: { back: location.pathname === '/' ? location.search : back },
+    }),
+  )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

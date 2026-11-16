@@ -5,6 +5,7 @@ import {
   closedLabel,
   compareTodayTasks,
   doneLabel,
+  dueReminders,
   reorderedIDs,
   dueTag,
   isTime,
@@ -230,5 +231,14 @@ describe('closed tasks', () => {
     expect(closedLabel(at('2026-10-19'), today, true)).toBe('Closed Oct 19 in Jira')
     expect(closedLabel(null, today, false)).toBe('Closed')
     expect(closedLabel(null, today, true)).toBe('Closed in Jira')
+  })
+})
+
+describe('dueReminders', () => {
+  it('keeps the reminders after since and up to now', () => {
+    const at = (t: string) => atLocal(today, t).toISOString()
+    const reminders = [at('14:05'), at('14:06'), at('14:07'), at('14:08')]
+    expect(dueReminders(reminders, atLocal(today, '14:05'), now)).toEqual([at('14:06'), at('14:07')])
+    expect(dueReminders(reminders, now, now)).toEqual([])
   })
 })
