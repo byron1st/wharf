@@ -107,6 +107,17 @@ UPDATE tasks SET
     END
 WHERE id = sqlc.arg(id) AND originated = 'local';
 
+-- name: GetTaskStatus :one
+SELECT status FROM tasks WHERE id = $1;
+
+-- name: CompleteTodosOfTask :exec
+-- The open todos take the task's closing time, or now when it is unknown.
+UPDATE todos SET
+    is_done      = true,
+    completed_at = COALESCE((SELECT tasks.closed_at FROM tasks WHERE tasks.id = sqlc.arg(task_id)), now())
+WHERE NOT todos.is_done
+  AND todos.id IN (SELECT task_todos.todo_id FROM task_todos WHERE task_todos.task_id = sqlc.arg(task_id));
+
 -- name: UpdateTaskPosition :exec
 UPDATE tasks SET position = $1 WHERE id = $2;
 

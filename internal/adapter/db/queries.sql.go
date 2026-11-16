@@ -11,6 +11,20 @@ import (
 	"time"
 )
 
+const completeTodosOfTask = `-- name: CompleteTodosOfTask :exec
+UPDATE todos SET
+    is_done      = true,
+    completed_at = COALESCE((SELECT tasks.closed_at FROM tasks WHERE tasks.id = $1), now())
+WHERE NOT todos.is_done
+  AND todos.id IN (SELECT task_todos.todo_id FROM task_todos WHERE task_todos.task_id = $1)
+`
+
+// The open todos take the task's closing time, or now when it is unknown.
+func (q *Queries) CompleteTodosOfTask(ctx context.Context, taskID string) error {
+	_, err := q.db.ExecContext(ctx, completeTodosOfTask, taskID)
+	return err
+}
+
 const countTaskTodos = `-- name: CountTaskTodos :one
 SELECT COUNT(*) FROM task_todos WHERE task_id = $1
 `
@@ -468,6 +482,17 @@ func (q *Queries) GetTask(ctx context.Context, id string) (GetTaskRow, error) {
 		&i.ParentID,
 	)
 	return i, err
+}
+
+const getTaskStatus = `-- name: GetTaskStatus :one
+SELECT status FROM tasks WHERE id = $1
+`
+
+func (q *Queries) GetTaskStatus(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getTaskStatus, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
 }
 
 const incrementCounter = `-- name: IncrementCounter :one
