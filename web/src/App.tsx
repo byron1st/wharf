@@ -49,29 +49,29 @@ export function App() {
     <ClockContext.Provider value={clock}>
       <SyncProvider>
         <KeptTasksProvider>
-        <TodayPage />
-        {task && (
-          <TaskDialog
-            id={decodeURIComponent(task[1])}
-            onClose={fromClosed ? () => navigate('/closed', { state: { back } }) : close}
-            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed } })}
-          />
-        )}
-        {closed && (
-          <ClosedTasksDialog
-            filters={closedFilters}
-            onFilters={setClosedFilters}
-            onClose={close}
-            onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed: true } })}
-          />
-        )}
-        {settings && (
-          <SettingsDialog
-            tab={settings[1] === 'atlassian' ? 'atlassian' : 'general'}
-            onTab={(tab) => navigate(`/settings/${tab}`, { replace: true, state: { back } })}
-            onClose={close}
-          />
-        )}
+          <TodayPage />
+          {task && (
+            <TaskDialog
+              id={decodeURIComponent(task[1])}
+              onClose={fromClosed ? () => navigate('/closed', { state: { back } }) : close}
+              onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed } })}
+            />
+          )}
+          {closed && (
+            <ClosedTasksDialog
+              filters={closedFilters}
+              onFilters={setClosedFilters}
+              onClose={close}
+              onOpen={(id) => navigate(`/task/${encodeURIComponent(id)}`, { state: { back, fromClosed: true } })}
+            />
+          )}
+          {settings && (
+            <SettingsDialog
+              tab={settings[1] === 'atlassian' ? 'atlassian' : 'general'}
+              onTab={(tab) => navigate(`/settings/${tab}`, { replace: true, state: { back } })}
+              onClose={close}
+            />
+          )}
         </KeptTasksProvider>
         <Toaster position="bottom-right" visibleToasts={3} gap={10} toastOptions={{ unstyled: true }} />
       </SyncProvider>

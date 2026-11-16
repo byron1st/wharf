@@ -91,10 +91,11 @@ function Body({
 
   const commit = async (next: Draft) => {
     setSaving(true)
+    // A task closed here stays on Today until the next visit; keep it before
+    // the optimistic update so Today never drops it.
+    if (next.status !== task.status) keep(task.id)
     try {
       await updateAsync(task, { ...next, title: next.title.trim() || task.title })
-      // A task closed here stays on Today until the next visit.
-      if (next.status !== task.status) keep(task.id)
       setDraft(null)
     } catch {
       // updateAsync already undid the change and showed the toast.
