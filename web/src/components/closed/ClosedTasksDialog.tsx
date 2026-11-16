@@ -40,11 +40,12 @@ const GROUPS: { id: ClosedGroup; label: string }[] = [
   { id: 'earlier', label: 'Earlier' },
 ]
 
-/** Reopened is the local task last reopened from the list, with what Undo puts back. */
+/** Reopened is the local task last reopened from the list, with what Undo puts back and its todo count then. */
 interface Reopened {
   id: string
   status: TaskStatus
   closedAt: string | null
+  todoCount: number
 }
 
 /** byClosedAt orders the latest closing first, unknown times last, then by ID. */
@@ -157,20 +158,24 @@ export function ClosedTasksDialog({
 
   // The notice waits for the server: a failed reopen is rolled back and reported instead.
   const reopen = (t: TaskListItem) => {
-    const was = { id: t.id, status: t.status, closedAt: t.closed_at }
+    const was = { id: t.id, status: t.status, closedAt: t.closed_at, todoCount: t.todo_count }
     setStatusAsync(t, 'todo').then(
       () => setReopened(was),
       () => {},
     )
   }
 
-  // Undoing a reopen of a canceled task deletes the todos added since, so it asks as canceling does.
+  // Undo puts the task back as it was. Undoing the reopen of a canceled task
+  // deletes its todos again, so it asks first when todos were added since.
   const undo = () => {
     if (!reopened) return
-    guard({ id: reopened.id, status: 'todo' }, reopened.status, () => {
+    const restore = () => {
       setStatus({ id: reopened.id }, reopened.status, reopened.closedAt ?? undefined)
       setReopened(null)
-    })
+    }
+    const count = tasks.find((t) => t.id === reopened.id)?.todo_count ?? 0
+    if (count > reopened.todoCount) guard({ id: reopened.id, status: 'todo' }, reopened.status, restore)
+    else restore()
   }
 
   return (
