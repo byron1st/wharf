@@ -1,9 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ClockContext } from '@/hooks/useNow'
 import type { Todo } from '@/lib/api'
 import { atLocal } from '@/lib/dates'
 import { useReminderNotifications } from './useReminderNotifications'
@@ -24,20 +22,25 @@ const todo: Todo = {
   service_desk_requests: [],
 }
 
-function Probe() {
-  useReminderNotifications()
+function Probe({ now, onOpen }: { now: Date; onOpen: (taskID: string) => void }) {
+  useReminderNotifications(now, onOpen)
   return null
 }
+
+/** instances are the notifications the latest stubNotification constructed. */
+let instances: { onclick: (() => void) | null }[] = []
 
 /** stubNotification replaces the browser API with a recorder granted the given permission. */
 function stubNotification(permission: NotificationPermission) {
   const shown: { title: string; options?: NotificationOptions }[] = []
+  instances = []
   class FakeNotification {
     static permission = permission
     static requestPermission = vi.fn()
     onclick: (() => void) | null = null
     constructor(title: string, options?: NotificationOptions) {
       shown.push({ title, options })
+      instances.push(this)
     }
     close() {}
   }
@@ -45,23 +48,17 @@ function stubNotification(permission: NotificationPermission) {
   return shown
 }
 
-function setup() {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => new Response(JSON.stringify({ todos: [todo] }))),
-  )
+function setup(fetchTodos: () => Promise<Response> = async () => new Response(JSON.stringify({ todos: [todo] }))) {
+  vi.stubGlobal('fetch', vi.fn(fetchTodos))
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const onOpen = vi.fn()
   const wrap = (time: string): ReactNode => (
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
-        <ClockContext.Provider value={{ now: atLocal(today, time), today }}>
-          <Probe />
-        </ClockContext.Provider>
-      </MemoryRouter>
+      <Probe now={atLocal(today, time)} onOpen={onOpen} />
     </QueryClientProvider>
   )
   const view = render(wrap('14:07'))
-  return { tick: (time: string) => view.rerender(wrap(time)), qc }
+  return { tick: (time: string) => view.rerender(wrap(time)), qc, onOpen }
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -108,6 +105,41 @@ describe('useReminderNotifications', () => {
     await waitFor(() => expect(qc.getQueryData(['todos', { is_done: false }])).toBeDefined())
     const query = qc.getQueryCache().find({ queryKey: ['todos', { is_done: false }] })!
     expect(query.observers[0].options).toMatchObject({ refetchInterval: 60_000, refetchIntervalInBackground: true })
+  })
+
+  it('opens the task when the notification is clicked', async () => {
+    stubNotification('granted')
+    const { tick, qc, onOpen } = setup()
+    await waitFor(() => expect(qc.getQueryData(['todos', { is_done: false }])).toBeDefined())
+    tick('14:08')
+    instances[0].onclick?.()
+    expect(onOpen).toHaveBeenCalledWith('local-WHF-003')
+  })
+
+  it('notifies a reminder that went off while the todos were still loading', async () => {
+    const shown = stubNotification('granted')
+    let respond: (r: Response) => void = () => {}
+    const { tick, qc } = setup(() => new Promise((resolve) => (respond = resolve)))
+    tick('14:08')
+    expect(shown).toEqual([])
+    respond(new Response(JSON.stringify({ todos: [todo] })))
+    await waitFor(() => expect(qc.getQueryData(['todos', { is_done: false }])).toBeDefined())
+    await waitFor(() => expect(shown).toHaveLength(1))
+  })
+
+  it('keeps the app running when the browser refuses to construct a notification', async () => {
+    vi.stubGlobal(
+      'Notification',
+      class {
+        static permission = 'granted'
+        constructor() {
+          throw new TypeError('Illegal constructor')
+        }
+      },
+    )
+    const { tick, qc } = setup()
+    await waitFor(() => expect(qc.getQueryData(['todos', { is_done: false }])).toBeDefined())
+    expect(() => tick('14:08')).not.toThrow()
   })
 
   it('stays silent without permission', async () => {

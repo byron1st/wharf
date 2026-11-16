@@ -9,12 +9,6 @@ import { ClockContext, useTicker } from '@/hooks/useNow'
 import { useReminderNotifications } from '@/hooks/useReminderNotifications'
 import { SyncProvider } from '@/hooks/useSync'
 
-/** ReminderNotifications runs useReminderNotifications under the shared clock. */
-function ReminderNotifications() {
-  useReminderNotifications()
-  return null
-}
-
 /** NavState is what a modal URL carries: the Today search to return to, and whether a task was opened from Closed tasks. */
 interface NavState {
   back?: string
@@ -39,6 +33,13 @@ export function App() {
   const settings = /^\/settings(?:\/(general|atlassian))?\/?$/.exec(location.pathname)
   const closed = /^\/closed\/?$/.test(location.pathname)
 
+  // Like the Settings shortcut, a reminder's task returns to the Today URL it was opened over.
+  useReminderNotifications(clock.now, (id) =>
+    navigate(`/task/${encodeURIComponent(id)}`, {
+      state: { back: location.pathname === '/' ? location.search : back },
+    }),
+  )
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
@@ -54,7 +55,6 @@ export function App() {
   return (
     <ClockContext.Provider value={clock}>
       <SyncProvider>
-        <ReminderNotifications />
         <TodayPage />
         {task && (
           <TaskDialog

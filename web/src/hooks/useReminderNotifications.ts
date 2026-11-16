@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router'
 import { keys } from '@/hooks/data'
-import { useNow } from '@/hooks/useNow'
 import { api, taskKey } from '@/lib/api'
 import { dueReminders, reminderLabel } from '@/lib/dates'
 
@@ -26,12 +24,15 @@ export function requestNotificationPermission() {
  * useReminderNotifications shows a browser notification for each open todo's
  * reminder when it goes off while the app is open. It checks on every clock
  * tick, so a reminder fires within a minute boundary of its time; clicking the
- * notification focuses the app on the todo's task. Reminders more than
+ * notification focuses the app and calls onOpen with the todo's task ID; the
+ * latest onOpen is used, so it may close over the current route. Reminders more than
  * CATCH_UP_MS late, such as those missed while the machine slept, are skipped.
  */
-export function useReminderNotifications() {
-  const { now } = useNow()
-  const navigate = useNavigate()
+export function useReminderNotifications(now: Date, onOpen: (taskID: string) => void) {
+  const open = useRef(onOpen)
+  useEffect(() => {
+    open.current = onOpen
+  })
   const filter = { is_done: false }
   const { data: todos } = useQuery({
     queryKey: keys.todos(filter),
@@ -49,16 +50,22 @@ export function useReminderNotifications() {
     for (const todo of todos) {
       for (const at of dueReminders(todo.reminders, from, now)) {
         // The tag makes Chrome show one notification even when several tabs fire it.
-        const n = new Notification(todo.description, {
-          body: `${taskKey(todo.task_id)} · ${reminderLabel(at)}`,
-          tag: `wharf-reminder-${todo.id}-${at}`,
-        })
+        let n: Notification
+        try {
+          n = new Notification(todo.description, {
+            body: `${taskKey(todo.task_id)} · ${reminderLabel(at)}`,
+            tag: `wharf-reminder-${todo.id}-${at}`,
+          })
+        } catch {
+          // Some browsers (Chrome on Android) only notify from a service worker; skip rather than crash the app.
+          return
+        }
         n.onclick = () => {
           window.focus()
-          navigate(`/task/${encodeURIComponent(todo.task_id)}`)
+          open.current(todo.task_id)
           n.close()
         }
       }
     }
-  }, [now, todos, navigate])
+  }, [now, todos])
 }
