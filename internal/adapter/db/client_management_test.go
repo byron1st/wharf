@@ -3,6 +3,8 @@ package db_test
 import (
 	"context"
 	"io/fs"
+	"net/url"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -500,4 +502,39 @@ func TestMigrateWithURLQuery(t *testing.T) {
 
 	require.NoError(t, manager.Migrate(context.Background()))
 	require.True(t, tableExists(t, dsn, "others"))
+}
+
+// A role without CREATE on the database, as on Supabase, must be able to
+// migrate a database whose wharf schema already exists: CREATE SCHEMA IF NOT
+// EXISTS fails for it even then.
+func TestMigrateWithExistingSchemaNeedsNoDatabaseCreate(t *testing.T) {
+	ctx := context.Background()
+	dsn := newDatabase(t)
+	admin := open(t, dsn)
+
+	u, err := url.Parse(dsn)
+	require.NoError(t, err)
+
+	role := "wharf_app_" + strings.TrimPrefix(u.Path, "/")
+
+	_, err = admin.ExecContext(ctx, "CREATE ROLE "+role+" LOGIN PASSWORD '"+testPassword+"'")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = admin.ExecContext(ctx, "DROP OWNED BY "+role)
+		_, _ = admin.ExecContext(ctx, "DROP ROLE "+role)
+	})
+
+	_, err = admin.ExecContext(ctx, "CREATE SCHEMA wharf AUTHORIZATION "+role)
+	require.NoError(t, err)
+
+	var canCreate bool
+
+	require.NoError(t, admin.QueryRowContext(ctx,
+		"SELECT has_database_privilege($1, current_database(), 'CREATE')", role).Scan(&canCreate))
+	require.False(t, canCreate)
+
+	u.User = url.User(role)
+
+	require.NoError(t, dbManager(t, u.String(), scripts.Migrations()).Migrate(ctx))
+	require.True(t, tableExists(t, dsn, "tasks"))
 }
