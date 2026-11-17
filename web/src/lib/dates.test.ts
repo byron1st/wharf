@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   atLocal,
+  boardColumn,
+  boardMoveDates,
+  compareBoardTodos,
   nextAutoSyncLabel,
   closedGroup,
   closedLabel,
@@ -296,5 +299,68 @@ describe('lateCount', () => {
     const t = (end_date: string | null, is_done = false) => ({ is_done, start_date: null, end_date })
     expect(lateCount([t('2026-10-24'), t('2026-10-25'), t(today), t(null), t('2026-10-20', true)], today)).toBe(2)
     expect(lateCount([], today)).toBe(0)
+  })
+})
+
+describe('boardColumn', () => {
+  it('puts a todo in Late, Due today, Upcoming or No date by its end date', () => {
+    expect(boardColumn({ start_date: null, end_date: '2026-10-25' }, today)).toBe('late')
+    expect(boardColumn({ start_date: '2026-10-20', end_date: today }, today)).toBe('today')
+    expect(boardColumn({ start_date: today, end_date: '2026-10-30' }, today)).toBe('later')
+    expect(boardColumn({ start_date: '2026-10-20', end_date: null }, today)).toBe('nodate')
+  })
+})
+
+describe('boardMoveDates', () => {
+  it('ends a todo today when it lands in Due today, starting it today if it started later', () => {
+    expect(boardMoveDates({ start_date: '2026-10-20', end_date: null }, 'today', today)).toEqual({ start_date: '2026-10-20', end_date: today })
+    expect(boardMoveDates({ start_date: '2026-10-28', end_date: '2026-10-30' }, 'today', today)).toEqual({ start_date: today, end_date: today })
+  })
+
+  it('ends a todo tomorrow when it lands in Upcoming, unless it already ends later', () => {
+    expect(boardMoveDates({ start_date: null, end_date: null }, 'later', today)).toEqual({ start_date: null, end_date: '2026-10-27' })
+    expect(boardMoveDates({ start_date: null, end_date: today }, 'later', today)).toEqual({ start_date: null, end_date: '2026-10-27' })
+    expect(boardMoveDates({ start_date: null, end_date: '2026-10-30' }, 'later', today)).toBeNull()
+    expect(boardMoveDates({ start_date: '2026-11-02', end_date: null }, 'later', today)).toEqual({ start_date: '2026-10-27', end_date: '2026-10-27' })
+  })
+
+  it('clears the end date in No date and changes nothing in Late', () => {
+    expect(boardMoveDates({ start_date: '2026-10-20', end_date: today }, 'nodate', today)).toEqual({ start_date: '2026-10-20', end_date: null })
+    expect(boardMoveDates({ start_date: null, end_date: today }, 'late', today)).toBeNull()
+  })
+})
+
+describe('compareBoardTodos', () => {
+  const t = (id: string, o: { task?: string; end?: string | null; pos?: number; board?: number; col?: string }) => ({
+    id,
+    task_id: o.task ?? 'A',
+    end_date: o.end ?? null,
+    position: o.pos ?? 0,
+    board_column: o.board === undefined ? undefined : (o.col ?? 'late'),
+    board_position: o.board,
+  })
+  const rank = new Map([
+    ['A', 0],
+    ['B', 1],
+  ])
+  const order = (list: ReturnType<typeof t>[]) => [...list].sort((a, b) => compareBoardTodos(a, b, rank, 'late')).map((x) => x.id)
+
+  it('puts todos placed by hand first, in their board order', () => {
+    expect(order([t('x', {}), t('y', { board: 1 }), t('z', { board: 0 })])).toEqual(['z', 'y', 'x'])
+  })
+
+  it('ignores a place in another column', () => {
+    expect(order([t('x', { pos: 0 }), t('y', { pos: 1, board: 0, col: 'today' })])).toEqual(['x', 'y'])
+  })
+
+  it('orders the rest by end date, then task place on Today, then place in the task', () => {
+    expect(
+      order([
+        t('late2', { end: '2026-10-24' }),
+        t('b0', { task: 'B', end: '2026-10-20' }),
+        t('a1', { end: '2026-10-20', pos: 1 }),
+        t('a0', { end: '2026-10-20', pos: 0 }),
+      ]),
+    ).toEqual(['a0', 'a1', 'b0', 'late2'])
   })
 })

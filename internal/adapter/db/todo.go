@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -33,6 +34,8 @@ var (
 	ErrFailedToDeleteTodoLinks     = errors.New("db: failed to delete service desk request links of todo")
 	ErrFailedToListTodoRequests    = errors.New("db: failed to list service desk requests of todos")
 	ErrFailedToCountTodosByTask    = errors.New("db: failed to count todos by task")
+	ErrFailedToUpdateBoardPosition = errors.New("db: failed to update todo board position")
+	ErrFailedToClearBoardColumn    = errors.New("db: failed to clear todo board column")
 )
 
 // CreateTodo stores t as a new todo of the stored task t.TaskID and returns
@@ -117,6 +120,9 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 			StartDate:   row.StartDate.String,
 			EndDate:     row.EndDate.String,
 			Position:    &position,
+
+			BoardColumn:   todo.BoardColumn(row.BoardColumn.String),
+			BoardPosition: fromNullInt(row.BoardPosition),
 		})
 	}
 
@@ -342,4 +348,40 @@ func fromServiceDeskRequest(row ServiceDeskRequest) servicedesk.Request {
 // toNullString stores an empty s as NULL.
 func toNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// SetTodoBoardPositions makes ids the hand-set order of column: each todo in
+// ids takes its index there, and the other todos placed in column lose their
+// place, so none keeps a stale index that ties with these. IDs that are not
+// stored are skipped, and an empty ids changes nothing.
+func (m *manager) SetTodoBoardPositions(ctx context.Context, column todo.BoardColumn, ids []int64) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	if len(ids) == 0 {
+		return nil
+	}
+
+	// Marshaling an []int64 cannot fail.
+	list, _ := json.Marshal(ids)
+
+	// The advisory lock keeps two devices' orders from locking rows in
+	// opposite orders and deadlocking.
+	return m.inTx(ctx, func(queries *Queries) error {
+		col := sql.NullString{String: string(column), Valid: true}
+		if err := queries.ClearTodoBoardColumn(
+			ctx,
+			ClearTodoBoardColumnParams{BoardColumn: col, Ids: string(list)},
+		); err != nil {
+			return fmt.Errorf("%w: column=%s", errors.Join(ErrFailedToClearBoardColumn, err), column)
+		}
+
+		params := SetTodoBoardPositionsParams{BoardColumn: col, Ids: string(list)}
+		if err := queries.SetTodoBoardPositions(ctx, params); err != nil {
+			return fmt.Errorf("%w: column=%s", errors.Join(ErrFailedToUpdateBoardPosition, err), column)
+		}
+
+		return nil
+	})
 }

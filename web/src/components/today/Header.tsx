@@ -1,4 +1,4 @@
-import { Archive, CircleAlert, LayoutDashboard, List, Plus, RefreshCw, Settings } from 'lucide-react'
+import { Archive, CircleAlert, Columns3, LayoutDashboard, List, Plus, RefreshCw, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Kbd, OriginBadge } from '@/components/common/badges'
 import { Button } from '@/components/ui/button'
@@ -157,13 +157,14 @@ function NewTaskButton({ onCreate }: { onCreate: (title: string) => Promise<void
   )
 }
 
-export type Layout = 'list' | 'card'
+export type Layout = 'list' | 'card' | 'todo'
 
-/** LayoutTabs switches Today between the List and Card views. */
+/** LayoutTabs switches Today between the List, Card and Todo views. */
 function LayoutTabs({ layout, onChange }: { layout: Layout; onChange: (layout: Layout) => void }) {
   const tabs = [
     { value: 'list' as const, label: 'List', title: 'List view', Icon: List },
     { value: 'card' as const, label: 'Card', title: 'Card view', Icon: LayoutDashboard },
+    { value: 'todo' as const, label: 'Todo', title: 'Todo view', Icon: Columns3 },
   ]
   return (
     <div
@@ -172,7 +173,8 @@ function LayoutTabs({ layout, onChange }: { layout: Layout; onChange: (layout: L
       onKeyDown={(e) => {
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
         e.preventDefault()
-        const next = layout === 'list' ? 'card' : 'list'
+        const i = tabs.findIndex((t) => t.value === layout)
+        const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].value
         onChange(next)
         e.currentTarget.querySelector<HTMLElement>(`[data-layout="${next}"]`)?.focus()
       }}

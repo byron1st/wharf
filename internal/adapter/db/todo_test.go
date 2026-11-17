@@ -443,3 +443,67 @@ func TestCreateTodoConcurrently(t *testing.T) {
 
 	require.Equal(t, want, positions)
 }
+
+func TestSetTodoBoardPositions(t *testing.T) {
+	manager, _ := newTodoManager(t)
+
+	a := create(t, manager, todo.Todo{TaskID: "J1", Description: "a"})
+	b := create(t, manager, todo.Todo{TaskID: "J1", Description: "b"})
+	c := create(t, manager, todo.Todo{TaskID: "J1", Description: "c"})
+
+	type place struct {
+		column   todo.BoardColumn
+		position *int
+	}
+
+	places := func() map[int64]place {
+		todos, err := manager.ListTodos(context.Background(), todo.Filter{})
+		require.NoError(t, err)
+
+		got := map[int64]place{}
+		for _, td := range todos {
+			got[td.ID] = place{td.BoardColumn, td.BoardPosition}
+		}
+
+		return got
+	}
+
+	require.Equal(t, map[int64]place{a: {}, b: {}, c: {}}, places())
+
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardToday, []int64{c, 9999, a}))
+	require.Equal(t, map[int64]place{
+		a: {todo.BoardToday, new(2)},
+		b: {},
+		c: {todo.BoardToday, new(0)},
+	}, places())
+
+	// Saving a todo keeps its place, and todos left out keep theirs.
+	require.NoError(t, manager.UpdateTodo(context.Background(), todo.Todo{ID: a, TaskID: "J1", Description: "a2"}))
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardNoDate, []int64{b}))
+	require.Equal(t, map[int64]place{
+		a: {todo.BoardToday, new(2)},
+		b: {todo.BoardNoDate, new(0)},
+		c: {todo.BoardToday, new(0)},
+	}, places())
+
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardLate, nil))
+
+	// A new order of a column takes out the todos placed there before but not listed now.
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardToday, []int64{a}))
+	require.Equal(t, map[int64]place{
+		a: {todo.BoardToday, new(0)},
+		b: {todo.BoardNoDate, new(0)},
+		c: {},
+	}, places())
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardToday, []int64{c, a}))
+
+	// A new end date moves the todo to another column, so it drops its place.
+	require.NoError(
+		t,
+		manager.UpdateTodo(
+			context.Background(),
+			todo.Todo{ID: c, TaskID: "J1", Description: "c", EndDate: "2026-10-30"},
+		),
+	)
+	require.Equal(t, place{}, places()[c])
+}

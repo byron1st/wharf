@@ -283,8 +283,42 @@ export function useTodoActions() {
     onSettled: () => settle(qc),
   })
 
+  const reorderBoard = useMutation({
+    // A todo moved here from another column has its dates saved first, so the
+    // refetch after this save never brings back its old column.
+    // Orders keep their place in line from the drop on, so a later drop is never overwritten by an earlier one.
+    mutationFn: ({ column, ids, after }: { column: string; ids: number[]; after?: number }) =>
+      queued('todo-board-order', () => {
+        const save = () => api.reorderBoardTodos(column, ids)
+        return after === undefined ? save() : queued(`todo-${after}`, save)
+      }),
+    onMutate: async ({ column, ids }) => {
+      await qc.cancelQueries({ queryKey: keys.allTodos })
+      const snap = snapshot(qc)
+      const at = new Map(ids.map((id, i) => [id, i]))
+      // As on the server, the todos placed in the column before but not listed now leave it.
+      qc.setQueriesData<Todo[]>({ queryKey: keys.allTodos }, (old) =>
+        old?.map((t) =>
+          at.has(t.id)
+            ? { ...t, board_column: column, board_position: at.get(t.id) }
+            : t.board_column === column
+              ? { ...t, board_column: undefined, board_position: null }
+              : t,
+        ),
+      )
+      return snap
+    },
+    onError: (err, vars, snap) => {
+      if (snap) restore(qc, snap)
+      reportSaveError(err, 'todo', () => reorderBoard.mutate(vars))
+    },
+    onSettled: () => settle(qc),
+  })
+
   return {
     update: (todo: Todo, patch: Partial<TodoInput>) => update.mutate({ todo, patch }),
+    /** reorderBoard places ids, in order, in the Todo view column, after any save of the todo after still in flight. */
+    reorderBoard: (column: string, ids: number[], after?: number) => reorderBoard.mutate({ column, ids, after }),
     create: (input: TodoInput) => create.mutateAsync(input),
     remove: (todo: Todo) => remove.mutate(todo),
     link: (todo: Todo, request: ServiceDeskRequest) => link.mutate({ todo, request }),
