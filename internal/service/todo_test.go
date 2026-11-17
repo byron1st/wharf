@@ -126,22 +126,26 @@ func TestListTodos(t *testing.T) {
 func TestReorderBoardTodos(t *testing.T) {
 	failure := errors.New("write failed")
 	svc, manager := newTodoService(t)
-	manager.EXPECT().SetTodoBoardPositions(mock.Anything, []int64{3, 1}).Return(nil).Once()
-	manager.EXPECT().SetTodoBoardPositions(mock.Anything, []int64(nil)).Return(failure).Once()
+	manager.EXPECT().SetTodoBoardPositions(mock.Anything, todo.BoardToday, []int64{3, 1}).Return(nil).Once()
+	manager.EXPECT().SetTodoBoardPositions(mock.Anything, todo.BoardLate, []int64(nil)).Return(failure).Once()
 
-	require.NoError(t, svc.ReorderBoardTodos(t.Context(), []int64{3, 1}))
-	require.ErrorIs(t, svc.ReorderBoardTodos(t.Context(), nil), failure)
+	require.NoError(t, svc.ReorderBoardTodos(t.Context(), todo.BoardToday, []int64{3, 1}))
+	require.ErrorIs(t, svc.ReorderBoardTodos(t.Context(), todo.BoardLate, nil), failure)
 }
 
-func TestReorderBoardTodosRejectsInvalidIDs(t *testing.T) {
+func TestReorderBoardTodosRejectsInvalidInput(t *testing.T) {
 	// No expectations: nothing may be stored.
 	svc, _ := newTodoService(t)
 
-	err := svc.ReorderBoardTodos(t.Context(), []int64{1, 0})
+	err := svc.ReorderBoardTodos(t.Context(), "someday", []int64{1})
+	require.ErrorIs(t, err, service.ErrUnknownBoardColumn)
+	require.ErrorContains(t, err, "column=someday")
+
+	err = svc.ReorderBoardTodos(t.Context(), todo.BoardToday, []int64{1, 0})
 	require.ErrorIs(t, err, service.ErrInvalidTodoIDToReorder)
 	require.ErrorContains(t, err, "id=0")
 
-	err = svc.ReorderBoardTodos(t.Context(), []int64{1, 2, 1})
+	err = svc.ReorderBoardTodos(t.Context(), todo.BoardToday, []int64{1, 2, 1})
 	require.ErrorIs(t, err, service.ErrDuplicateTodoIDToReorder)
 	require.ErrorContains(t, err, "id=1")
 }

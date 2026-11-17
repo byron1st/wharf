@@ -26,8 +26,11 @@ type Todo struct {
 	// Position is the index among the todos of the task. When writing, nil
 	// means the end of the task, or the current place when the task is kept.
 	Position *int
-	// BoardPosition orders the todo within its column of the Todo view, or
-	// is nil until it is placed there by hand. It is ignored when writing.
+	// BoardColumn and BoardPosition are where the todo was last placed by
+	// hand on the Todo view, or empty and nil until then. The position only
+	// orders the todo while it is still in that column. Both are ignored when
+	// writing; ReorderBoardTodos sets them.
+	BoardColumn   BoardColumn
 	BoardPosition *int
 	// ServiceDeskRequests are the stored requests linked to the todo, in issue
 	// key order. They are ignored when writing.
@@ -48,4 +51,24 @@ type Filter struct {
 type Count struct {
 	Todos int
 	Done  int
+}
+
+// BoardColumn is a column of the Todo view.
+type BoardColumn string
+
+const (
+	BoardLate   BoardColumn = "late"
+	BoardToday  BoardColumn = "today"
+	BoardLater  BoardColumn = "later"
+	BoardNoDate BoardColumn = "nodate"
+)
+
+// Valid reports whether c is one of the Todo view columns.
+func (c BoardColumn) Valid() bool {
+	switch c {
+	case BoardLate, BoardToday, BoardLater, BoardNoDate:
+		return true
+	}
+
+	return false
 }

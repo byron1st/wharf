@@ -81,6 +81,7 @@ type Todo struct {
 	CompletedAt   sql.NullTime
 	StartDate     sql.NullString
 	EndDate       sql.NullString
+	BoardColumn   sql.NullString
 	BoardPosition sql.NullInt64
 }
 

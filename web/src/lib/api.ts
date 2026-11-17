@@ -66,7 +66,8 @@ export interface Todo {
   end_date: string | null
   reminders: string[]
   position: number | null
-  /** board_position orders the todo in its Todo view column; the server leaves it out until it is placed by hand. */
+  /** board_column and board_position are where the todo was last placed by hand on the Todo view; the server leaves them out until then. */
+  board_column?: string
   board_position?: number | null
   service_desk_requests: ServiceDeskRequest[]
 }
@@ -201,7 +202,7 @@ export const api = {
   setTaskStatus: (id: string, status: TaskStatus, closedAt?: string) =>
     request<void>('PUT', `/api/tasks/${enc(id)}/status`, closedAt ? { status, closed_at: closedAt } : { status }),
   reorderTasks: (ids: string[]) => request<void>('PUT', '/api/tasks/order', { ids }),
-  reorderBoardTodos: (ids: number[]) => request<void>('PUT', '/api/todos/board-order', { ids }),
+  reorderBoardTodos: (column: string, ids: number[]) => request<void>('PUT', '/api/todos/board-order', { column, ids }),
   syncTask: (id: string) => request<TaskSync>('POST', `/api/tasks/${enc(id)}/sync`),
 
   listTodos: (f: TodoFilter) =>

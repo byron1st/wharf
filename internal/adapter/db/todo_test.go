@@ -451,25 +451,40 @@ func TestSetTodoBoardPositions(t *testing.T) {
 	b := create(t, manager, todo.Todo{TaskID: "J1", Description: "b"})
 	c := create(t, manager, todo.Todo{TaskID: "J1", Description: "c"})
 
-	positions := func() map[int64]*int {
+	type place struct {
+		column   todo.BoardColumn
+		position *int
+	}
+
+	places := func() map[int64]place {
 		todos, err := manager.ListTodos(context.Background(), todo.Filter{})
 		require.NoError(t, err)
 
-		got := map[int64]*int{}
+		got := map[int64]place{}
 		for _, td := range todos {
-			got[td.ID] = td.BoardPosition
+			got[td.ID] = place{td.BoardColumn, td.BoardPosition}
 		}
 
 		return got
 	}
 
-	require.Equal(t, map[int64]*int{a: nil, b: nil, c: nil}, positions())
+	require.Equal(t, map[int64]place{a: {}, b: {}, c: {}}, places())
 
-	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), []int64{c, 9999, a}))
-	require.Equal(t, map[int64]*int{a: new(2), b: nil, c: new(0)}, positions())
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardToday, []int64{c, 9999, a}))
+	require.Equal(t, map[int64]place{
+		a: {todo.BoardToday, new(2)},
+		b: {},
+		c: {todo.BoardToday, new(0)},
+	}, places())
 
-	// Saving a todo keeps its board position, and todos left out keep theirs.
+	// Saving a todo keeps its place, and todos left out keep theirs.
 	require.NoError(t, manager.UpdateTodo(context.Background(), todo.Todo{ID: a, TaskID: "J1", Description: "a2"}))
-	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), []int64{b}))
-	require.Equal(t, map[int64]*int{a: new(2), b: new(0), c: new(0)}, positions())
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardNoDate, []int64{b}))
+	require.Equal(t, map[int64]place{
+		a: {todo.BoardToday, new(2)},
+		b: {todo.BoardNoDate, new(0)},
+		c: {todo.BoardToday, new(0)},
+	}, places())
+
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardLate, nil))
 }

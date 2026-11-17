@@ -10,7 +10,7 @@ import {
   type CollisionDetection,
 } from '@dnd-kit/core'
 import { Bell, FileText, Plus, Ticket } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { OriginDot } from '@/components/common/badges'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -309,17 +309,22 @@ function NewTodoButton({ tasks, defaultTask }: { tasks: TaskListItem[]; defaultT
     setOpen(on)
   }
 
+  // The listener is added once and opens with the defaults of the latest render.
+  const showRef = useRef(show)
+  useEffect(() => {
+    showRef.current = show
+  })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (e.key.toLowerCase() !== 't' || e.metaKey || e.ctrlKey || e.altKey) return
       if (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
       e.preventDefault()
-      show(true)
+      showRef.current(true)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  })
+  }, [])
 
   const add = () => {
     const d = text.trim()
@@ -333,6 +338,8 @@ function NewTodoButton({ tasks, defaultTask }: { tasks: TaskListItem[]; defaultT
       start_date: null,
       end_date: due === 'today' ? today : due === 'tomorrow' ? addDays(today, 1) : null,
       reminders: [],
+    }).catch(() => {
+      // The failure is already reported with a Retry.
     })
   }
 
@@ -461,33 +468,27 @@ export function TodoBoard({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   const tasks = groups.map((g) => g.task)
-  const taskMap = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks])
-  const taskRank = useMemo(() => new Map(tasks.map((t, i) => [t.id, i])), [tasks])
-  const filter = picked && taskMap.has(picked) ? picked : null
-
+  const taskMap = new Map(tasks.map((t) => [t.id, t]))
+  const taskRank = new Map(tasks.map((t, i) => [t.id, i]))
   const openTodos = groups.flatMap((g) => g.todos.filter((t) => !t.is_done))
   const counts = new Map<string, number>()
   for (const t of openTodos) counts.set(t.task_id, (counts.get(t.task_id) ?? 0) + 1)
+  // A task whose last open todo is done loses its chip, and with it the filter.
+  const filter = picked && counts.has(picked) ? picked : null
 
-  const columns = useMemo(() => {
-    const cols = new Map<BoardColumn, { open: Todo[]; done: Todo[] }>(BOARD_COLUMNS.map((c) => [c, { open: [], done: [] }]))
-    for (const t of openTodos) {
-      if (filter && t.task_id !== filter) continue
-      cols.get(boardColumn(t, today))?.open.push(t)
-    }
-    for (const t of doneToday) {
-      if (!t.is_done || !taskMap.has(t.task_id) || (filter && t.task_id !== filter)) continue
-      cols.get(boardColumn(t, today))?.done.push(t)
-    }
-    for (const c of cols.values()) {
-      c.open.sort((a, b) => compareBoardTodos(a, b, taskRank))
-      c.done.sort((a, b) => compareBoardTodos(a, b, taskRank))
-    }
-    return cols
-  }, [openTodos, doneToday, filter, taskMap, taskRank, today])
+  /** columns are the open todos of each column, of every task, in board order. */
+  const columns = new Map<BoardColumn, Todo[]>(BOARD_COLUMNS.map((c) => [c, []]))
+  for (const t of openTodos) columns.get(boardColumn(t, today))?.push(t)
+  for (const [c, list] of columns) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
+  const done = new Map<BoardColumn, Todo[]>(BOARD_COLUMNS.map((c) => [c, []]))
+  for (const t of doneToday) {
+    if (t.is_done && taskMap.has(t.task_id)) done.get(boardColumn(t, today))?.push(t)
+  }
+  for (const [c, list] of done) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
+  const shown = (list: Todo[]) => (filter ? list.filter((t) => t.task_id === filter) : list)
 
   const colOf = new Map<number, BoardColumn>()
-  for (const [c, { open }] of columns) for (const t of open) colOf.set(t.id, c)
+  for (const [c, list] of columns) for (const t of list) colOf.set(t.id, c)
   const dragged = active === null ? undefined : openTodos.find((t) => t.id === active)
   const from = active === null ? undefined : colOf.get(active)
   /** accepts says whether the dragged todo may land in column c: Late only takes its own. */
@@ -504,14 +505,15 @@ export function TodoBoard({
     if (!dragged || from === undefined || to === null || to === dragged.id) return
     const col = typeof to === 'number' ? colOf.get(to) : (to.slice(COL_PREFIX.length) as BoardColumn)
     if (!col || !accepts(col)) return
-    const ids = (columns.get(col)?.open ?? []).map((t) => t.id).filter((id) => id !== dragged.id)
+    // The order covers every task's todos in the column, also the ones a filter hides.
+    const ids = (columns.get(col) ?? []).map((t) => t.id).filter((id) => id !== dragged.id)
     const at = typeof to === 'number' ? ids.indexOf(to) : -1
     ids.splice(at < 0 ? ids.length : at, 0, dragged.id)
     if (col !== from) {
       const dates = boardMoveDates(dragged, col, today)
       if (dates) update(dragged, dates)
     }
-    reorderBoard(ids)
+    reorderBoard(col, ids)
   }
 
   const selectedTask = selection?.kind === 'task' ? selection.id : null
@@ -592,19 +594,20 @@ export function TodoBoard({
       >
         <div className="grid min-h-0 flex-1 grid-cols-4 gap-2.5">
           {BOARD_COLUMNS.map((c) => {
-            const { open, done } = columns.get(c) ?? { open: [], done: [] }
+            const open = shown(columns.get(c) ?? [])
+            const finished = shown(done.get(c) ?? [])
             const hot = active !== null && overCol === c && accepts(c)
             return (
               <Column
                 key={c}
                 column={c}
                 open={open.length}
-                done={done.length}
+                done={finished.length}
                 accepts={accepts(c)}
                 hot={hot && from !== c}
                 lineEnd={hot && typeof over === 'string' && open.length > 0}
               >
-                {{ cards: open.map((t) => card(t, c)), doneCards: done.map((t) => card(t, c)) }}
+                {{ cards: open.map((t) => card(t, c)), doneCards: finished.map((t) => card(t, c)) }}
               </Column>
             )
           })}

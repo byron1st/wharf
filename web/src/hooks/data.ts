@@ -284,27 +284,28 @@ export function useTodoActions() {
   })
 
   const reorderBoard = useMutation({
-    mutationFn: (ids: number[]) => queued('todo-board-order', () => api.reorderBoardTodos(ids)),
-    onMutate: async (ids) => {
+    mutationFn: ({ column, ids }: { column: string; ids: number[] }) =>
+      queued('todo-board-order', () => api.reorderBoardTodos(column, ids)),
+    onMutate: async ({ column, ids }) => {
       await qc.cancelQueries({ queryKey: keys.allTodos })
       const snap = snapshot(qc)
       const at = new Map(ids.map((id, i) => [id, i]))
       qc.setQueriesData<Todo[]>({ queryKey: keys.allTodos }, (old) =>
-        old?.map((t) => (at.has(t.id) ? { ...t, board_position: at.get(t.id) } : t)),
+        old?.map((t) => (at.has(t.id) ? { ...t, board_column: column, board_position: at.get(t.id) } : t)),
       )
       return snap
     },
-    onError: (err, ids, snap) => {
+    onError: (err, vars, snap) => {
       if (snap) restore(qc, snap)
-      reportSaveError(err, 'todo', () => reorderBoard.mutate(ids))
+      reportSaveError(err, 'todo', () => reorderBoard.mutate(vars))
     },
     onSettled: () => settle(qc),
   })
 
   return {
     update: (todo: Todo, patch: Partial<TodoInput>) => update.mutate({ todo, patch }),
-    /** reorderBoard stores ids, the todos of one Todo view column in order, as their board positions. */
-    reorderBoard: (ids: number[]) => reorderBoard.mutate(ids),
+    /** reorderBoard places ids, in order, in the Todo view column. */
+    reorderBoard: (column: string, ids: number[]) => reorderBoard.mutate({ column, ids }),
     create: (input: TodoInput) => create.mutateAsync(input),
     remove: (todo: Todo) => remove.mutate(todo),
     link: (todo: Todo, request: ServiceDeskRequest) => link.mutate({ todo, request }),

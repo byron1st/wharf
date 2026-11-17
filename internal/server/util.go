@@ -43,6 +43,7 @@ var errorStatuses = []struct {
 	{err: ErrFailedToDecodeBoardOrder, status: http.StatusBadRequest},
 	{err: ErrBoardOrderHasTrailingData, status: http.StatusBadRequest},
 	{err: ErrBoardOrderTooLarge, status: http.StatusRequestEntityTooLarge},
+	{err: service.ErrUnknownBoardColumn, status: http.StatusBadRequest},
 	{err: service.ErrInvalidTodoIDToReorder, status: http.StatusBadRequest},
 	{err: service.ErrDuplicateTodoIDToReorder, status: http.StatusBadRequest},
 	{err: ErrEmptyTodoRequestDate, status: http.StatusBadRequest},

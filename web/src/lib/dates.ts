@@ -201,18 +201,24 @@ export function boardMoveDates(
   return null
 }
 
+type BoardTodo = {
+  task_id: string
+  end_date: string | null
+  position: number | null
+  board_column?: string
+  board_position?: number | null
+}
+
 /**
- * compareBoardTodos orders the todos of a column: by board position, then
- * those never placed by hand by end date, then by their task's place on
- * Today (taskRank), then by their place in the task.
+ * compareBoardTodos orders the todos of column: first those placed there by
+ * hand, by board position (a place in another column does not count), then
+ * the rest by end date, then by their task's place on Today (taskRank), then
+ * by their place in the task.
  */
-export function compareBoardTodos(
-  a: { task_id: string; end_date: string | null; position: number | null; board_position?: number | null },
-  b: { task_id: string; end_date: string | null; position: number | null; board_position?: number | null },
-  taskRank: Map<string, number>,
-): number {
-  const pa = a.board_position ?? null
-  const pb = b.board_position ?? null
+export function compareBoardTodos(a: BoardTodo, b: BoardTodo, taskRank: Map<string, number>, column: BoardColumn): number {
+  const placed = (t: BoardTodo) => (t.board_column === column ? (t.board_position ?? null) : null)
+  const pa = placed(a)
+  const pb = placed(b)
   if (pa !== pb) {
     if (pa === null) return 1
     if (pb === null) return -1

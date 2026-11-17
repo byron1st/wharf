@@ -227,6 +227,7 @@ func toTodoResponse(t todo.Todo) todoResponse {
 		CompletedAt:         t.CompletedAt,
 		Reminders:           t.Reminders,
 		Position:            t.Position,
+		BoardColumn:         t.BoardColumn,
 		BoardPosition:       t.BoardPosition,
 		ServiceDeskRequests: toServiceDeskRequests(t.ServiceDeskRequests),
 	}
@@ -262,7 +263,7 @@ func reorderBoardTodos(svc service.Service, logger *slog.Logger) http.HandlerFun
 			return
 		}
 
-		if err := svc.ReorderBoardTodos(r.Context(), req.IDs); err != nil {
+		if err := svc.ReorderBoardTodos(r.Context(), req.Column, req.IDs); err != nil {
 			writeError(w, r, logger, "failed to reorder board todos", err)
 			return
 		}

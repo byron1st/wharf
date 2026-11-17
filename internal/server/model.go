@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/byron1st/wharf/internal/pkg/task"
+	"github.com/byron1st/wharf/internal/pkg/todo"
 )
 
 // errorResponse carries a code when the client must tell the error apart
@@ -114,17 +115,19 @@ type todoResponse struct {
 	EndDate     *string     `json:"end_date"`
 	Reminders   []time.Time `json:"reminders"`
 	Position    *int        `json:"position"`
-	// BoardPosition is the todo's place in its Todo view column. It is left
-	// out until the todo is placed there by hand.
-	BoardPosition *int `json:"board_position,omitempty"`
+	// BoardColumn and BoardPosition are where the todo was last placed by
+	// hand on the Todo view. They are left out until then.
+	BoardColumn   todo.BoardColumn `json:"board_column,omitempty"`
+	BoardPosition *int             `json:"board_position,omitempty"`
 
 	ServiceDeskRequests []serviceDeskRequestResponse `json:"service_desk_requests"`
 }
 
-// todoBoardOrderRequest is the body of PUT /todos/board-order: the todos of
-// one Todo view column, in order.
+// todoBoardOrderRequest is the body of PUT /todos/board-order: a Todo view
+// column and its todos, in order.
 type todoBoardOrderRequest struct {
-	IDs []int64 `json:"ids"`
+	Column todo.BoardColumn `json:"column"`
+	IDs    []int64          `json:"ids"`
 }
 
 type todoListResponse struct {

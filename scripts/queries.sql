@@ -193,8 +193,12 @@ WHERE task_id = sqlc.arg(task_id) AND position > sqlc.arg(position);
 -- name: CreateTaskTodo :exec
 INSERT INTO task_todos (todo_id, task_id, position) VALUES ($1, $2, $3);
 
--- name: UpdateTodoBoardPosition :exec
-UPDATE todos SET board_position = $1 WHERE id = $2;
+-- name: SetTodoBoardPositions :exec
+-- ids is a JSON array of todo IDs in column order: an array parameter would
+-- need lib/pq. Each listed todo takes its index there as its board position.
+UPDATE todos SET board_column = sqlc.arg(board_column), board_position = ordered.ord - 1
+FROM jsonb_array_elements_text(CAST(sqlc.arg(ids)::text AS jsonb)) WITH ORDINALITY AS ordered(id, ord)
+WHERE todos.id = ordered.id::bigint;
 
 -- name: ListTodos :many
 -- A NULL filter is not applied.

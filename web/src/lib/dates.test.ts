@@ -330,21 +330,26 @@ describe('boardMoveDates', () => {
 })
 
 describe('compareBoardTodos', () => {
-  const t = (id: string, o: { task?: string; end?: string | null; pos?: number; board?: number | null }) => ({
+  const t = (id: string, o: { task?: string; end?: string | null; pos?: number; board?: number; col?: string }) => ({
     id,
     task_id: o.task ?? 'A',
     end_date: o.end ?? null,
     position: o.pos ?? 0,
+    board_column: o.board === undefined ? undefined : (o.col ?? 'late'),
     board_position: o.board,
   })
   const rank = new Map([
     ['A', 0],
     ['B', 1],
   ])
-  const order = (list: ReturnType<typeof t>[]) => [...list].sort((a, b) => compareBoardTodos(a, b, rank)).map((x) => x.id)
+  const order = (list: ReturnType<typeof t>[]) => [...list].sort((a, b) => compareBoardTodos(a, b, rank, 'late')).map((x) => x.id)
 
   it('puts todos placed by hand first, in their board order', () => {
     expect(order([t('x', {}), t('y', { board: 1 }), t('z', { board: 0 })])).toEqual(['z', 'y', 'x'])
+  })
+
+  it('ignores a place in another column', () => {
+    expect(order([t('x', { pos: 0 }), t('y', { pos: 1, board: 0, col: 'today' })])).toEqual(['x', 'y'])
   })
 
   it('orders the rest by end date, then task place on Today, then place in the task', () => {

@@ -1192,16 +1192,16 @@ func (_c *MockManager_SetTaskPositions_Call) RunAndReturn(run func(ctx context.C
 }
 
 // SetTodoBoardPositions provides a mock function for the type MockManager
-func (_mock *MockManager) SetTodoBoardPositions(ctx context.Context, ids []int64) error {
-	ret := _mock.Called(ctx, ids)
+func (_mock *MockManager) SetTodoBoardPositions(ctx context.Context, column todo.BoardColumn, ids []int64) error {
+	ret := _mock.Called(ctx, column, ids)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SetTodoBoardPositions")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []int64) error); ok {
-		r0 = returnFunc(ctx, ids)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, todo.BoardColumn, []int64) error); ok {
+		r0 = returnFunc(ctx, column, ids)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1215,24 +1215,30 @@ type MockManager_SetTodoBoardPositions_Call struct {
 
 // SetTodoBoardPositions is a helper method to define mock.On call
 //   - ctx context.Context
+//   - column todo.BoardColumn
 //   - ids []int64
-func (_e *MockManager_Expecter) SetTodoBoardPositions(ctx any, ids any) *MockManager_SetTodoBoardPositions_Call {
-	return &MockManager_SetTodoBoardPositions_Call{Call: _e.mock.On("SetTodoBoardPositions", ctx, ids)}
+func (_e *MockManager_Expecter) SetTodoBoardPositions(ctx any, column any, ids any) *MockManager_SetTodoBoardPositions_Call {
+	return &MockManager_SetTodoBoardPositions_Call{Call: _e.mock.On("SetTodoBoardPositions", ctx, column, ids)}
 }
 
-func (_c *MockManager_SetTodoBoardPositions_Call) Run(run func(ctx context.Context, ids []int64)) *MockManager_SetTodoBoardPositions_Call {
+func (_c *MockManager_SetTodoBoardPositions_Call) Run(run func(ctx context.Context, column todo.BoardColumn, ids []int64)) *MockManager_SetTodoBoardPositions_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 []int64
+		var arg1 todo.BoardColumn
 		if args[1] != nil {
-			arg1 = args[1].([]int64)
+			arg1 = args[1].(todo.BoardColumn)
+		}
+		var arg2 []int64
+		if args[2] != nil {
+			arg2 = args[2].([]int64)
 		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -1243,7 +1249,7 @@ func (_c *MockManager_SetTodoBoardPositions_Call) Return(err error) *MockManager
 	return _c
 }
 
-func (_c *MockManager_SetTodoBoardPositions_Call) RunAndReturn(run func(ctx context.Context, ids []int64) error) *MockManager_SetTodoBoardPositions_Call {
+func (_c *MockManager_SetTodoBoardPositions_Call) RunAndReturn(run func(ctx context.Context, column todo.BoardColumn, ids []int64) error) *MockManager_SetTodoBoardPositions_Call {
 	_c.Call.Return(run)
 	return _c
 }

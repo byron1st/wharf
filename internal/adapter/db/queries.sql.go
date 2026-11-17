@@ -880,7 +880,7 @@ func (q *Queries) ListTodoServiceDeskRequests(ctx context.Context, arg ListTodoS
 }
 
 const listTodos = `-- name: ListTodos :many
-SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_at, todos.start_date, todos.end_date, todos.board_position, task_todos.task_id, task_todos.position
+SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_at, todos.start_date, todos.end_date, todos.board_column, todos.board_position, task_todos.task_id, task_todos.position
 FROM todos
 JOIN task_todos ON task_todos.todo_id = todos.id
 WHERE (task_todos.task_id = $1 OR $1 IS NULL)
@@ -908,6 +908,7 @@ type ListTodosRow struct {
 	CompletedAt   sql.NullTime
 	StartDate     sql.NullString
 	EndDate       sql.NullString
+	BoardColumn   sql.NullString
 	BoardPosition sql.NullInt64
 	TaskID        string
 	Position      int64
@@ -936,6 +937,7 @@ func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]ListTod
 			&i.CompletedAt,
 			&i.StartDate,
 			&i.EndDate,
+			&i.BoardColumn,
 			&i.BoardPosition,
 			&i.TaskID,
 			&i.Position,
@@ -959,6 +961,24 @@ UPDATE atlassian_sync_settings SET interval_minutes = $1
 
 func (q *Queries) SetAtlassianSyncInterval(ctx context.Context, intervalMinutes int64) error {
 	_, err := q.db.ExecContext(ctx, setAtlassianSyncInterval, intervalMinutes)
+	return err
+}
+
+const setTodoBoardPositions = `-- name: SetTodoBoardPositions :exec
+UPDATE todos SET board_column = $1, board_position = ordered.ord - 1
+FROM jsonb_array_elements_text(CAST($2::text AS jsonb)) WITH ORDINALITY AS ordered(id, ord)
+WHERE todos.id = ordered.id::bigint
+`
+
+type SetTodoBoardPositionsParams struct {
+	BoardColumn sql.NullString
+	Ids         string
+}
+
+// ids is a JSON array of todo IDs in column order: an array parameter would
+// need lib/pq. Each listed todo takes its index there as its board position.
+func (q *Queries) SetTodoBoardPositions(ctx context.Context, arg SetTodoBoardPositionsParams) error {
+	_, err := q.db.ExecContext(ctx, setTodoBoardPositions, arg.BoardColumn, arg.Ids)
 	return err
 }
 
@@ -1112,20 +1132,6 @@ func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, 
 		return 0, err
 	}
 	return result.RowsAffected()
-}
-
-const updateTodoBoardPosition = `-- name: UpdateTodoBoardPosition :exec
-UPDATE todos SET board_position = $1 WHERE id = $2
-`
-
-type UpdateTodoBoardPositionParams struct {
-	BoardPosition sql.NullInt64
-	ID            int64
-}
-
-func (q *Queries) UpdateTodoBoardPosition(ctx context.Context, arg UpdateTodoBoardPositionParams) error {
-	_, err := q.db.ExecContext(ctx, updateTodoBoardPosition, arg.BoardPosition, arg.ID)
-	return err
 }
 
 const upsertServiceDeskRequest = `-- name: UpsertServiceDeskRequest :exec

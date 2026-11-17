@@ -85,7 +85,7 @@ type Manager interface {
 	DeleteTask(ctx context.Context, id string) error
 	CreateTodo(ctx context.Context, t todo.Todo) (int64, error)
 	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
-	SetTodoBoardPositions(ctx context.Context, ids []int64) error
+	SetTodoBoardPositions(ctx context.Context, column todo.BoardColumn, ids []int64) error
 	CountTodosByTask(ctx context.Context) (map[string]todo.Count, error)
 	UpdateTodo(ctx context.Context, t todo.Todo) error
 	DeleteTodo(ctx context.Context, id int64) error

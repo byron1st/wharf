@@ -21,6 +21,7 @@ var (
 	ErrTaskOfUpdatedTodoNotFound = errors.New("service: task of updated todo not found")
 	ErrTodoToUpdateNotFound      = errors.New("service: todo to update not found")
 	ErrTodoToDeleteNotFound      = errors.New("service: todo to delete not found")
+	ErrUnknownBoardColumn        = errors.New("service: todo board column is unknown")
 	ErrInvalidTodoIDToReorder    = errors.New("service: todo id to reorder is not positive")
 	ErrDuplicateTodoIDToReorder  = errors.New("service: todo id to reorder is duplicated")
 )
@@ -31,11 +32,16 @@ func (s *service) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 	return s.db.ListTodos(ctx, f)
 }
 
-// ReorderBoardTodos orders the todos of one Todo view column as ids lists
-// them. IDs that are not stored are skipped, and todos not in ids keep their
-// board positions. It fails with ErrInvalidTodoIDToReorder for an ID that is
-// not positive and with ErrDuplicateTodoIDToReorder for an ID listed twice.
-func (s *service) ReorderBoardTodos(ctx context.Context, ids []int64) error {
+// ReorderBoardTodos places the todos in ids in the Todo view column, in that
+// order. IDs that are not stored are skipped, and todos not in ids keep their
+// places. It fails with ErrUnknownBoardColumn for a column that is not one of
+// the board's, ErrInvalidTodoIDToReorder for an ID that is not positive, and
+// ErrDuplicateTodoIDToReorder for an ID listed twice.
+func (s *service) ReorderBoardTodos(ctx context.Context, column todo.BoardColumn, ids []int64) error {
+	if !column.Valid() {
+		return fmt.Errorf("%w: column=%s", ErrUnknownBoardColumn, column)
+	}
+
 	seen := make(map[int64]bool, len(ids))
 	for _, id := range ids {
 		if id <= 0 {
@@ -49,7 +55,7 @@ func (s *service) ReorderBoardTodos(ctx context.Context, ids []int64) error {
 		seen[id] = true
 	}
 
-	return s.db.SetTodoBoardPositions(ctx, ids)
+	return s.db.SetTodoBoardPositions(ctx, column, ids)
 }
 
 // CreateTodo validates t and stores it as a new todo of the stored task

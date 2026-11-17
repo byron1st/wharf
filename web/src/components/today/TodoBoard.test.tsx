@@ -228,7 +228,7 @@ describe('TodoBoard', () => {
     stubFetch()
     renderBoard([
       { task: task('local-WHF-001'), todos: [todo(1, { end_date: '2026-10-20' }), todo(2, { end_date: '2026-10-24' })] },
-      { task: task('local-WHF-002'), todos: [todo(3, { task_id: 'local-WHF-002', end_date: '2026-10-20', board_position: 0 })] },
+      { task: task('local-WHF-002'), todos: [todo(3, { task_id: 'local-WHF-002', end_date: '2026-10-20', board_column: 'late', board_position: 0 })] },
     ])
 
     expect(cardsIn('Late')).toEqual(['Todo 3', 'Todo 1', 'Todo 2'])
@@ -249,7 +249,7 @@ describe('TodoBoard', () => {
     expect(sends[1]).toEqual({
       method: 'PUT',
       url: '/api/todos/board-order',
-      body: { ids: x > 600 ? [2, 1] : [1] },
+      body: { column: x > 600 ? 'later' : 'today', ids: x > 600 ? [2, 1] : [1] },
     })
   })
 
@@ -263,7 +263,7 @@ describe('TodoBoard', () => {
 
     await waitFor(() => expect(sends).toHaveLength(2))
     expect(sends[0]).toMatchObject({ url: '/api/todos/1', body: { end_date: null } })
-    expect(sends[1]).toMatchObject({ url: '/api/todos/board-order', body: { ids: [1, 2] } })
+    expect(sends[1]).toMatchObject({ url: '/api/todos/board-order', body: { column: 'nodate', ids: [1, 2] } })
   })
 
   it('reorders a column without changing dates', async () => {
@@ -275,7 +275,47 @@ describe('TodoBoard', () => {
     await drag('Todo 3', 900 + 100, 120)
 
     await waitFor(() => expect(sends).toHaveLength(1))
-    expect(sends[0]).toEqual({ method: 'PUT', url: '/api/todos/board-order', body: { ids: [3, 1, 2] } })
+    expect(sends[0]).toEqual({ method: 'PUT', url: '/api/todos/board-order', body: { column: 'nodate', ids: [3, 1, 2] } })
+  })
+
+  it('keeps the todos a filter hides in the column order it stores', async () => {
+    const sends = stubFetch()
+    stubRects()
+    renderBoard([
+      { task: task('local-WHF-001'), todos: [todo(1), todo(2)] },
+      { task: task('local-WHF-002'), todos: [todo(3, { task_id: 'local-WHF-002' })] },
+    ])
+
+    fireEvent.click(screen.getByTitle('WHF-001 · Title of local-WHF-001'))
+    // Todo 2 lands on Todo 1, the first card of the filtered No date column.
+    await drag('Todo 2', 900 + 100, 120)
+
+    await waitFor(() => expect(sends).toHaveLength(1))
+    expect(sends[0].body).toEqual({ column: 'nodate', ids: [2, 1, 3] })
+  })
+
+  it('drops the task filter once the task has no open todo left', () => {
+    stubFetch()
+    const groups = [
+      { task: task('local-WHF-001'), todos: [todo(1)] },
+      { task: task('local-WHF-002'), todos: [todo(2, { task_id: 'local-WHF-002' })] },
+    ]
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const board = (g: TodoGroup[]) => (
+      <QueryClientProvider client={qc}>
+        <ClockContext.Provider value={{ now, today }}>
+          <TodoBoard groups={g} doneToday={[]} selection={null} onSelect={vi.fn()} onToggleDone={vi.fn()} />
+        </ClockContext.Provider>
+      </QueryClientProvider>
+    )
+    const { rerender } = render(board(groups))
+
+    fireEvent.click(screen.getByTitle('WHF-002 · Title of local-WHF-002'))
+    expect(cardsIn('No date')).toEqual(['Todo 2'])
+
+    rerender(board([groups[0], { ...groups[1], todos: [todo(2, { task_id: 'local-WHF-002', is_done: true })] }]))
+    expect(screen.getByRole('button', { name: /^All tasks/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(cardsIn('No date')).toEqual(['Todo 1'])
   })
 
   it('takes no drops in Late from another column, and does not drag a done todo', async () => {
