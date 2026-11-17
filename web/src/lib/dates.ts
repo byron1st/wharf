@@ -168,6 +168,67 @@ export function nextTodo<T extends DatedTodo>(todos: T[], today: string): T | un
   return best
 }
 
+/** BoardColumn is a column of the Todo view. */
+export type BoardColumn = 'late' | 'today' | 'later' | 'nodate'
+
+export const BOARD_COLUMNS: BoardColumn[] = ['late', 'today', 'later', 'nodate']
+
+/** boardColumn is the Todo view column of a todo, from its end date. */
+export function boardColumn(t: { start_date: string | null; end_date: string | null }, today: string): BoardColumn {
+  if (!t.end_date) return 'nodate'
+  const tone = whenPill(t, today).tone
+  return tone === 'over' ? 'late' : tone === 'today' ? 'today' : 'later'
+}
+
+/**
+ * boardMoveDates are the dates a todo takes when dropped on column col from
+ * another column, or null when they stay: Due today ends it today (and starts
+ * it today if it started later), Upcoming ends it tomorrow unless it already
+ * ends later, and No date clears its end. Late takes no drops from elsewhere.
+ */
+export function boardMoveDates(
+  t: { start_date: string | null; end_date: string | null },
+  col: BoardColumn,
+  today: string,
+): { start_date: string | null; end_date: string | null } | null {
+  if (col === 'today') {
+    return { start_date: t.start_date && t.start_date > today ? today : t.start_date, end_date: today }
+  }
+  if (col === 'later') {
+    return t.end_date && t.end_date > today ? null : { start_date: t.start_date, end_date: addDays(today, 1) }
+  }
+  if (col === 'nodate') return { start_date: t.start_date, end_date: null }
+  return null
+}
+
+/**
+ * compareBoardTodos orders the todos of a column: by board position, then
+ * those never placed by hand by end date, then by their task's place on
+ * Today (taskRank), then by their place in the task.
+ */
+export function compareBoardTodos(
+  a: { task_id: string; end_date: string | null; position: number | null; board_position?: number | null },
+  b: { task_id: string; end_date: string | null; position: number | null; board_position?: number | null },
+  taskRank: Map<string, number>,
+): number {
+  const pa = a.board_position ?? null
+  const pb = b.board_position ?? null
+  if (pa !== pb) {
+    if (pa === null) return 1
+    if (pb === null) return -1
+    return pa - pb
+  }
+  if (a.end_date !== b.end_date) {
+    if (a.end_date === null) return 1
+    if (b.end_date === null) return -1
+    return a.end_date < b.end_date ? -1 : 1
+  }
+  const ra = taskRank.get(a.task_id) ?? Infinity
+  const rb = taskRank.get(b.task_id) ?? Infinity
+  if (ra !== rb) return ra < rb ? -1 : 1
+  return (a.position ?? 0) - (b.position ?? 0)
+}
+
 /** compareTodayTasks orders Today's task groups: by stored position, then unpositioned ones by due date, undated last, then by ID. */
 export function compareTodayTasks(
   a: { id: string; position: number | null; due_date: string | null },
