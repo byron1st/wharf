@@ -338,6 +338,9 @@ describe('TaskCards', () => {
     ])
     unfold(/^WHF-003/)
     unfold(/^WHF-004/)
+    // Both the dragged todo and the one it lands on are draggable rows, so only the card boundary stops the move.
+    expect(screen.getByText('Todo 2').closest('[data-todo]')).not.toBeNull()
+    expect(screen.getByText('Todo 6').closest('[data-todo]')).not.toBeNull()
 
     await drag(screen.getByText('Todo 2'), 22, 2 * 44 + 22)
 
