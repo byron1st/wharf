@@ -286,10 +286,12 @@ export function useTodoActions() {
   const reorderBoard = useMutation({
     // A todo moved here from another column has its dates saved first, so the
     // refetch after this save never brings back its old column.
-    mutationFn: ({ column, ids, after }: { column: string; ids: number[]; after?: number }) => {
-      const save = () => queued('todo-board-order', () => api.reorderBoardTodos(column, ids))
-      return after === undefined ? save() : queued(`todo-${after}`, save)
-    },
+    // Orders keep their place in line from the drop on, so a later drop is never overwritten by an earlier one.
+    mutationFn: ({ column, ids, after }: { column: string; ids: number[]; after?: number }) =>
+      queued('todo-board-order', () => {
+        const save = () => api.reorderBoardTodos(column, ids)
+        return after === undefined ? save() : queued(`todo-${after}`, save)
+      }),
     onMutate: async ({ column, ids }) => {
       await qc.cancelQueries({ queryKey: keys.allTodos })
       const snap = snapshot(qc)

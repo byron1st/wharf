@@ -488,6 +488,15 @@ func TestSetTodoBoardPositions(t *testing.T) {
 
 	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardLate, nil))
 
+	// A new order of a column takes out the todos placed there before but not listed now.
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardToday, []int64{a}))
+	require.Equal(t, map[int64]place{
+		a: {todo.BoardToday, new(0)},
+		b: {todo.BoardNoDate, new(0)},
+		c: {},
+	}, places())
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardToday, []int64{c, a}))
+
 	// A new end date moves the todo to another column, so it drops its place.
 	require.NoError(
 		t,

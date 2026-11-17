@@ -182,9 +182,9 @@ export function boardColumn(t: { start_date: string | null; end_date: string | n
 
 /**
  * boardMoveDates are the dates a todo takes when dropped on column col from
- * another column, or null when they stay: Due today ends it today (and starts
- * it today if it started later), Upcoming ends it tomorrow unless it already
- * ends later, and No date clears its end. Late takes no drops from elsewhere.
+ * another column, or null when they stay: Due today ends it today, Upcoming
+ * ends it tomorrow unless it already ends later (either moving a later start
+ * up to the new end), and No date clears its end. Late takes no drops from elsewhere.
  */
 export function boardMoveDates(
   t: { start_date: string | null; end_date: string | null },
@@ -195,7 +195,9 @@ export function boardMoveDates(
     return { start_date: t.start_date && t.start_date > today ? today : t.start_date, end_date: today }
   }
   if (col === 'later') {
-    return t.end_date && t.end_date > today ? null : { start_date: t.start_date, end_date: addDays(today, 1) }
+    if (t.end_date && t.end_date > today) return null
+    const tomorrow = addDays(today, 1)
+    return { start_date: t.start_date && t.start_date > tomorrow ? tomorrow : t.start_date, end_date: tomorrow }
   }
   if (col === 'nodate') return { start_date: t.start_date, end_date: null }
   return null

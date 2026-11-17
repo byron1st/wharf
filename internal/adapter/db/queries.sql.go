@@ -11,6 +11,23 @@ import (
 	"time"
 )
 
+const clearTodoBoardColumn = `-- name: ClearTodoBoardColumn :exec
+UPDATE todos SET board_column = NULL, board_position = NULL
+WHERE board_column = $1
+  AND id NOT IN (SELECT jsonb_array_elements_text(CAST($2::text AS jsonb))::bigint)
+`
+
+type ClearTodoBoardColumnParams struct {
+	BoardColumn sql.NullString
+	Ids         string
+}
+
+// Takes the todos not in ids, a JSON array of todo IDs, out of the column.
+func (q *Queries) ClearTodoBoardColumn(ctx context.Context, arg ClearTodoBoardColumnParams) error {
+	_, err := q.db.ExecContext(ctx, clearTodoBoardColumn, arg.BoardColumn, arg.Ids)
+	return err
+}
+
 const completeTodosOfTask = `-- name: CompleteTodosOfTask :exec
 UPDATE todos SET
     is_done      = true,
@@ -1119,8 +1136,8 @@ type UpdateTodoParams struct {
 	ID          int64
 }
 
-// A todo that stays done keeps its completed_at. A new end date moves it to
-// another Todo view column, so it drops its place there.
+// A todo that stays done keeps its completed_at. A new end date drops the
+// todo's hand-set place on the Todo view, since its column often changes too.
 func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updateTodo,
 		arg.EndDate,

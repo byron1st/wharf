@@ -473,7 +473,7 @@ export function TodoBoard({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   // Derived once per data change, not on every drag-over render.
-  const { tasks, taskMap, openTodos, counts, columns, done, colOf } = useMemo(() => {
+  const { tasks, taskMap, openTodos, counts, columns, done, colOf, indexOf } = useMemo(() => {
     const tasks = groups.map((g) => g.task)
     const taskMap = new Map(tasks.map((t) => [t.id, t]))
     const taskRank = new Map(tasks.map((t, i) => [t.id, i]))
@@ -494,8 +494,14 @@ export function TodoBoard({
     for (const t of finished.values()) done.get(boardColumn(t, today))?.push(t)
     for (const [c, list] of done) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
     const colOf = new Map<number, BoardColumn>()
-    for (const [c, list] of columns) for (const t of list) colOf.set(t.id, c)
-    return { tasks, taskMap, openTodos, counts, columns, done, colOf }
+    const indexOf = new Map<number, number>()
+    for (const [c, list] of columns) {
+      list.forEach((t, i) => {
+        colOf.set(t.id, c)
+        indexOf.set(t.id, i)
+      })
+    }
+    return { tasks, taskMap, openTodos, counts, columns, done, colOf, indexOf }
   }, [groups, doneToday, today])
   // A task whose last open todo is done loses its chip, and with it the filter.
   const filter = picked && counts.has(picked) ? picked : null
@@ -515,8 +521,7 @@ export function TodoBoard({
   /** below says whether card id sits below the dragged todo in its own column, so the todo lands after it. */
   const below = (id: number) => {
     if (active === null || from === undefined || colOf.get(id) !== from) return false
-    const list = columns.get(from) ?? []
-    return list.findIndex((t) => t.id === id) > list.findIndex((t) => t.id === active)
+    return (indexOf.get(id) ?? 0) > (indexOf.get(active) ?? 0)
   }
 
   const drop = (to: string | number | null) => {

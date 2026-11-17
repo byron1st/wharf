@@ -35,6 +35,7 @@ var (
 	ErrFailedToListTodoRequests    = errors.New("db: failed to list service desk requests of todos")
 	ErrFailedToCountTodosByTask    = errors.New("db: failed to count todos by task")
 	ErrFailedToUpdateBoardPosition = errors.New("db: failed to update todo board position")
+	ErrFailedToClearBoardColumn    = errors.New("db: failed to clear todo board column")
 )
 
 // CreateTodo stores t as a new todo of the stored task t.TaskID and returns
@@ -349,9 +350,10 @@ func toNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
 
-// SetTodoBoardPositions places the todos in ids in column, each at its
-// index in ids, in one statement. IDs that are not stored are skipped, and
-// todos not in ids keep their places.
+// SetTodoBoardPositions makes ids the hand-set order of column: each todo in
+// ids takes its index there, and the other todos placed in column lose their
+// place, so none keeps a stale index that ties with these. IDs that are not
+// stored are skipped, and an empty ids changes nothing.
 func (m *manager) SetTodoBoardPositions(ctx context.Context, column todo.BoardColumn, ids []int64) error {
 	if err := m.checkConnected(); err != nil {
 		return err
@@ -367,10 +369,15 @@ func (m *manager) SetTodoBoardPositions(ctx context.Context, column todo.BoardCo
 	// The advisory lock keeps two devices' orders from locking rows in
 	// opposite orders and deadlocking.
 	return m.inTx(ctx, func(queries *Queries) error {
-		params := SetTodoBoardPositionsParams{
-			BoardColumn: sql.NullString{String: string(column), Valid: true},
-			Ids:         string(list),
+		col := sql.NullString{String: string(column), Valid: true}
+		if err := queries.ClearTodoBoardColumn(
+			ctx,
+			ClearTodoBoardColumnParams{BoardColumn: col, Ids: string(list)},
+		); err != nil {
+			return fmt.Errorf("%w: column=%s", errors.Join(ErrFailedToClearBoardColumn, err), column)
 		}
+
+		params := SetTodoBoardPositionsParams{BoardColumn: col, Ids: string(list)}
 		if err := queries.SetTodoBoardPositions(ctx, params); err != nil {
 			return fmt.Errorf("%w: column=%s", errors.Join(ErrFailedToUpdateBoardPosition, err), column)
 		}

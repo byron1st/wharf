@@ -321,6 +321,7 @@ describe('boardMoveDates', () => {
     expect(boardMoveDates({ start_date: null, end_date: null }, 'later', today)).toEqual({ start_date: null, end_date: '2026-10-27' })
     expect(boardMoveDates({ start_date: null, end_date: today }, 'later', today)).toEqual({ start_date: null, end_date: '2026-10-27' })
     expect(boardMoveDates({ start_date: null, end_date: '2026-10-30' }, 'later', today)).toBeNull()
+    expect(boardMoveDates({ start_date: '2026-11-02', end_date: null }, 'later', today)).toEqual({ start_date: '2026-10-27', end_date: '2026-10-27' })
   })
 
   it('clears the end date in No date and changes nothing in Late', () => {
