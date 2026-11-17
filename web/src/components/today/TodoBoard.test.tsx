@@ -170,6 +170,29 @@ describe('TodoBoard', () => {
     expect(onToggleDone).toHaveBeenCalledWith(done, false)
   })
 
+  it('keeps a todo checked on the board in Done today before the done list is fetched again', () => {
+    stubFetch()
+    const checked = todo(1, { is_done: true, completed_at: now.toISOString() })
+    renderBoard([{ task: task('local-WHF-001'), todos: [checked, todo(2)] }])
+
+    expect(cardsIn('No date')).toEqual(['Todo 2', 'Todo 1'])
+    expect(within(column('No date')).getByText('Done today · 1')).toBeInTheDocument()
+  })
+
+  it('stores nothing when a todo is dropped where it already is', async () => {
+    const sends = stubFetch()
+    stubRects()
+    renderBoard([{ task: task('local-WHF-001'), todos: [todo(1), todo(2)] }])
+
+    // Todo 1 lands on Todo 2, which it already sits before.
+    await drag('Todo 1', 900 + 100, 180)
+    // Todo 2, already last, lands on the column below the cards.
+    await drag('Todo 2', 900 + 100, 600)
+
+    await new Promise((r) => setTimeout(r, 20))
+    expect(sends).toHaveLength(0)
+  })
+
   it('selects a todo from its text and its task from the task line, and marks them', () => {
     stubFetch()
     const groups = [{ task: task('local-WHF-001'), todos: [todo(1)] }]
@@ -315,7 +338,9 @@ describe('TodoBoard', () => {
 
     rerender(board([groups[0], { ...groups[1], todos: [todo(2, { task_id: 'local-WHF-002', is_done: true })] }]))
     expect(screen.getByRole('button', { name: /^All tasks/ })).toHaveAttribute('aria-pressed', 'true')
-    expect(cardsIn('No date')).toEqual(['Todo 1'])
+    // Every task shows again, with the todo just finished under Done today.
+    expect(cardsIn('No date')).toEqual(['Todo 1', 'Todo 2'])
+    expect(within(column('No date')).getByText('Done today · 1')).toBeInTheDocument()
   })
 
   it('takes no drops in Late from another column, and does not drag a done todo', async () => {

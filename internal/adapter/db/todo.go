@@ -35,7 +35,6 @@ var (
 	ErrFailedToListTodoRequests    = errors.New("db: failed to list service desk requests of todos")
 	ErrFailedToCountTodosByTask    = errors.New("db: failed to count todos by task")
 	ErrFailedToUpdateBoardPosition = errors.New("db: failed to update todo board position")
-	ErrFailedToEncodeBoardTodoIDs  = errors.New("db: failed to encode board todo ids")
 )
 
 // CreateTodo stores t as a new todo of the stored task t.TaskID and returns
@@ -358,20 +357,21 @@ func (m *manager) SetTodoBoardPositions(ctx context.Context, column todo.BoardCo
 		return err
 	}
 
-	list, err := json.Marshal(ids)
-	if err != nil {
-		return errors.Join(ErrFailedToEncodeBoardTodoIDs, err)
+	if len(ids) == 0 {
+		return nil
 	}
 
-	return m.inTx(ctx, func(queries *Queries) error {
-		params := SetTodoBoardPositionsParams{
-			BoardColumn: sql.NullString{String: string(column), Valid: true},
-			Ids:         string(list),
-		}
-		if err := queries.SetTodoBoardPositions(ctx, params); err != nil {
-			return fmt.Errorf("%w: column=%s", errors.Join(ErrFailedToUpdateBoardPosition, err), column)
-		}
+	// Marshaling an []int64 cannot fail.
+	list, _ := json.Marshal(ids)
 
-		return nil
-	})
+	// One statement needs no transaction or advisory lock.
+	params := SetTodoBoardPositionsParams{
+		BoardColumn: sql.NullString{String: string(column), Valid: true},
+		Ids:         string(list),
+	}
+	if err := m.queries.SetTodoBoardPositions(ctx, params); err != nil {
+		return fmt.Errorf("%w: column=%s", errors.Join(ErrFailedToUpdateBoardPosition, err), column)
+	}
+
+	return nil
 }

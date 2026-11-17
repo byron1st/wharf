@@ -481,9 +481,12 @@ export function TodoBoard({
   for (const t of openTodos) columns.get(boardColumn(t, today))?.push(t)
   for (const [c, list] of columns) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
   const done = new Map<BoardColumn, Todo[]>(BOARD_COLUMNS.map((c) => [c, []]))
-  for (const t of doneToday) {
-    if (t.is_done && taskMap.has(t.task_id)) done.get(boardColumn(t, today))?.push(t)
+  // A todo checked here is done in the open list's cache before the done list is fetched again.
+  const finished = new Map<number, Todo>()
+  for (const t of [...doneToday, ...groups.flatMap((g) => g.todos)]) {
+    if (t.is_done && taskMap.has(t.task_id)) finished.set(t.id, t)
   }
+  for (const t of finished.values()) done.get(boardColumn(t, today))?.push(t)
   for (const [c, list] of done) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
   const shown = (list: Todo[]) => (filter ? list.filter((t) => t.task_id === filter) : list)
 
@@ -509,6 +512,8 @@ export function TodoBoard({
     const ids = (columns.get(col) ?? []).map((t) => t.id).filter((id) => id !== dragged.id)
     const at = typeof to === 'number' ? ids.indexOf(to) : -1
     ids.splice(at < 0 ? ids.length : at, 0, dragged.id)
+    const current = (columns.get(col) ?? []).map((t) => t.id)
+    if (col === from && ids.every((id, i) => id === current[i])) return
     if (col !== from) {
       const dates = boardMoveDates(dragged, col, today)
       if (dates) update(dragged, dates)
