@@ -364,14 +364,17 @@ func (m *manager) SetTodoBoardPositions(ctx context.Context, column todo.BoardCo
 	// Marshaling an []int64 cannot fail.
 	list, _ := json.Marshal(ids)
 
-	// One statement needs no transaction or advisory lock.
-	params := SetTodoBoardPositionsParams{
-		BoardColumn: sql.NullString{String: string(column), Valid: true},
-		Ids:         string(list),
-	}
-	if err := m.queries.SetTodoBoardPositions(ctx, params); err != nil {
-		return fmt.Errorf("%w: column=%s", errors.Join(ErrFailedToUpdateBoardPosition, err), column)
-	}
+	// The advisory lock keeps two devices' orders from locking rows in
+	// opposite orders and deadlocking.
+	return m.inTx(ctx, func(queries *Queries) error {
+		params := SetTodoBoardPositionsParams{
+			BoardColumn: sql.NullString{String: string(column), Valid: true},
+			Ids:         string(list),
+		}
+		if err := queries.SetTodoBoardPositions(ctx, params); err != nil {
+			return fmt.Errorf("%w: column=%s", errors.Join(ErrFailedToUpdateBoardPosition, err), column)
+		}
 
-	return nil
+		return nil
+	})
 }

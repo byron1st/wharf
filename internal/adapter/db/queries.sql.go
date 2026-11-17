@@ -1098,34 +1098,37 @@ func (q *Queries) UpdateTaskPosition(ctx context.Context, arg UpdateTaskPosition
 
 const updateTodo = `-- name: UpdateTodo :execrows
 UPDATE todos SET
-    description  = $1,
-    note         = $2,
-    is_done      = $3,
-    completed_at = CASE WHEN $3 THEN COALESCE(completed_at, $4) END,
-    start_date   = $5,
-    end_date     = $6
+    board_column   = CASE WHEN end_date IS NOT DISTINCT FROM $1 THEN board_column END,
+    board_position = CASE WHEN end_date IS NOT DISTINCT FROM $1 THEN board_position END,
+    description  = $2,
+    note         = $3,
+    is_done      = $4,
+    completed_at = CASE WHEN $4 THEN COALESCE(completed_at, $5) END,
+    start_date   = $6,
+    end_date     = $1
 WHERE id = $7
 `
 
 type UpdateTodoParams struct {
+	EndDate     sql.NullString
 	Description string
 	Note        string
 	IsDone      bool
 	CompletedAt sql.NullTime
 	StartDate   sql.NullString
-	EndDate     sql.NullString
 	ID          int64
 }
 
-// A todo that stays done keeps its completed_at.
+// A todo that stays done keeps its completed_at. A new end date moves it to
+// another Todo view column, so it drops its place there.
 func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updateTodo,
+		arg.EndDate,
 		arg.Description,
 		arg.Note,
 		arg.IsDone,
 		arg.CompletedAt,
 		arg.StartDate,
-		arg.EndDate,
 		arg.ID,
 	)
 	if err != nil {

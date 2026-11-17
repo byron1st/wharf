@@ -10,7 +10,7 @@ import {
   type CollisionDetection,
 } from '@dnd-kit/core'
 import { Bell, FileText, Plus, Ticket } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { OriginDot } from '@/components/common/badges'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -96,7 +96,7 @@ function BoardCard({
   onSelect,
   onToggleDone,
   dragging,
-  lineBefore,
+  line,
 }: {
   todo: Todo
   task: TaskListItem | undefined
@@ -106,7 +106,8 @@ function BoardCard({
   onSelect: (s: Selection) => void
   onToggleDone: (todo: Todo, done: boolean) => void
   dragging: boolean
-  lineBefore: boolean
+  /** line marks the side of the card the dragged todo will land on. */
+  line: 'top' | 'bottom' | null
 }) {
   const { now, today } = useNow()
   const done = todo.is_done
@@ -120,7 +121,7 @@ function BoardCard({
   const note = !done && todo.note.trim() !== ''
   return (
     <>
-      {lineBefore && <div aria-hidden className="-my-[3px] h-[3px] shrink-0 rounded-sm bg-accent" />}
+      {line === 'top' && <div aria-hidden className="-my-[3px] h-[3px] shrink-0 rounded-sm bg-accent" />}
       <div
         ref={(node) => {
           dragRef(node)
@@ -203,6 +204,7 @@ function BoardCard({
           </div>
         )}
       </div>
+      {line === 'bottom' && <div aria-hidden className="-my-[3px] h-[3px] shrink-0 rounded-sm bg-accent" />}
     </>
   )
 }
@@ -311,14 +313,17 @@ function NewTodoButton({ tasks, defaultTask }: { tasks: TaskListItem[]; defaultT
 
   // The listener is added once and opens with the defaults of the latest render.
   const showRef = useRef(show)
+  const hasTasks = useRef(tasks.length > 0)
   useEffect(() => {
     showRef.current = show
+    hasTasks.current = tasks.length > 0
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (e.key.toLowerCase() !== 't' || e.metaKey || e.ctrlKey || e.altKey) return
       if (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
+      if (!hasTasks.current) return
       e.preventDefault()
       showRef.current(true)
     }
@@ -467,31 +472,34 @@ export function TodoBoard({
   // A small distance keeps clicks on a card's checkbox, text and task from starting a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
-  const tasks = groups.map((g) => g.task)
-  const taskMap = new Map(tasks.map((t) => [t.id, t]))
-  const taskRank = new Map(tasks.map((t, i) => [t.id, i]))
-  const openTodos = groups.flatMap((g) => g.todos.filter((t) => !t.is_done))
-  const counts = new Map<string, number>()
-  for (const t of openTodos) counts.set(t.task_id, (counts.get(t.task_id) ?? 0) + 1)
+  // Derived once per data change, not on every drag-over render.
+  const { tasks, taskMap, openTodos, counts, columns, done, colOf } = useMemo(() => {
+    const tasks = groups.map((g) => g.task)
+    const taskMap = new Map(tasks.map((t) => [t.id, t]))
+    const taskRank = new Map(tasks.map((t, i) => [t.id, i]))
+    const openTodos = groups.flatMap((g) => g.todos.filter((t) => !t.is_done))
+    const counts = new Map<string, number>()
+    for (const t of openTodos) counts.set(t.task_id, (counts.get(t.task_id) ?? 0) + 1)
+
+    /** columns are the open todos of each column, of every task, in board order. */
+    const columns = new Map<BoardColumn, Todo[]>(BOARD_COLUMNS.map((c) => [c, []]))
+    for (const t of openTodos) columns.get(boardColumn(t, today))?.push(t)
+    for (const [c, list] of columns) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
+    const done = new Map<BoardColumn, Todo[]>(BOARD_COLUMNS.map((c) => [c, []]))
+    // A todo checked here is done in the open list's cache before the done list is fetched again.
+    const finished = new Map<number, Todo>()
+    for (const t of [...doneToday, ...groups.flatMap((g) => g.todos)]) {
+      if (t.is_done && taskMap.has(t.task_id)) finished.set(t.id, t)
+    }
+    for (const t of finished.values()) done.get(boardColumn(t, today))?.push(t)
+    for (const [c, list] of done) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
+    const colOf = new Map<number, BoardColumn>()
+    for (const [c, list] of columns) for (const t of list) colOf.set(t.id, c)
+    return { tasks, taskMap, openTodos, counts, columns, done, colOf }
+  }, [groups, doneToday, today])
   // A task whose last open todo is done loses its chip, and with it the filter.
   const filter = picked && counts.has(picked) ? picked : null
-
-  /** columns are the open todos of each column, of every task, in board order. */
-  const columns = new Map<BoardColumn, Todo[]>(BOARD_COLUMNS.map((c) => [c, []]))
-  for (const t of openTodos) columns.get(boardColumn(t, today))?.push(t)
-  for (const [c, list] of columns) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
-  const done = new Map<BoardColumn, Todo[]>(BOARD_COLUMNS.map((c) => [c, []]))
-  // A todo checked here is done in the open list's cache before the done list is fetched again.
-  const finished = new Map<number, Todo>()
-  for (const t of [...doneToday, ...groups.flatMap((g) => g.todos)]) {
-    if (t.is_done && taskMap.has(t.task_id)) finished.set(t.id, t)
-  }
-  for (const t of finished.values()) done.get(boardColumn(t, today))?.push(t)
-  for (const [c, list] of done) list.sort((a, b) => compareBoardTodos(a, b, taskRank, c))
   const shown = (list: Todo[]) => (filter ? list.filter((t) => t.task_id === filter) : list)
-
-  const colOf = new Map<number, BoardColumn>()
-  for (const [c, list] of columns) for (const t of list) colOf.set(t.id, c)
   const dragged = active === null ? undefined : openTodos.find((t) => t.id === active)
   const from = active === null ? undefined : colOf.get(active)
   /** accepts says whether the dragged todo may land in column c: Late only takes its own. */
@@ -504,21 +512,32 @@ export function TodoBoard({
     setOver(null)
   }
 
+  /** below says whether card id sits below the dragged todo in its own column, so the todo lands after it. */
+  const below = (id: number) => {
+    if (active === null || from === undefined || colOf.get(id) !== from) return false
+    const list = columns.get(from) ?? []
+    return list.findIndex((t) => t.id === id) > list.findIndex((t) => t.id === active)
+  }
+
   const drop = (to: string | number | null) => {
     if (!dragged || from === undefined || to === null || to === dragged.id) return
     const col = typeof to === 'number' ? colOf.get(to) : (to.slice(COL_PREFIX.length) as BoardColumn)
     if (!col || !accepts(col)) return
     // The order covers every task's todos in the column, also the ones a filter hides.
-    const ids = (columns.get(col) ?? []).map((t) => t.id).filter((id) => id !== dragged.id)
-    const at = typeof to === 'number' ? ids.indexOf(to) : -1
-    ids.splice(at < 0 ? ids.length : at, 0, dragged.id)
     const current = (columns.get(col) ?? []).map((t) => t.id)
+    const ids = current.filter((id) => id !== dragged.id)
+    const at = typeof to === 'number' ? ids.indexOf(to) + (below(to) ? 1 : 0) : ids.length
+    ids.splice(at, 0, dragged.id)
     if (col === from && ids.every((id, i) => id === current[i])) return
+    let after: number | undefined
     if (col !== from) {
       const dates = boardMoveDates(dragged, col, today)
-      if (dates) update(dragged, dates)
+      if (dates) {
+        update(dragged, dates)
+        after = dragged.id
+      }
     }
-    reorderBoard(col, ids)
+    reorderBoard(col, ids, after)
   }
 
   const selectedTask = selection?.kind === 'task' ? selection.id : null
@@ -533,7 +552,7 @@ export function TodoBoard({
       onSelect={onSelect}
       onToggleDone={onToggleDone}
       dragging={active === t.id}
-      lineBefore={active !== null && active !== t.id && over === t.id && accepts(column)}
+      line={active !== null && active !== t.id && over === t.id && accepts(column) ? (below(t.id) ? 'bottom' : 'top') : null}
     />
   )
 

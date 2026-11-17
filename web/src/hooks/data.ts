@@ -284,8 +284,12 @@ export function useTodoActions() {
   })
 
   const reorderBoard = useMutation({
-    mutationFn: ({ column, ids }: { column: string; ids: number[] }) =>
-      queued('todo-board-order', () => api.reorderBoardTodos(column, ids)),
+    // A todo moved here from another column has its dates saved first, so the
+    // refetch after this save never brings back its old column.
+    mutationFn: ({ column, ids, after }: { column: string; ids: number[]; after?: number }) => {
+      const save = () => queued('todo-board-order', () => api.reorderBoardTodos(column, ids))
+      return after === undefined ? save() : queued(`todo-${after}`, save)
+    },
     onMutate: async ({ column, ids }) => {
       await qc.cancelQueries({ queryKey: keys.allTodos })
       const snap = snapshot(qc)
@@ -304,8 +308,8 @@ export function useTodoActions() {
 
   return {
     update: (todo: Todo, patch: Partial<TodoInput>) => update.mutate({ todo, patch }),
-    /** reorderBoard places ids, in order, in the Todo view column. */
-    reorderBoard: (column: string, ids: number[]) => reorderBoard.mutate({ column, ids }),
+    /** reorderBoard places ids, in order, in the Todo view column, after any save of the todo after still in flight. */
+    reorderBoard: (column: string, ids: number[], after?: number) => reorderBoard.mutate({ column, ids, after }),
     create: (input: TodoInput) => create.mutateAsync(input),
     remove: (todo: Todo) => remove.mutate(todo),
     link: (todo: Todo, request: ServiceDeskRequest) => link.mutate({ todo, request }),

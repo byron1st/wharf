@@ -57,7 +57,10 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {}
 })
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  localStorage.clear()
+})
 
 describe('App', () => {
   it('opens Closed tasks from the header and returns to it from a task opened there', async () => {
@@ -156,7 +159,6 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(within(screen.getByRole('region', { name: 'Todo board' })).getByText('Outline the plan')).toBeInTheDocument()
-    localStorage.clear()
   })
 
 })

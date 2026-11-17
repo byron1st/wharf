@@ -184,13 +184,33 @@ describe('TodoBoard', () => {
     stubRects()
     renderBoard([{ task: task('local-WHF-001'), todos: [todo(1), todo(2)] }])
 
-    // Todo 1 lands on Todo 2, which it already sits before.
-    await drag('Todo 1', 900 + 100, 180)
     // Todo 2, already last, lands on the column below the cards.
     await drag('Todo 2', 900 + 100, 600)
 
     await new Promise((r) => setTimeout(r, 20))
     expect(sends).toHaveLength(0)
+  })
+
+  it('moves a todo down one place when it is dropped on the card below it', async () => {
+    const sends = stubFetch()
+    stubRects()
+    renderBoard([{ task: task('local-WHF-001'), todos: [todo(1), todo(2), todo(3)] }])
+
+    // Todo 1 lands on Todo 2, the card right below it (y 160–210).
+    await drag('Todo 1', 900 + 100, 180)
+
+    await waitFor(() => expect(sends).toHaveLength(1))
+    expect(sends[0].body).toEqual({ column: 'nodate', ids: [2, 1, 3] })
+  })
+
+  it('does not open New todo with T when Today has no task', async () => {
+    stubFetch()
+    const user = userEvent.setup()
+    renderBoard([])
+
+    expect(screen.getByRole('button', { name: /New todo/ })).toBeDisabled()
+    await user.keyboard('t')
+    expect(screen.queryByRole('dialog', { name: 'New todo' })).toBeNull()
   })
 
   it('selects a todo from its text and its task from the task line, and marks them', () => {

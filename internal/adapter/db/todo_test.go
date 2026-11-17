@@ -487,4 +487,14 @@ func TestSetTodoBoardPositions(t *testing.T) {
 	}, places())
 
 	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), todo.BoardLate, nil))
+
+	// A new end date moves the todo to another column, so it drops its place.
+	require.NoError(
+		t,
+		manager.UpdateTodo(
+			context.Background(),
+			todo.Todo{ID: c, TaskID: "J1", Description: "c", EndDate: "2026-10-30"},
+		),
+	)
+	require.Equal(t, place{}, places()[c])
 }

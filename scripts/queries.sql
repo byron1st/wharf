@@ -160,8 +160,11 @@ WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = sqlc.arg(task_id))
 RETURNING id;
 
 -- name: UpdateTodo :execrows
--- A todo that stays done keeps its completed_at.
+-- A todo that stays done keeps its completed_at. A new end date moves it to
+-- another Todo view column, so it drops its place there.
 UPDATE todos SET
+    board_column   = CASE WHEN end_date IS NOT DISTINCT FROM sqlc.narg(end_date) THEN board_column END,
+    board_position = CASE WHEN end_date IS NOT DISTINCT FROM sqlc.narg(end_date) THEN board_position END,
     description  = sqlc.arg(description),
     note         = sqlc.arg(note),
     is_done      = sqlc.arg(is_done),
