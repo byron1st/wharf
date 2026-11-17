@@ -8,16 +8,16 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileText, Plus, Ticket, X } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileText, Plus, Ticket, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { Kbd, OriginDot, STATUS_LABEL, StatusIcon } from '@/components/common/badges'
+import { Kbd, OriginDot, StatusIcon } from '@/components/common/badges'
 import { Checkbox } from '@/components/ui/checkbox'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
 import { taskKey, type TaskListItem, type TaskStatus, type Todo } from '@/lib/api'
-import { doneLabel, dueTag, fromTaskDate, reminderSummary, toneClass, whenPill } from '@/lib/dates'
+import { doneLabel, dueTag, fromTaskDate, groupSummary, nextTodo, reminderSummary, toneClass, whenPill } from '@/lib/dates'
 import { cn } from '@/lib/utils'
+import { StatusChip } from './StatusChip'
 
 export type Selection = { kind: 'todo'; id: number } | { kind: 'task'; id: string } | { kind: 'req'; id: string } | null
 
@@ -27,8 +27,8 @@ export interface TodoGroup {
   todos: Todo[]
 }
 
-const ROW = 'grid grid-cols-[28px_minmax(0,1fr)_104px_104px] items-center gap-3 px-4'
-export const STATUSES: TaskStatus[] = ['todo', 'in-progress', 'done', 'canceled']
+/** ROW is a todo row, indented under its task's guide line. */
+const ROW = 'relative ml-11 grid min-h-[42px] grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg py-1.5 pr-3.5 pl-[18px]'
 /** END is the droppable ID of the "move to the end" area. */
 export const END = '__end'
 
@@ -73,10 +73,8 @@ function NewTodoRow({ task, onDone }: { task: TaskListItem; onDone: () => void }
     }).catch(() => setText(d))
   }
   return (
-    <div className="grid min-h-[46px] grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 border-b border-tag-teal-line bg-accent-tint pr-3 pl-4">
-      <span className="flex justify-center">
-        <span className="size-[18px] rounded-[5px] border-[1.5px] border-dashed border-[#2dd4bf]" />
-      </span>
+    <div className="flex items-center gap-2.5 rounded-b-xl border-t border-tag-teal-line bg-accent-tint py-2 pr-3 pl-4">
+      <span className="size-[18px] shrink-0 rounded-[5px] border-[1.5px] border-dashed border-[#2dd4bf]" />
       <input
         autoFocus
         aria-label={`New todo for ${key}`}
@@ -87,7 +85,7 @@ function NewTodoRow({ task, onDone }: { task: TaskListItem; onDone: () => void }
           if (e.key === 'Enter' && !e.nativeEvent.isComposing) add()
           if (e.key === 'Escape') onDone()
         }}
-        className="h-8 min-w-0 bg-transparent text-[14px] outline-none placeholder:text-ink-muted"
+        className="h-[30px] min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-ink-muted"
       />
       <span className="flex items-center gap-2 text-[12px] text-ink-muted">
         <span className="flex items-center gap-1">
@@ -128,23 +126,24 @@ function TodoRow({
   const rem = done ? null : reminderSummary(todo.reminders, now)
   const reqs = todo.service_desk_requests
   return (
-    <div
-      className={cn(ROW, 'min-h-11 border-b border-border-subtle', selected ? 'bg-accent-tint shadow-[inset_0_0_0_1px_var(--color-accent-line)]' : 'bg-white')}
-    >
-      <span className="flex justify-center">
-        <Checkbox checked={done} label={todo.description} onChange={(v) => onToggleDone(todo, v)} />
-      </span>
+    <div className={cn(ROW, selected ? 'bg-accent-tint shadow-[inset_0_0_0_1px_var(--color-accent-line)]' : 'bg-white')}>
+      <span aria-hidden className="absolute top-1/2 -left-[13px] h-0.5 w-2.5 bg-bg-skeleton" />
+      <Checkbox checked={done} label={todo.description} onChange={(v) => onToggleDone(todo, v)} />
       <button
         type="button"
         onClick={onSelect}
         aria-pressed={selected}
-        className={cn(
-          'flex h-[42px] min-w-0 items-center gap-2 text-left text-[14px]',
-          selected && 'font-semibold',
-          done && 'text-ink-muted',
-        )}
+        className="flex min-w-0 flex-wrap items-center gap-2 text-left"
       >
-        <span className={cn('truncate', done && 'line-through')}>{todo.description}</span>
+        <span
+          className={cn(
+            'text-[14px] leading-[1.45] [overflow-wrap:anywhere] break-keep',
+            selected && 'font-semibold',
+            done && 'text-ink-muted line-through',
+          )}
+        >
+          {todo.description}
+        </span>
         {todo.note.trim() && <FileText size={14} className="shrink-0 text-ink-muted" aria-label="Has a note" />}
         {reqs.length > 0 && (
           <span
@@ -156,13 +155,19 @@ function TodoRow({
           </span>
         )}
       </button>
-      <span
-        title={rem && rem.sent ? `${rem.sent} sent` : undefined}
-        className={cn('text-[12px] tabular-nums', rem?.upcoming ? 'text-[#6d28d9]' : 'text-ink-muted')}
-      >
-        {rem?.label}
-      </span>
-      <span className="flex justify-end">
+      <span className="flex items-center gap-2.5">
+        {rem && (
+          <span
+            title={rem.sent ? `${rem.sent} sent` : undefined}
+            className={cn(
+              'inline-flex items-center gap-1 text-[12px] whitespace-nowrap tabular-nums',
+              rem.upcoming ? 'text-[#6d28d9]' : 'text-ink-muted',
+            )}
+          >
+            <Bell size={12} aria-hidden />
+            {rem.label}
+          </span>
+        )}
         {when && (
           <span className={cn('rounded-md px-2 py-0.5 text-[12px] font-medium whitespace-nowrap tabular-nums', toneClass[when.tone])}>
             {when.label}
@@ -238,11 +243,11 @@ function DraggableTodo({
       data-todo={todo.id}
       className={cn('relative', dragging && 'opacity-45')}
     >
-      <span aria-hidden className="absolute top-1/2 left-[3px] z-[1] flex size-3 -translate-y-1/2 cursor-grab text-border-strong">
+      <span aria-hidden className="absolute top-1/2 left-[47px] z-[1] flex size-3 -translate-y-1/2 cursor-grab text-border-strong">
         <GripIcon />
       </span>
       {children}
-      {line && <span aria-hidden className={cn('absolute inset-x-0 z-[1] h-0.5 bg-accent', line === 'top' ? 'top-0' : 'bottom-0')} />}
+      {line && <span aria-hidden className={cn('absolute right-0 left-11 z-[1] h-0.5 bg-accent', line === 'top' ? 'top-0' : 'bottom-0')} />}
     </div>
   )
 }
@@ -329,51 +334,6 @@ function TodoRows({
   )
 }
 
-/** TaskStatusButton opens the status menu of a local task; a Jira task's status is read-only. */
-function TaskStatusButton({ task, onSetStatus }: { task: TaskListItem; onSetStatus: (status: TaskStatus) => void }) {
-  const [open, setOpen] = useState(false)
-  const label = STATUS_LABEL[task.status]
-  if (task.originated !== 'local') {
-    return (
-      <span role="img" aria-label={`Status: ${label}`} title={`${label} · from Jira`} className="flex size-[26px] shrink-0 items-center justify-center">
-        <StatusIcon status={task.status} size={16} />
-      </span>
-    )
-  }
-  return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Status: ${label}`}
-          title={`${label} · change status`}
-          // Radix opens the menu on pointerdown, so keep it from arming the header's drag too.
-          onPointerDown={(e) => e.stopPropagation()}
-          className={cn(
-            'flex size-[26px] shrink-0 items-center justify-center rounded-md border',
-            open ? 'border-accent bg-accent-tint' : 'border-transparent hover:bg-black/5',
-          )}
-        >
-          <StatusIcon status={task.status} size={16} />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={4} className="w-[176px] min-w-0">
-        {STATUSES.map((s) => (
-          <DropdownMenuItem
-            key={s}
-            onSelect={() => s !== task.status && onSetStatus(s)}
-            className={cn('items-center gap-2 px-2 py-0 h-8', s === task.status && 'bg-bg-muted')}
-          >
-            <StatusIcon status={s} />
-            <span className="flex-1">{STATUS_LABEL[s]}</span>
-            {s === task.status && <Check size={12} strokeWidth={3} className="text-accent" aria-label="Current" />}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 /** GripIcon is the six-dot drag handle. */
 export function GripIcon() {
   return (
@@ -431,16 +391,28 @@ function TaskGroup({
   const pct = task.todo_count ? Math.round((task.done_todo_count / task.todo_count) * 100) : 0
   const key = taskKey(task.id)
   const ndone = task.done_todo_count
-  const rings = [dropHere && 'inset 0 2px 0 var(--color-accent)', isSel && 'inset 0 0 0 1px var(--color-accent-line)'].filter(Boolean)
+  const next = open || closed ? undefined : nextTodo(todos, today)
   return (
-    <div ref={dropRef} className={cn(dragging && 'opacity-45')}>
+    <article
+      ref={dropRef}
+      aria-label={`${key} ${task.title}`}
+      className={cn(
+        'relative rounded-xl border bg-white',
+        dropHere
+          ? 'border-accent shadow-ring-drop'
+          : isSel
+            ? 'border-accent-line-strong shadow-ring'
+            : 'border-border shadow-xs',
+        dragging && 'opacity-45',
+      )}
+    >
       <div
         ref={dragRef}
         {...listeners}
-        style={{ boxShadow: rings.join(', ') || undefined }}
         className={cn(
-          'relative grid min-h-11 grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 border-b border-border-subtle px-4',
-          isSel ? 'bg-accent-tint' : 'bg-bg-subtle',
+          'relative grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-2.5 rounded-t-xl border-b py-3 pr-3.5 pl-4',
+          open ? 'border-border-subtle' : 'rounded-b-xl border-transparent',
+          isSel ? 'bg-accent-tint' : open ? 'bg-bg-subtle' : 'bg-white',
         )}
       >
         <button
@@ -453,7 +425,7 @@ function TaskGroup({
             e.preventDefault()
             onMoveBy(e.key === 'ArrowUp' ? -1 : 1)
           }}
-          className="absolute top-1/2 left-[3px] flex size-3 -translate-y-1/2 cursor-grab text-ink-faint focus-visible:text-accent"
+          className="absolute top-5 left-1 flex size-3 cursor-grab text-ink-faint focus-visible:text-accent"
         >
           <GripIcon />
         </button>
@@ -462,39 +434,43 @@ function TaskGroup({
           aria-expanded={open}
           aria-label={`Collapse or expand ${key}`}
           onClick={onCollapse}
-          className="flex size-7 items-center justify-center rounded-md text-ink-muted hover:bg-black/5"
+          className="mt-px flex size-7 items-center justify-center rounded-md text-ink-muted hover:bg-black/5"
         >
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
-        <div className="flex min-w-0 items-center gap-1.5">
-          <TaskStatusButton task={task} onSetStatus={(s) => onSetStatus(task, s)} />
+        <div className="flex min-w-0 flex-col gap-1.5">
           <button
             type="button"
             aria-pressed={isSel}
             title="Show task details"
             onClick={() => onSelect({ kind: 'task', id: task.id })}
-            className="flex h-[42px] min-w-0 flex-1 items-center gap-2 text-left"
+            className={cn(
+              'text-left text-[16px] leading-[1.4] font-semibold tracking-[-0.01em] [overflow-wrap:anywhere] break-keep',
+              closed && 'text-ink-muted',
+            )}
           >
-            <OriginDot origin={task.originated} className="size-2" />
-            <span className="shrink-0 font-mono text-[12px] text-ink-secondary">{key}</span>
-            <span
-              className={cn(
-                'min-w-0 truncate text-[14px] font-semibold underline-offset-[3px]',
-                closed && 'text-ink-muted',
-                isSel && 'underline',
-              )}
-            >
-              {task.title}
+            {task.title}
+          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusChip task={task} onSetStatus={(s) => onSetStatus(task, s)} />
+            <span className="inline-flex items-center gap-1.5">
+              <OriginDot origin={task.originated} className="size-2" />
+              <span className="font-mono text-[12px] text-ink-secondary">{key}</span>
             </span>
-            <span className={cn('shrink-0 rounded-md px-[7px] py-px text-[12px] font-medium', toneClass[due.tone])}>
+            <span className={cn('rounded-md px-[7px] py-px text-[12px] font-medium whitespace-nowrap', toneClass[due.tone])}>
               {due.label}
             </span>
-          </button>
+            <span className="text-[12px] text-ink-muted">{groupSummary(todos, today)}</span>
+          </div>
+          {next && (
+            <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ink-secondary">
+              <span className="shrink-0 text-[11px] font-semibold tracking-[0.04em] text-ink-muted uppercase">Next</span>
+              <span className="min-w-0 [overflow-wrap:anywhere] break-keep">{next.description}</span>
+              <NextWhen todo={next} today={today} />
+            </span>
+          )}
         </div>
-        <span className="flex items-center gap-2 text-[12px] text-ink-muted tabular-nums">
-          <span className="flex h-[5px] w-10 overflow-hidden rounded-full bg-bg-pressed">
-            <span className="bg-tag-violet-solid" style={{ width: `${pct}%` }} />
-          </span>
+        <span className="flex items-center gap-2 pt-0.5">
           <button
             type="button"
             aria-pressed={doneOpen}
@@ -502,14 +478,17 @@ function TaskGroup({
             title={doneOpen ? 'Hide done todos' : ndone ? `Show ${ndone} done todo${ndone > 1 ? 's' : ''}` : 'No done todos yet'}
             onClick={onToggleDoneOpen}
             className={cn(
-              'flex h-6 items-center rounded-md border px-1.5',
+              'flex h-7 items-center gap-2 rounded-md border px-2 text-[12px] tabular-nums',
               doneOpen
                 ? 'border-[#ddd6fe] bg-tag-violet-bg text-tag-violet-ink'
                 : ndone
-                  ? 'border-border bg-white hover:bg-bg-subtle'
-                  : 'border-transparent',
+                  ? 'border-border bg-white text-ink-muted hover:bg-bg-subtle'
+                  : 'border-transparent text-ink-muted',
             )}
           >
+            <span aria-hidden className="flex h-[5px] w-12 overflow-hidden rounded-full bg-bg-pressed">
+              <span className="bg-tag-violet-solid" style={{ width: `${pct}%` }} />
+            </span>
             {task.done_todo_count}/{task.todo_count}
           </button>
           <button
@@ -530,15 +509,25 @@ function TaskGroup({
       </div>
       {open && (
         <>
+          <div className="relative py-0.5">
+            <span aria-hidden className="absolute top-0 bottom-3.5 left-[30px] w-0.5 rounded-sm bg-bg-skeleton" />
+            <TodoRows todos={todos} selection={selection} onSelect={onSelect} onToggleDone={onToggleDone} />
+            {doneOpen && (
+              <DoneTodos task={task} shown={todos} selection={selection} onSelect={onSelect} onToggleDone={onToggleDone} />
+            )}
+            {todos.length === 0 && adding !== task.id && !(doneOpen && ndone > 0) && <p className="m-0 ml-11 px-[18px] py-2.5 text-[12.5px] text-ink-muted">No todos for today yet.</p>}
+          </div>
           {adding === task.id && <NewTodoRow task={task} onDone={() => setAdding(null)} />}
-          <TodoRows todos={todos} selection={selection} onSelect={onSelect} onToggleDone={onToggleDone} />
-          {doneOpen && (
-            <DoneTodos task={task} shown={todos} selection={selection} onSelect={onSelect} onToggleDone={onToggleDone} />
-          )}
         </>
       )}
-    </div>
+    </article>
   )
+}
+
+/** NextWhen is the when pill of a collapsed task's next todo. */
+function NextWhen({ todo, today }: { todo: Todo; today: string }) {
+  const w = whenPill(todo, today)
+  return <span className={cn('shrink-0 rounded-[5px] px-1.5 py-px text-[11px] font-medium', toneClass[w.tone])}>{w.label}</span>
 }
 
 function EndZone() {
@@ -547,7 +536,7 @@ function EndZone() {
     <div
       ref={setNodeRef}
       className={cn(
-        'mx-4 my-1.5 flex h-9 items-center justify-center rounded-lg border border-dashed text-[12px] text-ink-muted',
+        'box-border flex h-10 items-center justify-center rounded-xl border-[1.5px] border-dashed text-[12px] text-ink-muted',
         isOver ? 'border-accent bg-accent-tint' : 'border-border-strong bg-bg-subtle',
       )}
     >
@@ -606,86 +595,78 @@ export function TodosCard({
   }
 
   return (
-    <section aria-label="Todos" className="min-w-0 overflow-x-auto rounded-xl border border-border bg-white shadow-xs">
-      <div className="min-w-[520px]">
-        <div className={cn(ROW, 'h-9 border-b border-border text-[12px] font-medium text-ink-muted')}>
-          <span className="flex justify-center">
-            <button
-              type="button"
-              aria-label={toggleAllLabel}
-              title={toggleAllLabel}
-              disabled={groups.length === 0}
-              onClick={toggleAll}
-              className="flex size-7 items-center justify-center rounded-md text-ink-muted hover:bg-black/5 disabled:opacity-50 disabled:hover:bg-transparent"
-            >
-              {allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
-            </button>
-          </span>
-          <span>Todo</span>
-          <span>Reminder</span>
-          <span className="text-right">When</span>
-        </div>
-
-        <DndContext
-          sensors={sensors}
-          collisionDetection={pointerWithin}
-          onDragStart={(e) => setActive(String(e.active.id))}
-          onDragOver={(e) => setOver(e.over ? String(e.over.id) : null)}
-          onDragCancel={reset}
-          onDragEnd={(e) => {
-            reset()
-            const id = String(e.active.id)
-            const to = e.over ? String(e.over.id) : null
-            if (!to || to === id) return
-            onMove(id, to === END ? null : to)
-          }}
+    <section aria-label="Todos" className="flex min-w-0 flex-col gap-3">
+      <div className="-my-1 flex justify-end">
+        <button
+          type="button"
+          disabled={groups.length === 0}
+          onClick={toggleAll}
+          className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-ink-muted hover:bg-black/5 disabled:opacity-50 disabled:hover:bg-transparent"
         >
-          {groups.map((g) => {
-            const id = g.task.id
-            const open = isOpen(id)
-            return (
-              <TaskGroup
-                key={id}
-                group={g}
-                selection={selection}
-                onSelect={onSelect}
-                adding={adding}
-                setAdding={setAdding}
-                open={open}
-                onCollapse={() => {
-                  setCollapsed([id], open)
-                  if (open && adding === id) setAdding(null)
-                }}
-                doneOpen={!!doneOpen[id]}
-                onToggleDoneOpen={() => setDoneOpen((m) => ({ ...m, [id]: !m[id] }))}
-                onToggleDone={onToggleDone}
-                onSetStatus={onSetStatus}
-                dragging={active === id}
-                dropHere={!!active && active !== id && over === id}
-                onMoveBy={(d) => moveBy(id, d)}
-              />
-            )
-          })}
-          {active && <EndZone />}
-          <DragOverlay dropAnimation={null}>
-            {dragged && (
-              <div className="flex h-11 max-w-[420px] cursor-grabbing items-center gap-2 rounded-lg border border-border bg-white px-3 shadow-lg">
-                <StatusIcon status={dragged.status} size={16} />
-                <OriginDot origin={dragged.originated} className="size-2" />
-                <span className="shrink-0 font-mono text-[12px] text-ink-secondary">{taskKey(dragged.id)}</span>
-                <span className="min-w-0 truncate text-[14px] font-semibold">{dragged.title}</span>
-              </div>
-            )}
-          </DragOverlay>
-        </DndContext>
-
-        {groups.length === 0 && (
-          <p className="m-0 px-4 py-10 text-center text-[14px] text-ink-muted">
-            Nothing to do today. Add a task with <span className="font-medium text-ink-secondary">New task</span>, or sync
-            Atlassian Cloud.
-          </p>
-        )}
+          {allCollapsed ? <ChevronsUpDown size={14} aria-hidden /> : <ChevronsDownUp size={14} aria-hidden />}
+          {toggleAllLabel}
+        </button>
       </div>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={(e) => setActive(String(e.active.id))}
+        onDragOver={(e) => setOver(e.over ? String(e.over.id) : null)}
+        onDragCancel={reset}
+        onDragEnd={(e) => {
+          reset()
+          const id = String(e.active.id)
+          const to = e.over ? String(e.over.id) : null
+          if (!to || to === id) return
+          onMove(id, to === END ? null : to)
+        }}
+      >
+        {groups.map((g) => {
+          const id = g.task.id
+          const open = isOpen(id)
+          return (
+            <TaskGroup
+              key={id}
+              group={g}
+              selection={selection}
+              onSelect={onSelect}
+              adding={adding}
+              setAdding={setAdding}
+              open={open}
+              onCollapse={() => {
+                setCollapsed([id], open)
+                if (open && adding === id) setAdding(null)
+              }}
+              doneOpen={!!doneOpen[id]}
+              onToggleDoneOpen={() => setDoneOpen((m) => ({ ...m, [id]: !m[id] }))}
+              onToggleDone={onToggleDone}
+              onSetStatus={onSetStatus}
+              dragging={active === id}
+              dropHere={!!active && active !== id && over === id}
+              onMoveBy={(d) => moveBy(id, d)}
+            />
+          )
+        })}
+        {active && <EndZone />}
+        <DragOverlay dropAnimation={null}>
+          {dragged && (
+            <div className="flex h-11 max-w-[420px] cursor-grabbing items-center gap-2 rounded-lg border border-border bg-white px-3 shadow-lg">
+              <StatusIcon status={dragged.status} size={16} />
+              <OriginDot origin={dragged.originated} className="size-2" />
+              <span className="shrink-0 font-mono text-[12px] text-ink-secondary">{taskKey(dragged.id)}</span>
+              <span className="min-w-0 truncate text-[14px] font-semibold">{dragged.title}</span>
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
+
+      {groups.length === 0 && (
+        <p className="m-0 px-4 py-10 text-center text-[14px] text-ink-muted">
+          Nothing to do today. Add a task with <span className="font-medium text-ink-secondary">New task</span>, or sync
+          Atlassian Cloud.
+        </p>
+      )}
     </section>
   )
 }

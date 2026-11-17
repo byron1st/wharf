@@ -128,6 +128,36 @@ export function doneLabel(completedAt: string | null, today: string) {
   return day === today ? { label: 'Done today', today: true } : { label: `Done ${monthDay(day)}`, today: false }
 }
 
+type DatedTodo = { is_done: boolean; start_date: string | null; end_date: string | null }
+
+const RANK: Record<Tone, number> = { over: 0, today: 1, plain: 2 }
+
+/** groupSummary is a task section's "3 open · 1 late · 2 due today", counting its open todos only. */
+export function groupSummary(todos: DatedTodo[], today: string): string {
+  const tones = todos.filter((t) => !t.is_done).map((t) => whenPill(t, today).tone)
+  const bits = [`${tones.length} open`]
+  const late = tones.filter((t) => t === 'over').length
+  const due = tones.filter((t) => t === 'today').length
+  if (late) bits.push(`${late} late`)
+  if (due) bits.push(`${due} due today`)
+  return bits.join(' · ')
+}
+
+/** nextTodo is the most urgent open todo: late, then due today, then the rest, keeping the given order within each. */
+export function nextTodo<T extends DatedTodo>(todos: T[], today: string): T | undefined {
+  let best: T | undefined
+  let rank = Infinity
+  for (const t of todos) {
+    if (t.is_done) continue
+    const r = RANK[whenPill(t, today).tone]
+    if (r < rank) {
+      best = t
+      rank = r
+    }
+  }
+  return best
+}
+
 /** compareTodayTasks orders Today's task groups: by stored position, then unpositioned ones by due date, undated last, then by ID. */
 export function compareTodayTasks(
   a: { id: string; position: number | null; due_date: string | null },

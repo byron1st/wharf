@@ -52,6 +52,9 @@ export function OriginBadge({ origin, icon = false }: { origin: Origin | 'sd'; i
   )
 }
 
+/** STATUSES are the task statuses in menu order. */
+export const STATUSES: TaskStatus[] = ['todo', 'in-progress', 'done', 'canceled']
+
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   todo: 'Todo',
   'in-progress': 'In progress',
