@@ -203,7 +203,10 @@ func TestInitialMigrationSchema(t *testing.T) {
 	require.Equal(t, []string{"name", "value"}, columns("counters"))
 	require.Equal(
 		t,
-		[]string{"id", "description", "note", "is_done", "completed_at", "start_date", "end_date"},
+		[]string{
+			"id", "description", "note", "is_done", "completed_at", "start_date", "end_date",
+			"board_column", "board_position",
+		},
 		columns("todos"),
 	)
 	require.Equal(t, []string{"todo_id", "task_id", "position"}, columns("task_todos"))
