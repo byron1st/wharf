@@ -14,8 +14,9 @@ import { OriginDot, StatusIcon } from '@/components/common/badges'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
+import { useStoredFlags } from '@/hooks/useStoredFlags'
 import { taskKey, type TaskListItem, type TaskStatus, type Todo } from '@/lib/api'
-import { doneLabel, dueTag, fromTaskDate, nextTodo, reminderSummary, toneClass, whenPill, type Tone } from '@/lib/dates'
+import { doneLabel, dueTag, fromTaskDate, lateCount, nextTodo, reminderSummary, toneClass, whenPill, type Tone } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import { StatusChip } from './StatusChip'
 import { END, GripIcon, type Selection, type TodoGroup } from './TodosCard'
@@ -360,7 +361,7 @@ function TaskCard({
   const ndone = task.done_todo_count
   const next = nextTodo(todos, today)
   const rest = todos.filter((t) => t !== next)
-  const late = todos.filter((t) => !t.is_done && whenPill(t, today).tone === 'over').length
+  const late = lateCount(todos, today)
   const expanded = unfolded || adding
   const isTodoSel = (t: Todo) => selection?.kind === 'todo' && selection.id === t.id
   return (
@@ -487,27 +488,6 @@ function TaskCard({
   )
 }
 
-/** useUnfolded is the set of unfolded cards, remembered per browser. */
-function useUnfolded() {
-  const [unfolded, setState] = useState<Record<string, boolean>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('wharf.cardOpen') ?? '{}') as Record<string, boolean>
-    } catch {
-      return {}
-    }
-  })
-  const set = (id: string, on: boolean) => {
-    setState((prev) => {
-      const next = { ...prev }
-      if (on) next[id] = true
-      else delete next[id]
-      localStorage.setItem('wharf.cardOpen', JSON.stringify(next))
-      return next
-    })
-  }
-  return [unfolded, set] as const
-}
-
 function EndSlot() {
   const { setNodeRef, isOver } = useDroppable({ id: END })
   return (
@@ -546,7 +526,7 @@ export function TaskCards({
   onMove: (id: string, before: string | null) => void
 }) {
   const [doneOpen, setDoneOpen] = useState<Record<string, boolean>>({})
-  const [unfolded, setUnfolded] = useUnfolded()
+  const [unfolded, setUnfolded] = useStoredFlags('wharf.cardOpen')
   const [active, setActive] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   // A small distance keeps clicks on the header's buttons from starting a drag.
@@ -596,7 +576,7 @@ export function TaskCards({
               adding={adding === id}
               setAdding={(on) => setAdding(on ? id : null)}
               unfolded={!!unfolded[id]}
-              onUnfold={(on) => setUnfolded(id, on)}
+              onUnfold={(on) => setUnfolded([id], on)}
               doneOpen={!!doneOpen[id]}
               onToggleDoneOpen={() => setDoneOpen((m) => ({ ...m, [id]: !m[id] }))}
               onToggleDone={onToggleDone}

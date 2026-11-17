@@ -132,9 +132,19 @@ type DatedTodo = { is_done: boolean; start_date: string | null; end_date: string
 
 const RANK: Record<Tone, number> = { over: 0, today: 1, plain: 2 }
 
+/** openTones are the when tones of the open todos, in order. */
+function openTones(todos: DatedTodo[], today: string): Tone[] {
+  return todos.filter((t) => !t.is_done).map((t) => whenPill(t, today).tone)
+}
+
+/** lateCount is how many open todos are past their end date. */
+export function lateCount(todos: DatedTodo[], today: string): number {
+  return openTones(todos, today).filter((t) => t === 'over').length
+}
+
 /** groupSummary is a task section's "3 open · 1 late · 2 due today", counting its open todos only. */
 export function groupSummary(todos: DatedTodo[], today: string): string {
-  const tones = todos.filter((t) => !t.is_done).map((t) => whenPill(t, today).tone)
+  const tones = openTones(todos, today)
   const bits = [`${tones.length} open`]
   const late = tones.filter((t) => t === 'over').length
   const due = tones.filter((t) => t === 'today').length

@@ -13,6 +13,7 @@ import {
   isTime,
   isTodayTask,
   isTodayTodo,
+  lateCount,
   nextTodo,
   quickPicks,
   reminderSummary,
@@ -287,5 +288,13 @@ describe('nextTodo', () => {
   it('is undefined without an open todo', () => {
     expect(nextTodo([], today)).toBeUndefined()
     expect(nextTodo([t(1, today, true)], today)).toBeUndefined()
+  })
+})
+
+describe('lateCount', () => {
+  it('counts open todos past their end date only', () => {
+    const t = (end_date: string | null, is_done = false) => ({ is_done, start_date: null, end_date })
+    expect(lateCount([t('2026-10-24'), t('2026-10-25'), t(today), t(null), t('2026-10-20', true)], today)).toBe(2)
+    expect(lateCount([], today)).toBe(0)
   })
 })
