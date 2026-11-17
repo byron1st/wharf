@@ -9,9 +9,11 @@ import {
   dueReminders,
   reorderedIDs,
   dueTag,
+  groupSummary,
   isTime,
   isTodayTask,
   isTodayTodo,
+  nextTodo,
   quickPicks,
   reminderSummary,
   shortDay,
@@ -254,5 +256,36 @@ describe('nextAutoSyncLabel', () => {
     { name: 'after tomorrow', last: atLocal('2026-10-27', '23:30').toISOString(), minutes: 1440, want: 'Oct 28 23:30' },
   ])('says $want when $name', ({ last, minutes, want }) => {
     expect(nextAutoSyncLabel(last, minutes, now)).toBe(want)
+  })
+})
+
+describe('groupSummary', () => {
+  const t = (end_date: string | null, is_done = false) => ({ is_done, start_date: null, end_date })
+
+  it('counts open todos, then late and due today ones when there are any', () => {
+    expect(groupSummary([t('2026-10-24'), t(today), t(today), t(null), t('2026-10-20', true)], today)).toBe(
+      '4 open · 1 late · 2 due today',
+    )
+    expect(groupSummary([t('2026-10-24'), t('2026-10-30')], today)).toBe('2 open · 1 late')
+    expect(groupSummary([t(null, true)], today)).toBe('0 open')
+  })
+})
+
+describe('nextTodo', () => {
+  const t = (id: number, end_date: string | null, is_done = false) => ({ id, is_done, start_date: null, end_date })
+
+  it('picks a late todo before one due today, and one due today before the rest', () => {
+    expect(nextTodo([t(1, null), t(2, today), t(3, '2026-10-25')], today)?.id).toBe(3)
+    expect(nextTodo([t(1, '2026-10-30'), t(2, today)], today)?.id).toBe(2)
+  })
+
+  it('keeps the given order among equally urgent todos and skips done ones', () => {
+    expect(nextTodo([t(1, '2026-10-20', true), t(2, null), t(3, '2026-10-30')], today)?.id).toBe(2)
+    expect(nextTodo([t(1, today), t(2, today)], today)?.id).toBe(1)
+  })
+
+  it('is undefined without an open todo', () => {
+    expect(nextTodo([], today)).toBeUndefined()
+    expect(nextTodo([t(1, today, true)], today)).toBeUndefined()
   })
 })

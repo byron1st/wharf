@@ -1,6 +1,6 @@
 import { ArrowUpRight, Lock, Trash2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { OriginBadge, STATUS_LABEL, StatusIcon } from '@/components/common/badges'
+import { OriginBadge, STATUS_LABEL, STATUSES, StatusIcon } from '@/components/common/badges'
 import { useCancelConfirm } from '@/components/common/CancelConfirm'
 import { Relations } from '@/components/common/Relations'
 import { MarkdownEditor, MdIcon, ModeTabs } from '@/components/markdown/MarkdownEditor'
@@ -16,8 +16,6 @@ import { dayLabel, fromTaskDate, monthDay, toTaskDate } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import { InspectorHeader, Label } from './InspectorShell'
 import { SavedMark } from './TodoInspector'
-
-export const STATUSES: TaskStatus[] = ['todo', 'in-progress', 'done', 'canceled']
 
 /** StatusSelect picks a local task's status. */
 export function StatusSelect({
