@@ -160,8 +160,11 @@ WHERE EXISTS (SELECT 1 FROM tasks WHERE tasks.id = sqlc.arg(task_id))
 RETURNING id;
 
 -- name: UpdateTodo :execrows
--- A todo that stays done keeps its completed_at.
+-- A todo that stays done keeps its completed_at. A new end date drops the
+-- todo's hand-set place on the Todo view, since its column often changes too.
 UPDATE todos SET
+    board_column   = CASE WHEN end_date IS NOT DISTINCT FROM sqlc.narg(end_date) THEN board_column END,
+    board_position = CASE WHEN end_date IS NOT DISTINCT FROM sqlc.narg(end_date) THEN board_position END,
     description  = sqlc.arg(description),
     note         = sqlc.arg(note),
     is_done      = sqlc.arg(is_done),
@@ -192,6 +195,19 @@ WHERE task_id = sqlc.arg(task_id) AND position > sqlc.arg(position);
 
 -- name: CreateTaskTodo :exec
 INSERT INTO task_todos (todo_id, task_id, position) VALUES ($1, $2, $3);
+
+-- name: ClearTodoBoardColumn :exec
+-- Takes the todos not in ids, a JSON array of todo IDs, out of the column.
+UPDATE todos SET board_column = NULL, board_position = NULL
+WHERE board_column = sqlc.arg(board_column)
+  AND id NOT IN (SELECT jsonb_array_elements_text(CAST(sqlc.arg(ids)::text AS jsonb))::bigint);
+
+-- name: SetTodoBoardPositions :exec
+-- ids is a JSON array of todo IDs in column order: an array parameter would
+-- need lib/pq. Each listed todo takes its index there as its board position.
+UPDATE todos SET board_column = sqlc.arg(board_column), board_position = ordered.ord - 1
+FROM jsonb_array_elements_text(CAST(sqlc.arg(ids)::text AS jsonb)) WITH ORDINALITY AS ordered(id, ord)
+WHERE todos.id = ordered.id::bigint;
 
 -- name: ListTodos :many
 -- A NULL filter is not applied.

@@ -57,7 +57,10 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {}
 })
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  localStorage.clear()
+})
 
 describe('App', () => {
   it('opens Closed tasks from the header and returns to it from a task opened there', async () => {
@@ -119,6 +122,43 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(within(screen.getByRole('region', { name: 'Todos' })).getByText('Write the plan')).toBeInTheDocument()
+  })
+
+  it('opens a task from the Todo view over the board and returns to the board', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('wharf.layout', 'todo')
+    const open: TaskListItem = { ...closed, id: 'local-WHF-003', title: 'Write the plan', status: 'todo', closed_at: null }
+    const plan = {
+      id: 1, task_id: open.id, description: 'Outline the plan', note: '', is_done: false, completed_at: null,
+      start_date: null, end_date: null, reminders: [], position: 0, service_desk_requests: [],
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === `/api/tasks/${open.id}`) return new Response(JSON.stringify({ ...detail, ...open }))
+        const todos = url.startsWith('/api/todos?is_done=false') ? [plan] : []
+        return new Response(JSON.stringify({ tasks: [open], todos, requests: [], last_sync: null }))
+      }),
+    )
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const board = await screen.findByRole('region', { name: 'Todo board' })
+    await user.click(await within(board).findByTitle('WHF-003 · Write the plan — show task'))
+    await user.click(within(await screen.findByRole('complementary', { name: 'Inspector' })).getByRole('button', { name: /^Open/ }))
+
+    expect(await screen.findByRole('dialog', { name: /Write the plan/ })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Todo board', hidden: true })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(within(screen.getByRole('region', { name: 'Todo board' })).getByText('Outline the plan')).toBeInTheDocument()
   })
 
 })

@@ -11,6 +11,23 @@ import (
 	"time"
 )
 
+const clearTodoBoardColumn = `-- name: ClearTodoBoardColumn :exec
+UPDATE todos SET board_column = NULL, board_position = NULL
+WHERE board_column = $1
+  AND id NOT IN (SELECT jsonb_array_elements_text(CAST($2::text AS jsonb))::bigint)
+`
+
+type ClearTodoBoardColumnParams struct {
+	BoardColumn sql.NullString
+	Ids         string
+}
+
+// Takes the todos not in ids, a JSON array of todo IDs, out of the column.
+func (q *Queries) ClearTodoBoardColumn(ctx context.Context, arg ClearTodoBoardColumnParams) error {
+	_, err := q.db.ExecContext(ctx, clearTodoBoardColumn, arg.BoardColumn, arg.Ids)
+	return err
+}
+
 const completeTodosOfTask = `-- name: CompleteTodosOfTask :exec
 UPDATE todos SET
     is_done      = true,
@@ -880,7 +897,7 @@ func (q *Queries) ListTodoServiceDeskRequests(ctx context.Context, arg ListTodoS
 }
 
 const listTodos = `-- name: ListTodos :many
-SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_at, todos.start_date, todos.end_date, task_todos.task_id, task_todos.position
+SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_at, todos.start_date, todos.end_date, todos.board_column, todos.board_position, task_todos.task_id, task_todos.position
 FROM todos
 JOIN task_todos ON task_todos.todo_id = todos.id
 WHERE (task_todos.task_id = $1 OR $1 IS NULL)
@@ -901,15 +918,17 @@ type ListTodosParams struct {
 }
 
 type ListTodosRow struct {
-	ID          int64
-	Description string
-	Note        string
-	IsDone      bool
-	CompletedAt sql.NullTime
-	StartDate   sql.NullString
-	EndDate     sql.NullString
-	TaskID      string
-	Position    int64
+	ID            int64
+	Description   string
+	Note          string
+	IsDone        bool
+	CompletedAt   sql.NullTime
+	StartDate     sql.NullString
+	EndDate       sql.NullString
+	BoardColumn   sql.NullString
+	BoardPosition sql.NullInt64
+	TaskID        string
+	Position      int64
 }
 
 // A NULL filter is not applied.
@@ -935,6 +954,8 @@ func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]ListTod
 			&i.CompletedAt,
 			&i.StartDate,
 			&i.EndDate,
+			&i.BoardColumn,
+			&i.BoardPosition,
 			&i.TaskID,
 			&i.Position,
 		); err != nil {
@@ -957,6 +978,24 @@ UPDATE atlassian_sync_settings SET interval_minutes = $1
 
 func (q *Queries) SetAtlassianSyncInterval(ctx context.Context, intervalMinutes int64) error {
 	_, err := q.db.ExecContext(ctx, setAtlassianSyncInterval, intervalMinutes)
+	return err
+}
+
+const setTodoBoardPositions = `-- name: SetTodoBoardPositions :exec
+UPDATE todos SET board_column = $1, board_position = ordered.ord - 1
+FROM jsonb_array_elements_text(CAST($2::text AS jsonb)) WITH ORDINALITY AS ordered(id, ord)
+WHERE todos.id = ordered.id::bigint
+`
+
+type SetTodoBoardPositionsParams struct {
+	BoardColumn sql.NullString
+	Ids         string
+}
+
+// ids is a JSON array of todo IDs in column order: an array parameter would
+// need lib/pq. Each listed todo takes its index there as its board position.
+func (q *Queries) SetTodoBoardPositions(ctx context.Context, arg SetTodoBoardPositionsParams) error {
+	_, err := q.db.ExecContext(ctx, setTodoBoardPositions, arg.BoardColumn, arg.Ids)
 	return err
 }
 
@@ -1076,34 +1115,37 @@ func (q *Queries) UpdateTaskPosition(ctx context.Context, arg UpdateTaskPosition
 
 const updateTodo = `-- name: UpdateTodo :execrows
 UPDATE todos SET
-    description  = $1,
-    note         = $2,
-    is_done      = $3,
-    completed_at = CASE WHEN $3 THEN COALESCE(completed_at, $4) END,
-    start_date   = $5,
-    end_date     = $6
+    board_column   = CASE WHEN end_date IS NOT DISTINCT FROM $1 THEN board_column END,
+    board_position = CASE WHEN end_date IS NOT DISTINCT FROM $1 THEN board_position END,
+    description  = $2,
+    note         = $3,
+    is_done      = $4,
+    completed_at = CASE WHEN $4 THEN COALESCE(completed_at, $5) END,
+    start_date   = $6,
+    end_date     = $1
 WHERE id = $7
 `
 
 type UpdateTodoParams struct {
+	EndDate     sql.NullString
 	Description string
 	Note        string
 	IsDone      bool
 	CompletedAt sql.NullTime
 	StartDate   sql.NullString
-	EndDate     sql.NullString
 	ID          int64
 }
 
-// A todo that stays done keeps its completed_at.
+// A todo that stays done keeps its completed_at. A new end date drops the
+// todo's hand-set place on the Todo view, since its column often changes too.
 func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updateTodo,
+		arg.EndDate,
 		arg.Description,
 		arg.Note,
 		arg.IsDone,
 		arg.CompletedAt,
 		arg.StartDate,
-		arg.EndDate,
 		arg.ID,
 	)
 	if err != nil {

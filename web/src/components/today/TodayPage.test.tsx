@@ -96,6 +96,29 @@ describe('TodayPage layout', () => {
     expect(list).toHaveFocus()
   })
 
+  it('switches to the Todo view, remembers it, and moves to it with the arrow keys', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderPage()
+
+    await user.click(tabs().getByRole('tab', { name: 'Todo' }))
+    expect(tabs().getByRole('tab', { name: 'Todo' })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByRole('region', { name: 'Todo board' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Todos' })).toBeNull()
+    expect(localStorage.getItem('wharf.layout')).toBe('todo')
+
+    unmount()
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Todo board' })).toBeInTheDocument()
+
+    const todo = tabs().getByRole('tab', { name: 'Todo' })
+    todo.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(tabs().getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{ArrowLeft}')
+    expect(todo).toHaveAttribute('aria-selected', 'true')
+    expect(todo).toHaveFocus()
+  })
+
   it('falls back to the List view for an unknown saved layout', () => {
     localStorage.setItem('wharf.layout', 'grid')
     renderPage()

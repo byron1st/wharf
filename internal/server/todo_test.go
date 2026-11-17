@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -53,6 +54,30 @@ func TestListTodos(t *testing.T) {
 		{"id":2,"task_id":"jira-WHF-1","description":"b","note":"","is_done":false,"completed_at":null,
 		 "start_date":null,"end_date":null,"reminders":[],"position":1,"service_desk_requests":[]}
 	]}`, rec.Body.String())
+}
+
+func TestListTodosShowsBoardPosition(t *testing.T) {
+	svc := mocks.NewMockService(t)
+	svc.EXPECT().ListTodos(mock.Anything, todo.Filter{}).Return([]todo.Todo{
+		{ID: 1, TaskID: "T", Description: "a", Position: new(0), BoardColumn: todo.BoardToday, BoardPosition: new(0)},
+		{ID: 2, TaskID: "T", Description: "b", Position: new(1), BoardColumn: todo.BoardLate, BoardPosition: new(3)},
+		{ID: 3, TaskID: "T", Description: "c", Position: new(2)},
+	}, nil).Once()
+
+	rec, _ := serve(t, svc, http.MethodGet, "/api/todos")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got struct {
+		Todos []map[string]any `json:"todos"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Len(t, got.Todos, 3)
+	require.InDelta(t, 0, got.Todos[0]["board_position"], 0)
+	require.Equal(t, "today", got.Todos[0]["board_column"])
+	require.InDelta(t, 3, got.Todos[1]["board_position"], 0)
+	require.Equal(t, "late", got.Todos[1]["board_column"])
+	require.NotContains(t, got.Todos[2], "board_position")
+	require.NotContains(t, got.Todos[2], "board_column")
 }
 
 func TestListTodosWithoutFilter(t *testing.T) {
@@ -213,4 +238,55 @@ func TestTodoRoutesMapServiceErrors(t *testing.T) {
 
 	rec, _ := serve(t, svc, http.MethodDelete, "/api/todos/9")
 	require.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestReorderBoardTodos(t *testing.T) {
+	svc := mocks.NewMockService(t)
+	svc.EXPECT().ReorderBoardTodos(mock.Anything, todo.BoardLater, []int64{7, 3}).Return(nil).Once()
+
+	rec, _ := serveBody(
+		t,
+		svc,
+		http.MethodPut,
+		"/api/todos/board-order",
+		strings.NewReader(`{"column":"later","ids":[7,3]}`),
+	)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	require.Empty(t, rec.Body.String())
+}
+
+func TestReorderBoardTodosRejectsInvalidBody(t *testing.T) {
+	for _, body := range []string{`{"column":"late","ids":["7"]}`, `{"column":"late","ids":[7],"x":1}`, `{"column":"late","ids":[7]} {}`} {
+		// No service expectation: the mock fails the test if it is called.
+		rec, _ := serveBody(
+			t,
+			mocks.NewMockService(t),
+			http.MethodPut,
+			"/api/todos/board-order",
+			strings.NewReader(body),
+		)
+
+		require.Equal(t, http.StatusBadRequest, rec.Code, body)
+	}
+
+	rec, _ := serveBody(t, mocks.NewMockService(t), http.MethodPut, "/api/todos/board-order",
+		strings.NewReader(`{"ids":[`+strings.Repeat("1,", 1<<20)+`1]}`))
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+}
+
+func TestReorderBoardTodosMapsServiceErrors(t *testing.T) {
+	for err, status := range map[error]int{
+		service.ErrUnknownBoardColumn:       http.StatusBadRequest,
+		service.ErrInvalidTodoIDToReorder:   http.StatusBadRequest,
+		service.ErrDuplicateTodoIDToReorder: http.StatusBadRequest,
+		errors.New("db down"):               http.StatusInternalServerError,
+	} {
+		svc := mocks.NewMockService(t)
+		svc.EXPECT().ReorderBoardTodos(mock.Anything, mock.Anything, mock.Anything).Return(err).Once()
+
+		rec, _ := serveBody(t, svc, http.MethodPut, "/api/todos/board-order", strings.NewReader(`{"ids":[1]}`))
+
+		require.Equal(t, status, rec.Code, err.Error())
+	}
 }

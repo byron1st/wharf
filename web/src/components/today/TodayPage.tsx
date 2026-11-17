@@ -12,6 +12,7 @@ import { RequestInspector } from './RequestInspector'
 import { RequestsCard } from './RequestsCard'
 import { TaskCards } from './TaskCards'
 import { TaskInspector } from './TaskInspector'
+import { TodoBoard } from './TodoBoard'
 import { TodoInspector } from './TodoInspector'
 import { TodosCard, type Selection, type TodoGroup } from './TodosCard'
 
@@ -26,9 +27,12 @@ function selectionOf(params: URLSearchParams): Selection {
   return null
 }
 
-/** useLayout is the Today layout, remembered per browser; anything but a saved "card" is the List view. */
+/** useLayout is the Today layout, remembered per browser; anything but a saved "card" or "todo" is the List view. */
 function useLayout() {
-  const [layout, setLayout] = useState<Layout>(() => (localStorage.getItem('wharf.layout') === 'card' ? 'card' : 'list'))
+  const [layout, setLayout] = useState<Layout>(() => {
+    const saved = localStorage.getItem('wharf.layout')
+    return saved === 'card' || saved === 'todo' ? saved : 'list'
+  })
   const set = (l: Layout) => {
     localStorage.setItem('wharf.layout', l)
     setLayout(l)
@@ -143,7 +147,15 @@ export function TodayPage() {
       />
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
-          {layout === 'card' ? (
+          {layout === 'todo' ? (
+            <TodoBoard
+              groups={groups}
+              doneToday={doneToday}
+              selection={selection}
+              onSelect={select}
+              onToggleDone={toggleDone}
+            />
+          ) : layout === 'card' ? (
             <TaskCards
               groups={groups}
               selection={selection}

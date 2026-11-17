@@ -74,13 +74,15 @@ type TaskTodo struct {
 }
 
 type Todo struct {
-	ID          int64
-	Description string
-	Note        string
-	IsDone      bool
-	CompletedAt sql.NullTime
-	StartDate   sql.NullString
-	EndDate     sql.NullString
+	ID            int64
+	Description   string
+	Note          string
+	IsDone        bool
+	CompletedAt   sql.NullTime
+	StartDate     sql.NullString
+	EndDate       sql.NullString
+	BoardColumn   sql.NullString
+	BoardPosition sql.NullInt64
 }
 
 type TodoReminder struct {

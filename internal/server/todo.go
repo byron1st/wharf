@@ -17,6 +17,9 @@ var (
 	ErrFailedToDecodeTodoRequest   = errors.New("server: failed to decode todo request")
 	ErrTodoRequestHasTrailingData  = errors.New("server: todo request has trailing data")
 	ErrTodoRequestTooLarge         = errors.New("server: todo request is too large")
+	ErrFailedToDecodeBoardOrder    = errors.New("server: failed to decode todo board order request")
+	ErrBoardOrderHasTrailingData   = errors.New("server: todo board order request has trailing data")
+	ErrBoardOrderTooLarge          = errors.New("server: todo board order request is too large")
 	ErrEmptyTodoRequestDate        = errors.New("server: todo request date is an empty string")
 	ErrInvalidTodoIsDoneFilter     = errors.New("server: is_done filter is not a bool")
 	ErrInvalidCompletedSinceFilter = errors.New("server: completed_since filter is not an RFC3339 time")
@@ -224,6 +227,8 @@ func toTodoResponse(t todo.Todo) todoResponse {
 		CompletedAt:         t.CompletedAt,
 		Reminders:           t.Reminders,
 		Position:            t.Position,
+		BoardColumn:         t.BoardColumn,
+		BoardPosition:       t.BoardPosition,
 		ServiceDeskRequests: toServiceDeskRequests(t.ServiceDeskRequests),
 	}
 
@@ -248,4 +253,45 @@ func deref(s *string) string {
 	}
 
 	return *s
+}
+
+func reorderBoardTodos(svc service.Service, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		req, err := decodeBoardOrder(w, r)
+		if err != nil {
+			writeError(w, r, logger, "failed to reorder board todos", err)
+			return
+		}
+
+		if err := svc.ReorderBoardTodos(r.Context(), req.Column, req.IDs); err != nil {
+			writeError(w, r, logger, "failed to reorder board todos", err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// decodeBoardOrder reads a todoBoardOrderRequest body, rejecting unknown
+// fields and anything but whitespace after the object.
+func decodeBoardOrder(w http.ResponseWriter, r *http.Request) (todoBoardOrderRequest, error) {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxTodoRequestBytes))
+	decoder.DisallowUnknownFields()
+
+	var req todoBoardOrderRequest
+
+	err := decoder.Decode(&req)
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		return req, errors.Join(ErrBoardOrderTooLarge, err)
+	}
+
+	if err != nil {
+		return req, errors.Join(ErrFailedToDecodeBoardOrder, err)
+	}
+
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return req, errors.Join(ErrBoardOrderHasTrailingData, err)
+	}
+
+	return req, nil
 }

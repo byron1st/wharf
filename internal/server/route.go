@@ -52,6 +52,7 @@ func NewHandler(
 	mux.HandleFunc("POST /api/tasks/{id}/sync", syncJiraTask(svc, logger))
 	mux.HandleFunc("GET /api/todos", listTodos(svc, logger))
 	mux.HandleFunc("POST /api/todos", createTodo(svc, logger))
+	mux.HandleFunc("PUT /api/todos/board-order", reorderBoardTodos(svc, logger))
 	mux.HandleFunc("PUT /api/todos/{id}", updateTodo(svc, logger))
 	mux.HandleFunc("DELETE /api/todos/{id}", deleteTodo(svc, logger))
 	mux.HandleFunc("PUT /api/todos/{id}/service-desk-requests/{key}", linkServiceDeskRequest(svc, logger))

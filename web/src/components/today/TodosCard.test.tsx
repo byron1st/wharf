@@ -248,8 +248,11 @@ describe('TodosCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse all tasks' }))
     for (const b of groupToggles()) expect(b).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText('Todo 1')).toBeNull()
-    expect(screen.queryByText('Todo 2')).toBeNull()
+    // A collapsed task shows only its next todo, in its header.
+    expect(screen.queryByRole('checkbox', { name: 'Todo 1' })).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Todo 2' })).toBeNull()
+    expect(screen.getAllByText('Todo 1')).toHaveLength(1)
+    expect(screen.getAllByText('Todo 2')).toHaveLength(1)
     expect(JSON.parse(localStorage.getItem('wharf.collapsed') ?? '{}')).toEqual({
       'local-WHF-001': true,
       'jira-SEC-3': true,
@@ -298,5 +301,64 @@ describe('TodosCard', () => {
     renderCard([])
 
     expect(screen.getByRole('button', { name: 'Collapse all tasks' })).toBeDisabled()
+  })
+
+  it('shows each task as its own section, without column headers', () => {
+    renderCard([
+      { task: task('local-WHF-001'), todos: [todo(1, { task_id: 'local-WHF-001' })] },
+      { task: task('jira-SEC-3', { title: 'Rotate keys' }), todos: [] },
+    ])
+
+    const first = screen.getByRole('article', { name: 'WHF-001 Title of local-WHF-001' })
+    expect(within(first).getByRole('checkbox', { name: 'Todo 1' })).toBeInTheDocument()
+    const second = screen.getByRole('article', { name: 'SEC-3 Rotate keys' })
+    expect(within(second).getByText('No todos for today yet.')).toBeInTheDocument()
+    for (const h of ['Todo', 'Reminder', 'When']) expect(screen.queryByText(h)).toBeNull()
+  })
+
+  it('sums up a task’s open, late and due today todos under its title', () => {
+    renderCard([
+      {
+        task: task('local-WHF-003'),
+        todos: [
+          todo(1, { end_date: '2026-10-24' }),
+          todo(2, { end_date: today }),
+          todo(3),
+          todo(4, { is_done: true, completed_at: now.toISOString() }),
+        ],
+      },
+      { task: task('local-WHF-004'), todos: [] },
+    ])
+
+    expect(screen.getByText('3 open · 1 late · 1 due today')).toBeInTheDocument()
+    expect(screen.getByText('0 open')).toBeInTheDocument()
+  })
+
+  it('shows the most urgent open todo as Next only while its task is collapsed', () => {
+    renderCard([
+      {
+        task: task('local-WHF-003'),
+        todos: [todo(1), todo(2, { end_date: today }), todo(3, { end_date: '2026-10-25' })],
+      },
+      { task: task('local-WHF-004'), todos: [todo(5, { task_id: 'local-WHF-004', is_done: true })] },
+    ])
+    expect(screen.queryByText('Next')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all tasks' }))
+
+    const next = screen.getByText('Next').parentElement as HTMLElement
+    expect(within(next).getByText('Todo 3')).toBeInTheDocument()
+    expect(within(next).getByText('1 day late')).toBeInTheDocument()
+    expect(screen.getAllByText('Next')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse or expand WHF-003' }))
+    expect(screen.queryByText('Next')).toBeNull()
+  })
+
+  it('shows no Next line on a collapsed closed task', () => {
+    renderCard([{ task: task('local-WHF-003', { status: 'done' }), todos: [todo(1, { end_date: today })] }])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all tasks' }))
+    expect(screen.queryByText('Next')).toBeNull()
   })
 })
