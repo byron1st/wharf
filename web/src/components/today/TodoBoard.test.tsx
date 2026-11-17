@@ -392,6 +392,37 @@ describe('TodoBoard', () => {
     expect(cardsIn('Late')).toEqual(['Todo 1'])
   })
 
+  it('reorders a todo with Option and the up and down arrows on its grip, keeping focus there', async () => {
+    const sends = stubFetch()
+    renderBoard([{ task: task('local-WHF-001'), todos: [todo(1), todo(2), todo(3)] }])
+
+    const grip = screen.getByRole('button', { name: 'Move Todo 1' })
+    // Without Option, or with nothing above the first card, nothing moves.
+    fireEvent.keyDown(grip, { key: 'ArrowDown' })
+    fireEvent.keyDown(grip, { key: 'ArrowUp', altKey: true })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(sends).toHaveLength(0)
+
+    fireEvent.keyDown(grip, { key: 'ArrowDown', altKey: true })
+    await waitFor(() => expect(sends).toHaveLength(1))
+    expect(sends[0].body).toEqual({ column: 'nodate', ids: [2, 1, 3] })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Move Todo 1' })).toHaveFocus())
+  })
+
+  it('moves a todo to the next column with Option and the left and right arrows, but not into Late', async () => {
+    const sends = stubFetch()
+    renderBoard([{ task: task('local-WHF-001'), todos: [todo(1, { end_date: today }), todo(2, { end_date: '2026-10-30' })] }])
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Move Todo 1' }), { key: 'ArrowLeft', altKey: true })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(sends).toHaveLength(0)
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Move Todo 1' }), { key: 'ArrowRight', altKey: true })
+    await waitFor(() => expect(sends).toHaveLength(2))
+    expect(sends[0]).toMatchObject({ url: '/api/todos/1', body: { end_date: '2026-10-27' } })
+    expect(sends[1]).toMatchObject({ url: '/api/todos/board-order', body: { column: 'later', ids: [2, 1] } })
+  })
+
   it('adds a todo from the New todo popover, opened with T', async () => {
     const sends = stubFetch()
     const user = userEvent.setup()

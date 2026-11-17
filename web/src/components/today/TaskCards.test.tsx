@@ -130,7 +130,7 @@ describe('TaskCards', () => {
     expect(within(first).getByRole('checkbox', { name: 'Todo 1' })).toBeInTheDocument()
     expect(within(first).getByRole('button', { name: 'Add todo to WHF-001' })).toHaveTextContent('Add todo')
 
-    expect(within(card(/^SEC-3/)).getByText('Nothing due today.')).toBeInTheDocument()
+    expect(within(card(/^SEC-3/)).getByText('No open todos.')).toBeInTheDocument()
   })
 
   it('wraps long titles and todo text in full instead of truncating them', () => {
@@ -393,11 +393,11 @@ describe('TaskCards', () => {
     expect(next(/^WHF-003/)).toHaveClass('bg-bg-muted')
   })
 
-  it('says nothing is due when a card has no open todo', () => {
+  it('says so when a card has no open todo', () => {
     renderCards([{ task: task('local-WHF-001'), todos: [todo(1, { is_done: true, completed_at: now.toISOString() })] }])
 
     expect(screen.queryByRole('group', { name: 'Next up' })).toBeNull()
-    expect(screen.getByText('Nothing due today.')).toBeInTheDocument()
+    expect(screen.getByText('No open todos.')).toBeInTheDocument()
   })
 
   it('shows how many todos are done and how many open ones are late', () => {

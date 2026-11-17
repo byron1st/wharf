@@ -437,7 +437,7 @@ function TaskCard({
       {next ? (
         <NextUp todo={next} selected={isTodoSel(next)} onSelect={() => onSelect({ kind: 'todo', id: next.id })} onToggleDone={onToggleDone} />
       ) : (
-        <p className="mx-4 py-2 text-[12.5px] text-ink-muted">Nothing due today.</p>
+        <p className="mx-4 py-2 text-[12.5px] text-ink-muted">No open todos.</p>
       )}
       {(expanded || doneOpen) && (
         <div className="pt-1.5">

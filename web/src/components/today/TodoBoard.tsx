@@ -95,6 +95,7 @@ function BoardCard({
   taskSelected,
   onSelect,
   onToggleDone,
+  onMoveKey,
   dragging,
   line,
 }: {
@@ -105,6 +106,7 @@ function BoardCard({
   taskSelected: boolean
   onSelect: (s: Selection) => void
   onToggleDone: (todo: Todo, done: boolean) => void
+  onMoveKey: (key: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => void
   dragging: boolean
   /** line marks the side of the card the dragged todo will land on. */
   line: 'top' | 'bottom' | null
@@ -156,9 +158,20 @@ function BoardCard({
           </span>
         </button>
         {!done && (
-          <span aria-hidden title="Drag to reorder or move" className="absolute top-[11px] right-[9px] flex text-border-strong">
+          <button
+            type="button"
+            data-grip={todo.id}
+            aria-label={`Move ${todo.description}`}
+            title="Drag to reorder or move · ⌥↑ / ⌥↓ to reorder · ⌥← / ⌥→ to move to another column"
+            onKeyDown={(e) => {
+              if (!e.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
+              e.preventDefault()
+              onMoveKey(e.key as 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight')
+            }}
+            className="absolute top-[11px] right-[9px] flex cursor-grab text-border-strong focus-visible:text-accent"
+          >
             <GripIcon />
-          </span>
+          </button>
         )}
         <div className="grid grid-cols-[18px_minmax(0,1fr)] items-start gap-2.5">
           <Checkbox checked={done} label={todo.description} onChange={(v) => onToggleDone(todo, v)} className="mt-px" />
@@ -522,27 +535,59 @@ export function TodoBoard({
     return (indexOf.get(id) ?? 0) > (indexOf.get(active) ?? 0)
   }
 
-  const drop = (to: string | number | null) => {
-    if (!dragged || from === undefined || to === null || to === dragged.id) return
-    const col = typeof to === 'number' ? colOf.get(to) : (to.slice(COL_PREFIX.length) as BoardColumn)
-    if (!col || !accepts(col)) return
-    // The order covers every task's todos in the column, also the ones a filter hides.
+  /**
+   * place puts todo, now in column from, at index at among the other open
+   * todos of column col (every task's, also the ones a filter hides), saving
+   * its dates first when it changes column. Late takes no todo from elsewhere.
+   */
+  const place = (todo: Todo, from: BoardColumn, col: BoardColumn, at: number) => {
+    if (col === 'late' && from !== 'late') return
     const current = (columns.get(col) ?? []).map((t) => t.id)
-    const ids = current.filter((id) => id !== dragged.id)
-    const at = typeof to === 'number' ? ids.indexOf(to) + (below(to) ? 1 : 0) : ids.length
-    ids.splice(at, 0, dragged.id)
+    const ids = current.filter((id) => id !== todo.id)
+    ids.splice(Math.max(0, Math.min(at, ids.length)), 0, todo.id)
     if (col === from && ids.every((id, i) => id === current[i])) return
     // The order is the whole column's, so the todos done today there keep their places after the open ones.
     ids.push(...(done.get(col) ?? []).map((t) => t.id))
     let after: number | undefined
     if (col !== from) {
-      const dates = boardMoveDates(dragged, col, today)
+      const dates = boardMoveDates(todo, col, today)
       if (dates) {
-        update(dragged, dates)
-        after = dragged.id
+        update(todo, dates)
+        after = todo.id
       }
     }
     reorderBoard(col, ids, after)
+  }
+
+  const drop = (to: string | number | null) => {
+    if (!dragged || from === undefined || to === null || to === dragged.id) return
+    const col = typeof to === 'number' ? colOf.get(to) : (to.slice(COL_PREFIX.length) as BoardColumn)
+    if (!col || !accepts(col)) return
+    const others = (columns.get(col) ?? []).map((t) => t.id).filter((id) => id !== dragged.id)
+    place(dragged, from, col, typeof to === 'number' ? others.indexOf(to) + (below(to) ? 1 : 0) : others.length)
+  }
+
+  /**
+   * moveByKey moves todo with Option and an arrow key: up or down past the
+   * next card shown in its column, or to the end of the column to the left
+   * or right. The todo's grip keeps focus.
+   */
+  const moveByKey = (todo: Todo, key: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => {
+    const col = colOf.get(todo.id)
+    if (!col) return
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+      const to = BOARD_COLUMNS[BOARD_COLUMNS.indexOf(col) + (key === 'ArrowLeft' ? -1 : 1)]
+      if (!to) return
+      place(todo, col, to, Infinity)
+    } else {
+      const visible = shown(columns.get(col) ?? [])
+      const neighbour = visible[visible.findIndex((t) => t.id === todo.id) + (key === 'ArrowUp' ? -1 : 1)]
+      if (!neighbour) return
+      const others = (columns.get(col) ?? []).map((t) => t.id).filter((id) => id !== todo.id)
+      place(todo, col, col, others.indexOf(neighbour.id) + (key === 'ArrowDown' ? 1 : 0))
+    }
+    // Moving the card in the DOM drops focus, so put it back on its grip.
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-grip="${todo.id}"]`)?.focus())
   }
 
   const selectedTask = selection?.kind === 'task' ? selection.id : null
@@ -556,6 +601,7 @@ export function TodoBoard({
       taskSelected={selectedTask === t.task_id}
       onSelect={onSelect}
       onToggleDone={onToggleDone}
+      onMoveKey={(key) => moveByKey(t, key)}
       dragging={active === t.id}
       line={active !== null && active !== t.id && over === t.id && accepts(column) ? (below(t.id) ? 'bottom' : 'top') : null}
     />
