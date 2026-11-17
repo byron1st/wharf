@@ -179,6 +179,19 @@ describe('TodoBoard', () => {
     expect(within(column('No date')).getByText('Done today · 1')).toBeInTheDocument()
   })
 
+  it('keeps the todos done today in the column order it stores', async () => {
+    const sends = stubFetch()
+    stubRects()
+    const done = todo(9, { is_done: true, completed_at: now.toISOString() })
+    renderBoard([{ task: task('local-WHF-001'), todos: [todo(1), todo(2), done] }], { doneToday: [done] })
+
+    // Todo 2 lands on Todo 1, the first card of No date.
+    await drag('Todo 2', 900 + 100, 120)
+
+    await waitFor(() => expect(sends).toHaveLength(1))
+    expect(sends[0].body).toEqual({ column: 'nodate', ids: [2, 1, 9] })
+  })
+
   it('stores nothing when a todo is dropped where it already is', async () => {
     const sends = stubFetch()
     stubRects()

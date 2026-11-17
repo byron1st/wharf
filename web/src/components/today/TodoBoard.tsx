@@ -303,6 +303,7 @@ function NewTodoButton({ tasks, defaultTask }: { tasks: TaskListItem[]; defaultT
   const input = useRef<HTMLInputElement>(null)
 
   const show = (on: boolean) => {
+    if (on && tasks.length === 0) return
     if (on) {
       setText('')
       setDue('none')
@@ -313,17 +314,14 @@ function NewTodoButton({ tasks, defaultTask }: { tasks: TaskListItem[]; defaultT
 
   // The listener is added once and opens with the defaults of the latest render.
   const showRef = useRef(show)
-  const hasTasks = useRef(tasks.length > 0)
   useEffect(() => {
     showRef.current = show
-    hasTasks.current = tasks.length > 0
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (e.key.toLowerCase() !== 't' || e.metaKey || e.ctrlKey || e.altKey) return
       if (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
-      if (!hasTasks.current) return
       e.preventDefault()
       showRef.current(true)
     }
@@ -534,6 +532,8 @@ export function TodoBoard({
     const at = typeof to === 'number' ? ids.indexOf(to) + (below(to) ? 1 : 0) : ids.length
     ids.splice(at, 0, dragged.id)
     if (col === from && ids.every((id, i) => id === current[i])) return
+    // The order is the whole column's, so the todos done today there keep their places after the open ones.
+    ids.push(...(done.get(col) ?? []).map((t) => t.id))
     let after: number | undefined
     if (col !== from) {
       const dates = boardMoveDates(dragged, col, today)

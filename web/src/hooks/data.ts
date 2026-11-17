@@ -296,8 +296,15 @@ export function useTodoActions() {
       await qc.cancelQueries({ queryKey: keys.allTodos })
       const snap = snapshot(qc)
       const at = new Map(ids.map((id, i) => [id, i]))
+      // As on the server, the todos placed in the column before but not listed now leave it.
       qc.setQueriesData<Todo[]>({ queryKey: keys.allTodos }, (old) =>
-        old?.map((t) => (at.has(t.id) ? { ...t, board_column: column, board_position: at.get(t.id) } : t)),
+        old?.map((t) =>
+          at.has(t.id)
+            ? { ...t, board_column: column, board_position: at.get(t.id) }
+            : t.board_column === column
+              ? { ...t, board_column: undefined, board_position: null }
+              : t,
+        ),
       )
       return snap
     },
