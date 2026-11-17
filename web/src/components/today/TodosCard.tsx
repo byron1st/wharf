@@ -391,7 +391,7 @@ function TaskGroup({
   const pct = task.todo_count ? Math.round((task.done_todo_count / task.todo_count) * 100) : 0
   const key = taskKey(task.id)
   const ndone = task.done_todo_count
-  const next = open ? undefined : nextTodo(todos, today)
+  const next = open || closed ? undefined : nextTodo(todos, today)
   return (
     <article
       ref={dropRef}

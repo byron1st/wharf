@@ -354,4 +354,11 @@ describe('TodosCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Collapse or expand WHF-003' }))
     expect(screen.queryByText('Next')).toBeNull()
   })
+
+  it('shows no Next line on a collapsed closed task', () => {
+    renderCard([{ task: task('local-WHF-003', { status: 'done' }), todos: [todo(1, { end_date: today })] }])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all tasks' }))
+    expect(screen.queryByText('Next')).toBeNull()
+  })
 })
