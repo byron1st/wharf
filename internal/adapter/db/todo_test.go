@@ -443,3 +443,33 @@ func TestCreateTodoConcurrently(t *testing.T) {
 
 	require.Equal(t, want, positions)
 }
+
+func TestSetTodoBoardPositions(t *testing.T) {
+	manager, _ := newTodoManager(t)
+
+	a := create(t, manager, todo.Todo{TaskID: "J1", Description: "a"})
+	b := create(t, manager, todo.Todo{TaskID: "J1", Description: "b"})
+	c := create(t, manager, todo.Todo{TaskID: "J1", Description: "c"})
+
+	positions := func() map[int64]*int {
+		todos, err := manager.ListTodos(context.Background(), todo.Filter{})
+		require.NoError(t, err)
+
+		got := map[int64]*int{}
+		for _, td := range todos {
+			got[td.ID] = td.BoardPosition
+		}
+
+		return got
+	}
+
+	require.Equal(t, map[int64]*int{a: nil, b: nil, c: nil}, positions())
+
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), []int64{c, 9999, a}))
+	require.Equal(t, map[int64]*int{a: new(2), b: nil, c: new(0)}, positions())
+
+	// Saving a todo keeps its board position, and todos left out keep theirs.
+	require.NoError(t, manager.UpdateTodo(context.Background(), todo.Todo{ID: a, TaskID: "J1", Description: "a2"}))
+	require.NoError(t, manager.SetTodoBoardPositions(context.Background(), []int64{b}))
+	require.Equal(t, map[int64]*int{a: new(2), b: new(0), c: new(0)}, positions())
+}

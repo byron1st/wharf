@@ -880,7 +880,7 @@ func (q *Queries) ListTodoServiceDeskRequests(ctx context.Context, arg ListTodoS
 }
 
 const listTodos = `-- name: ListTodos :many
-SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_at, todos.start_date, todos.end_date, task_todos.task_id, task_todos.position
+SELECT todos.id, todos.description, todos.note, todos.is_done, todos.completed_at, todos.start_date, todos.end_date, todos.board_position, task_todos.task_id, task_todos.position
 FROM todos
 JOIN task_todos ON task_todos.todo_id = todos.id
 WHERE (task_todos.task_id = $1 OR $1 IS NULL)
@@ -901,15 +901,16 @@ type ListTodosParams struct {
 }
 
 type ListTodosRow struct {
-	ID          int64
-	Description string
-	Note        string
-	IsDone      bool
-	CompletedAt sql.NullTime
-	StartDate   sql.NullString
-	EndDate     sql.NullString
-	TaskID      string
-	Position    int64
+	ID            int64
+	Description   string
+	Note          string
+	IsDone        bool
+	CompletedAt   sql.NullTime
+	StartDate     sql.NullString
+	EndDate       sql.NullString
+	BoardPosition sql.NullInt64
+	TaskID        string
+	Position      int64
 }
 
 // A NULL filter is not applied.
@@ -935,6 +936,7 @@ func (q *Queries) ListTodos(ctx context.Context, arg ListTodosParams) ([]ListTod
 			&i.CompletedAt,
 			&i.StartDate,
 			&i.EndDate,
+			&i.BoardPosition,
 			&i.TaskID,
 			&i.Position,
 		); err != nil {
@@ -1110,6 +1112,20 @@ func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (int64, 
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateTodoBoardPosition = `-- name: UpdateTodoBoardPosition :exec
+UPDATE todos SET board_position = $1 WHERE id = $2
+`
+
+type UpdateTodoBoardPositionParams struct {
+	BoardPosition sql.NullInt64
+	ID            int64
+}
+
+func (q *Queries) UpdateTodoBoardPosition(ctx context.Context, arg UpdateTodoBoardPositionParams) error {
+	_, err := q.db.ExecContext(ctx, updateTodoBoardPosition, arg.BoardPosition, arg.ID)
+	return err
 }
 
 const upsertServiceDeskRequest = `-- name: UpsertServiceDeskRequest :exec

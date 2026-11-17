@@ -122,3 +122,26 @@ func TestListTodos(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, want, got)
 }
+
+func TestReorderBoardTodos(t *testing.T) {
+	failure := errors.New("write failed")
+	svc, manager := newTodoService(t)
+	manager.EXPECT().SetTodoBoardPositions(mock.Anything, []int64{3, 1}).Return(nil).Once()
+	manager.EXPECT().SetTodoBoardPositions(mock.Anything, []int64(nil)).Return(failure).Once()
+
+	require.NoError(t, svc.ReorderBoardTodos(t.Context(), []int64{3, 1}))
+	require.ErrorIs(t, svc.ReorderBoardTodos(t.Context(), nil), failure)
+}
+
+func TestReorderBoardTodosRejectsInvalidIDs(t *testing.T) {
+	// No expectations: nothing may be stored.
+	svc, _ := newTodoService(t)
+
+	err := svc.ReorderBoardTodos(t.Context(), []int64{1, 0})
+	require.ErrorIs(t, err, service.ErrInvalidTodoIDToReorder)
+	require.ErrorContains(t, err, "id=0")
+
+	err = svc.ReorderBoardTodos(t.Context(), []int64{1, 2, 1})
+	require.ErrorIs(t, err, service.ErrDuplicateTodoIDToReorder)
+	require.ErrorContains(t, err, "id=1")
+}

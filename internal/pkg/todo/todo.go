@@ -26,6 +26,9 @@ type Todo struct {
 	// Position is the index among the todos of the task. When writing, nil
 	// means the end of the task, or the current place when the task is kept.
 	Position *int
+	// BoardPosition orders the todo within its column of the Todo view, or
+	// is nil until it is placed there by hand. It is ignored when writing.
+	BoardPosition *int
 	// ServiceDeskRequests are the stored requests linked to the todo, in issue
 	// key order. They are ignored when writing.
 	ServiceDeskRequests []servicedesk.Request

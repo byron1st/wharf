@@ -57,6 +57,7 @@ type Service interface {
 	LinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
 	UnlinkServiceDeskRequest(ctx context.Context, todoID int64, key string) error
 	ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, error)
+	ReorderBoardTodos(ctx context.Context, ids []int64) error
 	CreateTodo(ctx context.Context, t todo.Todo) (int64, error)
 	UpdateTodo(ctx context.Context, t todo.Todo) error
 	DeleteTodo(ctx context.Context, id int64) error

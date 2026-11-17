@@ -193,6 +193,9 @@ WHERE task_id = sqlc.arg(task_id) AND position > sqlc.arg(position);
 -- name: CreateTaskTodo :exec
 INSERT INTO task_todos (todo_id, task_id, position) VALUES ($1, $2, $3);
 
+-- name: UpdateTodoBoardPosition :exec
+UPDATE todos SET board_position = $1 WHERE id = $2;
+
 -- name: ListTodos :many
 -- A NULL filter is not applied.
 SELECT todos.*, task_todos.task_id, task_todos.position

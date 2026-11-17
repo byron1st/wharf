@@ -33,6 +33,7 @@ var (
 	ErrFailedToDeleteTodoLinks     = errors.New("db: failed to delete service desk request links of todo")
 	ErrFailedToListTodoRequests    = errors.New("db: failed to list service desk requests of todos")
 	ErrFailedToCountTodosByTask    = errors.New("db: failed to count todos by task")
+	ErrFailedToUpdateBoardPosition = errors.New("db: failed to update todo board position")
 )
 
 // CreateTodo stores t as a new todo of the stored task t.TaskID and returns
@@ -117,6 +118,8 @@ func (m *manager) ListTodos(ctx context.Context, f todo.Filter) ([]todo.Todo, er
 			StartDate:   row.StartDate.String,
 			EndDate:     row.EndDate.String,
 			Position:    &position,
+
+			BoardPosition: fromNullInt(row.BoardPosition),
 		})
 	}
 
@@ -342,4 +345,24 @@ func fromServiceDeskRequest(row ServiceDeskRequest) servicedesk.Request {
 // toNullString stores an empty s as NULL.
 func toNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// SetTodoBoardPositions stores the index of each ID in ids as the board
+// position of that todo, in one transaction. IDs that are not stored are
+// skipped, and todos not in ids keep their board positions.
+func (m *manager) SetTodoBoardPositions(ctx context.Context, ids []int64) error {
+	if err := m.checkConnected(); err != nil {
+		return err
+	}
+
+	return m.inTx(ctx, func(queries *Queries) error {
+		for i, id := range ids {
+			params := UpdateTodoBoardPositionParams{BoardPosition: sql.NullInt64{Int64: int64(i), Valid: true}, ID: id}
+			if err := queries.UpdateTodoBoardPosition(ctx, params); err != nil {
+				return fmt.Errorf("%w: id=%d", errors.Join(ErrFailedToUpdateBoardPosition, err), id)
+			}
+		}
+
+		return nil
+	})
 }

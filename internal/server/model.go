@@ -114,8 +114,17 @@ type todoResponse struct {
 	EndDate     *string     `json:"end_date"`
 	Reminders   []time.Time `json:"reminders"`
 	Position    *int        `json:"position"`
+	// BoardPosition is the todo's place in its Todo view column. It is left
+	// out until the todo is placed there by hand.
+	BoardPosition *int `json:"board_position,omitempty"`
 
 	ServiceDeskRequests []serviceDeskRequestResponse `json:"service_desk_requests"`
+}
+
+// todoBoardOrderRequest is the body of PUT /todos/board-order: the todos of
+// one Todo view column, in order.
+type todoBoardOrderRequest struct {
+	IDs []int64 `json:"ids"`
 }
 
 type todoListResponse struct {
