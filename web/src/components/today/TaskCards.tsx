@@ -8,19 +8,68 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { Bell, FileText, Plus, Ticket, X } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, FileText, Plus, Ticket, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { OriginDot, StatusIcon } from '@/components/common/badges'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
+import { useStoredFlags } from '@/hooks/useStoredFlags'
 import { taskKey, type TaskListItem, type TaskStatus, type Todo } from '@/lib/api'
-import { doneLabel, dueTag, fromTaskDate, reminderSummary, toneClass, whenPill } from '@/lib/dates'
+import { doneLabel, dueTag, fromTaskDate, lateCount, nextTodo, reminderSummary, toneClass, whenPill, type Tone } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import { StatusChip } from './StatusChip'
 import { END, GripIcon, type Selection, type TodoGroup } from './TodosCard'
 
-/** CardTodo is a todo on a card: its text wraps in full, with when, reminder, note and requests below. */
+/** TodoMeta is the when, reminder, note and requests line under a card todo's text. */
+function TodoMeta({ todo }: { todo: Todo }) {
+  const { now, today } = useNow()
+  const done = todo.is_done
+  const when = done ? null : whenPill(todo, today)
+  const finished = done ? doneLabel(todo.completed_at, today) : null
+  const rem = done ? null : reminderSummary(todo.reminders, now)
+  const reqs = todo.service_desk_requests
+  return (
+    <span className="flex flex-wrap items-center gap-1.5 leading-[normal]">
+      {when && (
+        <span className={cn('rounded-[5px] px-1.5 py-px text-[11px] font-medium whitespace-nowrap', toneClass[when.tone])}>
+          {when.label}
+        </span>
+      )}
+      {finished && (
+        <span
+          className={cn(
+            'rounded-[5px] px-1.5 py-px text-[11px] font-medium whitespace-nowrap',
+            finished.today ? 'bg-tag-violet-bg text-[#6d28d9]' : 'bg-bg-muted text-ink-muted',
+          )}
+        >
+          {finished.label}
+        </span>
+      )}
+      {rem && (
+        <span
+          title={rem.sent ? `${rem.sent} sent` : undefined}
+          className={cn('inline-flex items-center gap-1 text-[11px] tabular-nums', rem.upcoming ? 'text-[#6d28d9]' : 'text-ink-faint')}
+        >
+          <Bell size={12} />
+          {rem.label}
+        </span>
+      )}
+      {todo.note.trim() && <FileText size={13} className="shrink-0 text-ink-muted" aria-label="Has a note" />}
+      {reqs.length > 0 && (
+        <span
+          title={reqs.map((r) => `${r.key} ${r.title}`).join('\n')}
+          className="inline-flex h-[18px] items-center gap-[3px] rounded-full bg-tag-indigo-bg px-[5px] text-[11px] font-medium text-tag-indigo-ink"
+        >
+          <Ticket size={11} strokeWidth={2.4} />
+          {reqs.length}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** CardTodo is a todo on an unfolded card: its text wraps in full, with when, reminder, note and requests below. */
 function CardTodo({
   todo,
   selected,
@@ -32,16 +81,11 @@ function CardTodo({
   onSelect: () => void
   onToggleDone: (todo: Todo, done: boolean) => void
 }) {
-  const { now, today } = useNow()
   const done = todo.is_done
-  const when = done ? null : whenPill(todo, today)
-  const finished = done ? doneLabel(todo.completed_at, today) : null
-  const rem = done ? null : reminderSummary(todo.reminders, now)
-  const reqs = todo.service_desk_requests
   return (
     <div
       className={cn(
-        'grid grid-cols-[18px_minmax(0,1fr)] items-start gap-2.5 px-3.5 py-2',
+        'grid grid-cols-[18px_minmax(0,1fr)] items-start gap-2.5 px-[22px] py-2',
         selected ? 'bg-accent-tint shadow-[inset_0_0_0_1px_var(--color-accent-line)]' : 'bg-white',
       )}
     >
@@ -56,43 +100,53 @@ function CardTodo({
         >
           {todo.description}
         </span>
-        <span className="flex flex-wrap items-center gap-1.5 leading-[normal]">
-          {when && (
-            <span className={cn('rounded-[5px] px-1.5 py-px text-[11px] font-medium whitespace-nowrap', toneClass[when.tone])}>
-              {when.label}
-            </span>
-          )}
-          {finished && (
-            <span
-              className={cn(
-                'rounded-[5px] px-1.5 py-px text-[11px] font-medium whitespace-nowrap',
-                finished.today ? 'bg-tag-violet-bg text-[#6d28d9]' : 'bg-bg-muted text-ink-muted',
-              )}
-            >
-              {finished.label}
-            </span>
-          )}
-          {rem && (
-            <span
-              title={rem.sent ? `${rem.sent} sent` : undefined}
-              className={cn('inline-flex items-center gap-1 text-[11px] tabular-nums', rem.upcoming ? 'text-[#6d28d9]' : 'text-ink-faint')}
-            >
-              <Bell size={12} />
-              {rem.label}
-            </span>
-          )}
-          {todo.note.trim() && <FileText size={13} className="shrink-0 text-ink-muted" aria-label="Has a note" />}
-          {reqs.length > 0 && (
-            <span
-              title={reqs.map((r) => `${r.key} ${r.title}`).join('\n')}
-              className="inline-flex h-[18px] items-center gap-[3px] rounded-full bg-tag-indigo-bg px-[5px] text-[11px] font-medium text-tag-indigo-ink"
-            >
-              <Ticket size={11} strokeWidth={2.4} />
-              {reqs.length}
-            </span>
-          )}
-        </span>
+        <TodoMeta todo={todo} />
       </button>
+    </div>
+  )
+}
+
+/** NEXT_BG tints a card's Next up block by how urgent its todo is. */
+const NEXT_BG: Record<Tone, string> = { over: 'bg-danger-tint', today: 'bg-today-tint', plain: 'bg-bg-muted' }
+
+/** NextUp is a card's most urgent open todo, tinted by urgency. */
+function NextUp({
+  todo,
+  selected,
+  onSelect,
+  onToggleDone,
+}: {
+  todo: Todo
+  selected: boolean
+  onSelect: () => void
+  onToggleDone: (todo: Todo, done: boolean) => void
+}) {
+  const { today } = useNow()
+  return (
+    <div
+      aria-label="Next up"
+      role="group"
+      className={cn(
+        'mx-2.5 flex flex-col gap-1.5 rounded-[10px] px-3 py-2.5',
+        NEXT_BG[whenPill(todo, today).tone],
+        selected && 'shadow-[inset_0_0_0_1px_var(--color-accent-line)]',
+      )}
+    >
+      <span className="text-[11px] font-semibold tracking-[0.05em] text-ink-muted uppercase">Next up</span>
+      <div className="grid grid-cols-[18px_minmax(0,1fr)] items-start gap-2.5">
+        <Checkbox checked={false} label={todo.description} onChange={(v) => onToggleDone(todo, v)} className="mt-px" />
+        <button type="button" onClick={onSelect} aria-pressed={selected} className="flex min-w-0 flex-col gap-[5px] text-left">
+          <span
+            className={cn(
+              'text-[14px] leading-[1.45] break-keep [overflow-wrap:anywhere]',
+              selected ? 'font-semibold' : 'font-medium',
+            )}
+          >
+            {todo.description}
+          </span>
+          <TodoMeta todo={todo} />
+        </button>
+      </div>
     </div>
   )
 }
@@ -111,7 +165,7 @@ function DraggableCardTodo({ todo, dragging, line, children }: { todo: Todo; dra
       data-todo={todo.id}
       className={cn('relative', dragging && 'opacity-45')}
     >
-      <span aria-hidden className="absolute top-[11px] left-0.5 z-[1] flex size-3 cursor-grab text-border-strong">
+      <span aria-hidden className="absolute top-[11px] left-[5px] z-[1] flex size-3 cursor-grab text-border-strong">
         <GripIcon />
       </span>
       {children}
@@ -120,10 +174,11 @@ function DraggableCardTodo({ todo, dragging, line, children }: { todo: Todo; dra
   )
 }
 
-/** CardTodos lists a card's todos, and its done ones when shown; open ones reorder by drag within the card. */
+/** CardTodos lists a card's folded todos, and its done ones when shown; open ones reorder by drag within the card. */
 function CardTodos({
   task,
   todos,
+  skip,
   doneOpen,
   selection,
   onSelect,
@@ -131,6 +186,8 @@ function CardTodos({
 }: {
   task: TaskListItem
   todos: Todo[]
+  /** skip are todos shown elsewhere on the card, left out of the done list. */
+  skip: Todo[]
   doneOpen: boolean
   selection: Selection
   onSelect: (s: Selection) => void
@@ -144,7 +201,7 @@ function CardTodos({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   const ids = todos.map((t) => t.id)
   const dragged = todos.find((t) => t.id === active)
-  const shown = new Set(ids)
+  const shown = new Set(skip.map((t) => t.id))
   const done = doneOpen
     ? doneData
         .filter((t) => t.is_done && !shown.has(t.id))
@@ -167,7 +224,7 @@ function CardTodos({
   )
 
   return (
-    <div className="flex flex-col py-1">
+    <div className="flex flex-col">
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -212,9 +269,6 @@ function CardTodos({
         </DragOverlay>
       </DndContext>
       {done.map(row)}
-      {todos.length === 0 && done.length === 0 && (
-        <p className="m-0 px-3.5 py-2.5 text-[12px] text-ink-muted">No todos for today yet.</p>
-      )}
     </div>
   )
 }
@@ -237,7 +291,7 @@ function NewCardTodo({ task, onDone }: { task: TaskListItem; onDone: () => void 
     }).catch(() => setText(d))
   }
   return (
-    <div className="flex items-center gap-2 rounded-b-xl border-t border-tag-teal-line bg-accent-tint py-2 pr-2.5 pl-3.5">
+    <div className="flex items-center gap-2.5 border-t border-tag-teal-line bg-accent-tint py-2 pr-3 pl-4">
       <span className="size-[18px] shrink-0 rounded-[5px] border-[1.5px] border-dashed border-[#2dd4bf]" />
       <input
         autoFocus
@@ -269,6 +323,9 @@ interface CardProps {
   onSelect: (s: Selection) => void
   adding: boolean
   setAdding: (on: boolean) => void
+  /** unfolded shows the todos after Next up. */
+  unfolded: boolean
+  onUnfold: (on: boolean) => void
   doneOpen: boolean
   onToggleDoneOpen: () => void
   onToggleDone: (todo: Todo, done: boolean) => void
@@ -277,13 +334,15 @@ interface CardProps {
   dropHere: boolean
 }
 
-/** TaskCard is one task: its header drags the card and the whole card is a drop target. */
+/** TaskCard is one task: its header drags the card and the whole card is a drop target. Only its Next up todo shows until it is unfolded. */
 function TaskCard({
   group: { task, todos },
   selection,
   onSelect,
   adding,
   setAdding,
+  unfolded,
+  onUnfold,
   doneOpen,
   onToggleDoneOpen,
   onToggleDone,
@@ -300,13 +359,18 @@ function TaskCard({
   const pct = task.todo_count ? Math.round((task.done_todo_count / task.todo_count) * 100) : 0
   const key = taskKey(task.id)
   const ndone = task.done_todo_count
+  const next = nextTodo(todos, today)
+  const rest = todos.filter((t) => t !== next)
+  const late = lateCount(todos, today)
+  const expanded = unfolded || adding
+  const isTodoSel = (t: Todo) => selection?.kind === 'todo' && selection.id === t.id
   return (
     <article
       ref={dropRef}
       data-card={task.id}
       aria-label={`${key} ${task.title}`}
       className={cn(
-        'flex min-w-0 flex-col rounded-xl border bg-white',
+        'flex min-w-0 flex-col rounded-[14px] border bg-white',
         dropHere
           ? 'border-accent shadow-ring-drop'
           : isSel
@@ -315,14 +379,7 @@ function TaskCard({
         dragging && 'opacity-45',
       )}
     >
-      <header
-        ref={dragRef}
-        {...listeners}
-        className={cn(
-          'flex flex-col gap-2 rounded-t-xl border-b border-border-subtle px-3.5 py-3',
-          isSel ? 'bg-accent-tint' : 'bg-bg-subtle',
-        )}
-      >
+      <header ref={dragRef} {...listeners} className="flex flex-col gap-2.5 px-4 pt-3.5 pb-3">
         <div className="flex min-w-0 items-center gap-2">
           <StatusChip task={task} onSetStatus={(s) => onSetStatus(task, s)} />
           <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -342,13 +399,13 @@ function TaskCard({
           title="Show task details"
           onClick={() => onSelect({ kind: 'task', id: task.id })}
           className={cn(
-            'text-left text-[15px] leading-[1.4] font-semibold tracking-[-0.01em] break-keep [overflow-wrap:anywhere]',
+            'text-left text-[17px] leading-[1.38] font-semibold tracking-[-0.015em] break-keep [overflow-wrap:anywhere]',
             closed && 'text-ink-muted',
           )}
         >
           {task.title}
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 text-[12px] text-ink-muted tabular-nums">
           <span className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-bg-pressed">
             <span className="rounded-full bg-tag-violet-solid" style={{ width: `${pct}%` }} />
           </span>
@@ -359,39 +416,74 @@ function TaskCard({
             title={doneOpen ? 'Hide done todos' : ndone ? `Show ${ndone} done todo${ndone > 1 ? 's' : ''}` : 'No done todos yet'}
             onClick={onToggleDoneOpen}
             className={cn(
-              'flex h-6 items-center rounded-md border px-1.5 text-[12px] tabular-nums',
+              '-mx-1.5 flex h-6 items-center rounded-md border px-1.5',
               doneOpen
                 ? 'border-[#ddd6fe] bg-tag-violet-bg text-tag-violet-ink'
                 : ndone
-                  ? 'border-border bg-white text-ink-muted hover:bg-bg-subtle'
-                  : 'border-transparent text-ink-muted',
+                  ? 'border-transparent hover:border-border hover:bg-bg-subtle'
+                  : 'border-transparent',
             )}
           >
-            {task.done_todo_count}/{task.todo_count}
+            {task.done_todo_count}/{task.todo_count} done
           </button>
+          {late > 0 && (
+            <span className="inline-flex items-center gap-1 font-medium text-danger-ink">
+              <span aria-hidden className="size-1.5 rounded-full bg-danger" />
+              {late} late
+            </span>
+          )}
         </div>
       </header>
-      <CardTodos
-        task={task}
-        todos={todos}
-        doneOpen={doneOpen}
-        selection={selection}
-        onSelect={onSelect}
-        onToggleDone={onToggleDone}
-      />
-      {adding ? (
-        <NewCardTodo task={task} onDone={() => setAdding(false)} />
+      {next ? (
+        <NextUp todo={next} selected={isTodoSel(next)} onSelect={() => onSelect({ kind: 'todo', id: next.id })} onToggleDone={onToggleDone} />
       ) : (
+        <p className="mx-4 py-2 text-[12.5px] text-ink-muted">Nothing due today.</p>
+      )}
+      {(expanded || doneOpen) && (
+        <div className="pt-1.5">
+          <CardTodos
+            task={task}
+            todos={expanded ? rest : []}
+            skip={expanded ? todos : next ? [next] : []}
+            doneOpen={doneOpen}
+            selection={selection}
+            onSelect={onSelect}
+            onToggleDone={onToggleDone}
+          />
+          {adding && <NewCardTodo task={task} onDone={() => setAdding(false)} />}
+        </div>
+      )}
+      <div className="mt-2.5 flex items-center gap-1 border-t border-border-subtle px-2 py-1.5">
+        <button
+          type="button"
+          aria-expanded={expanded && rest.length > 0}
+          disabled={rest.length === 0}
+          onClick={() => {
+            onUnfold(!expanded)
+            if (expanded && adding) setAdding(false)
+          }}
+          className="flex h-[30px] items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-ink-secondary hover:bg-black/5 disabled:text-ink-faint disabled:hover:bg-transparent"
+        >
+          {rest.length > 0 && (expanded ? <ChevronDown size={13} aria-hidden /> : <ChevronRight size={13} aria-hidden />)}
+          {rest.length === 0
+            ? 'No other todos'
+            : expanded
+              ? `Hide ${rest.length} more`
+              : `${rest.length} more todo${rest.length > 1 ? 's' : ''}`}
+        </button>
         <button
           type="button"
           aria-label={`Add todo to ${key}`}
-          onClick={() => setAdding(true)}
-          className="flex h-9 items-center gap-1.5 rounded-b-xl border-t border-border-subtle bg-white px-3.5 text-left text-[12px] font-medium text-ink-muted hover:bg-bg-subtle"
+          onClick={() => {
+            onUnfold(true)
+            setAdding(true)
+          }}
+          className="ml-auto flex h-[30px] items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-ink-muted hover:bg-black/5"
         >
           <Plus size={13} strokeWidth={2.2} />
           Add todo
         </button>
-      )}
+      </div>
     </article>
   )
 }
@@ -403,7 +495,7 @@ function EndSlot() {
       ref={setNodeRef}
       data-card={END}
       className={cn(
-        'flex min-h-[120px] items-center justify-center rounded-xl border-[1.5px] border-dashed text-[12px] text-ink-muted',
+        'flex min-h-[120px] items-center justify-center rounded-[14px] border-[1.5px] border-dashed text-[12px] text-ink-muted',
         isOver ? 'border-accent bg-accent-tint' : 'border-border-strong bg-bg-subtle',
       )}
     >
@@ -434,6 +526,7 @@ export function TaskCards({
   onMove: (id: string, before: string | null) => void
 }) {
   const [doneOpen, setDoneOpen] = useState<Record<string, boolean>>({})
+  const [unfolded, setUnfolded] = useStoredFlags('wharf.cardOpen')
   const [active, setActive] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   // A small distance keeps clicks on the header's buttons from starting a drag.
@@ -457,7 +550,7 @@ export function TaskCards({
   }
 
   return (
-    <section aria-label="Tasks" className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(300px,1fr))] items-start gap-4">
+    <section aria-label="Tasks" className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(310px,1fr))] items-start gap-4">
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}
@@ -482,6 +575,8 @@ export function TaskCards({
               onSelect={onSelect}
               adding={adding === id}
               setAdding={(on) => setAdding(on ? id : null)}
+              unfolded={!!unfolded[id]}
+              onUnfold={(on) => setUnfolded([id], on)}
               doneOpen={!!doneOpen[id]}
               onToggleDoneOpen={() => setDoneOpen((m) => ({ ...m, [id]: !m[id] }))}
               onToggleDone={onToggleDone}

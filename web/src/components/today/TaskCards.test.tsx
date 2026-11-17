@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ClockContext } from '@/hooks/useNow'
@@ -102,7 +102,11 @@ function stubSaves() {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  localStorage.clear()
 })
+
+/** unfold opens the folded todos of the card whose key matches name. */
+const unfold = (name: RegExp) => fireEvent.click(within(card(name)).getByRole('button', { name: /more todos?$/ }))
 
 describe('TaskCards', () => {
   it('shows one card per task in order, in an auto-fill grid', () => {
@@ -112,7 +116,7 @@ describe('TaskCards', () => {
     ])
 
     const grid = screen.getByRole('region', { name: 'Tasks' })
-    expect(grid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(300px,1fr))]', 'items-start', 'gap-4')
+    expect(grid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(310px,1fr))]', 'items-start', 'gap-4')
     expect(within(grid).getAllByRole('article').map((a) => a.getAttribute('aria-label'))).toEqual([
       'WHF-001 Title of local-WHF-001',
       'SEC-3 Rotate keys',
@@ -122,11 +126,11 @@ describe('TaskCards', () => {
     expect(within(first).getByRole('button', { name: 'Status: In progress' })).toHaveTextContent('In progress')
     expect(within(first).getByText('WHF-001')).toBeInTheDocument()
     expect(within(first).getByText('Due today')).toBeInTheDocument()
-    expect(within(first).getByRole('button', { name: '1/4' })).toBeInTheDocument()
+    expect(within(first).getByRole('button', { name: '1/4 done' })).toBeInTheDocument()
     expect(within(first).getByRole('checkbox', { name: 'Todo 1' })).toBeInTheDocument()
     expect(within(first).getByRole('button', { name: 'Add todo to WHF-001' })).toHaveTextContent('Add todo')
 
-    expect(within(card(/^SEC-3/)).getByText('No todos for today yet.')).toBeInTheDocument()
+    expect(within(card(/^SEC-3/)).getByText('Nothing due today.')).toBeInTheDocument()
   })
 
   it('wraps long titles and todo text in full instead of truncating them', () => {
@@ -183,6 +187,7 @@ describe('TaskCards', () => {
 
   it('highlights the selected todo', () => {
     renderCards([{ task: task('local-WHF-003'), todos: [todo(1), todo(2)] }], { selection: { kind: 'todo', id: 2 } })
+    unfold(/^WHF-003/)
 
     expect(screen.getByText('Todo 2').closest('button')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('Todo 2')).toHaveClass('font-semibold')
@@ -193,6 +198,7 @@ describe('TaskCards', () => {
     const done = todo(1, { is_done: true, completed_at: now.toISOString() })
     const open = todo(2)
     const { onToggleDone } = renderCards([{ task: task('local-WHF-003'), todos: [done, open] }])
+    unfold(/^WHF-003/)
 
     expect(screen.getByText('Todo 1')).toHaveClass('line-through')
     expect(screen.getByText('Done today')).toBeInTheDocument()
@@ -231,14 +237,14 @@ describe('TaskCards', () => {
       { task: task('local-WHF-004', { todo_count: 1 }), todos: [] },
     ])
 
-    expect(screen.getByRole('button', { name: '0/1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '0/1 done' })).toBeDisabled()
     expect(fetchMock).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: '1/2' }))
+    fireEvent.click(screen.getByRole('button', { name: '1/2 done' }))
     expect(await screen.findByText('Done Oct 22')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/todos?task_id=local-WHF-003&is_done=true', expect.anything())
 
-    fireEvent.click(screen.getByRole('button', { name: '1/2' }))
+    fireEvent.click(screen.getByRole('button', { name: '1/2 done' }))
     await waitFor(() => expect(screen.queryByText('Done Oct 22')).toBeNull())
   })
 
@@ -260,7 +266,8 @@ describe('TaskCards', () => {
     )
     const { setAdding } = renderCards([{ task: task('local-WHF-003'), todos: [] }], { adding: 'local-WHF-003' })
 
-    expect(screen.queryByRole('button', { name: 'Add todo to WHF-003' })).toBeNull()
+    // The footer keeps Add todo while the new todo row is open.
+    expect(screen.getByRole('button', { name: 'Add todo to WHF-003' })).toBeInTheDocument()
     const input = screen.getByRole('textbox', { name: 'New todo for WHF-003' })
     expect(input).toHaveFocus()
     await userEvent.type(input, 'Write the runbook{Enter}')
@@ -311,25 +318,31 @@ describe('TaskCards', () => {
 
   it('reorders a todo within its card by drag', async () => {
     const saves = stubSaves()
-    stubRects([], [1, 2, 3])
-    renderCards([{ task: task('local-WHF-003'), todos: [todo(1), todo(2), todo(3)] }])
+    stubRects([], [2, 3, 4])
+    renderCards([{ task: task('local-WHF-003'), todos: [todo(1), todo(2), todo(3), todo(4)] }])
+    unfold(/^WHF-003/)
 
-    await drag(screen.getByText('Todo 1'), 22, 2 * 44 + 22)
+    await drag(screen.getByText('Todo 2'), 22, 2 * 44 + 22)
 
     await waitFor(() => expect(saves).toHaveLength(1))
-    expect(saves[0].url).toBe('/api/todos/1')
-    expect(saves[0].body).toMatchObject({ description: 'Todo 1', position: 3 })
+    expect(saves[0].url).toBe('/api/todos/2')
+    expect(saves[0].body).toMatchObject({ description: 'Todo 2', position: 4 })
   })
 
   it('does not move a todo onto another card', async () => {
     const saves = stubSaves()
-    stubRects([], [1, 2, 5])
+    stubRects([], [2, 3, 6])
     renderCards([
-      { task: task('local-WHF-003'), todos: [todo(1), todo(2)] },
-      { task: task('local-WHF-004'), todos: [todo(5, { task_id: 'local-WHF-004' })] },
+      { task: task('local-WHF-003'), todos: [todo(1), todo(2), todo(3)] },
+      { task: task('local-WHF-004'), todos: [todo(5, { task_id: 'local-WHF-004' }), todo(6, { task_id: 'local-WHF-004' })] },
     ])
+    unfold(/^WHF-003/)
+    unfold(/^WHF-004/)
+    // Both the dragged todo and the one it lands on are draggable rows, so only the card boundary stops the move.
+    expect(screen.getByText('Todo 2').closest('[data-todo]')).not.toBeNull()
+    expect(screen.getByText('Todo 6').closest('[data-todo]')).not.toBeNull()
 
-    await drag(screen.getByText('Todo 1'), 22, 2 * 44 + 22)
+    await drag(screen.getByText('Todo 2'), 22, 2 * 44 + 22)
 
     await new Promise((r) => setTimeout(r, 20))
     expect(saves).toHaveLength(0)
@@ -337,12 +350,13 @@ describe('TaskCards', () => {
 
   it('does not click the checkbox a drag began and ended on', async () => {
     stubSaves()
-    stubRects([], [1, 2])
-    const first = todo(1)
-    const { onToggleDone } = renderCards([{ task: task('local-WHF-003'), todos: [first, todo(2)] }])
-    const box = screen.getByRole('checkbox', { name: 'Todo 1' })
+    stubRects([], [2, 3])
+    const first = todo(2)
+    const { onToggleDone } = renderCards([{ task: task('local-WHF-003'), todos: [todo(1), first, todo(3)] }])
+    unfold(/^WHF-003/)
+    const box = screen.getByRole('checkbox', { name: 'Todo 2' })
 
-    const text = screen.getByText('Todo 1')
+    const text = screen.getByText('Todo 2')
     const at = (y: number) => ({ clientX: 100, clientY: y, isPrimary: true, button: 0 })
     fireEvent.pointerDown(text, at(22))
     fireEvent.pointerMove(text, at(28))
@@ -361,5 +375,94 @@ describe('TaskCards', () => {
     renderCards([])
 
     expect(screen.getByText(/Nothing to do today/)).toBeInTheDocument()
+  })
+
+  it('puts the most urgent open todo in Next up, tinted by urgency', () => {
+    renderCards([
+      { task: task('local-WHF-001'), todos: [todo(1), todo(2, { end_date: today }), todo(3, { end_date: '2026-10-24' })] },
+      { task: task('local-WHF-002'), todos: [todo(4, { task_id: 'local-WHF-002' }), todo(5, { task_id: 'local-WHF-002', end_date: today })] },
+      { task: task('local-WHF-003'), todos: [todo(6, { task_id: 'local-WHF-003' })] },
+    ])
+
+    const next = (name: RegExp) => within(card(name)).getByRole('group', { name: 'Next up' })
+    expect(within(next(/^WHF-001/)).getByText('Todo 3')).toBeInTheDocument()
+    expect(next(/^WHF-001/)).toHaveClass('bg-danger-tint')
+    expect(within(next(/^WHF-002/)).getByText('Todo 5')).toBeInTheDocument()
+    expect(next(/^WHF-002/)).toHaveClass('bg-today-tint')
+    expect(within(next(/^WHF-003/)).getByText('Todo 6')).toBeInTheDocument()
+    expect(next(/^WHF-003/)).toHaveClass('bg-bg-muted')
+  })
+
+  it('says nothing is due when a card has no open todo', () => {
+    renderCards([{ task: task('local-WHF-001'), todos: [todo(1, { is_done: true, completed_at: now.toISOString() })] }])
+
+    expect(screen.queryByRole('group', { name: 'Next up' })).toBeNull()
+    expect(screen.getByText('Nothing due today.')).toBeInTheDocument()
+  })
+
+  it('shows how many todos are done and how many open ones are late', () => {
+    renderCards([
+      {
+        task: task('local-WHF-001', { todo_count: 5, done_todo_count: 2 }),
+        todos: [todo(1, { end_date: '2026-10-24' }), todo(2, { end_date: '2026-10-25' }), todo(3, { end_date: '2026-10-20', is_done: true })],
+      },
+      { task: task('local-WHF-002', { todo_count: 1 }), todos: [todo(4, { task_id: 'local-WHF-002', end_date: today })] },
+    ])
+
+    expect(within(card(/^WHF-001/)).getByRole('button', { name: '2/5 done' })).toBeInTheDocument()
+    expect(within(card(/^WHF-001/)).getByText('2 late')).toBeInTheDocument()
+    expect(within(card(/^WHF-002/)).queryByText(/late$/)).toBeNull()
+  })
+
+  it('folds the todos after Next up, and remembers an unfolded card', () => {
+    const groups = [
+      { task: task('local-WHF-001'), todos: [todo(1), todo(2), todo(3)] },
+      { task: task('local-WHF-002'), todos: [todo(4, { task_id: 'local-WHF-002' })] },
+    ]
+    renderCards(groups)
+
+    expect(screen.queryByText('Todo 2')).toBeNull()
+    expect(within(card(/^WHF-002/)).getByRole('button', { name: 'No other todos' })).toBeDisabled()
+
+    fireEvent.click(within(card(/^WHF-001/)).getByRole('button', { name: '2 more todos' }))
+    expect(screen.getByText('Todo 2')).toBeInTheDocument()
+    expect(screen.getByText('Todo 3')).toBeInTheDocument()
+    expect(within(card(/^WHF-001/)).getByRole('button', { name: 'Hide 2 more' })).toHaveAttribute('aria-expanded', 'true')
+    expect(JSON.parse(localStorage.getItem('wharf.cardOpen') ?? '{}')).toEqual({ 'local-WHF-001': true })
+
+    cleanup()
+    renderCards(groups)
+    expect(screen.getByText('Todo 2')).toBeInTheDocument()
+
+    fireEvent.click(within(card(/^WHF-001/)).getByRole('button', { name: 'Hide 2 more' }))
+    expect(screen.queryByText('Todo 2')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('wharf.cardOpen') ?? '{}')).toEqual({})
+  })
+
+  it('folds a card in one click while its new todo row is open', () => {
+    const { setAdding } = renderCards([{ task: task('local-WHF-001'), todos: [todo(1), todo(2)] }], { adding: 'local-WHF-001' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide 1 more' }))
+    expect(setAdding).toHaveBeenLastCalledWith(null)
+    expect(JSON.parse(localStorage.getItem('wharf.cardOpen') ?? '{}')).toEqual({})
+  })
+
+  it('lists a todo checked this visit with the done todos of a folded card', async () => {
+    const kept = todo(1, { is_done: true, completed_at: now.toISOString() })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ todos: [kept] }))))
+    renderCards([{ task: task('local-WHF-001', { todo_count: 2, done_todo_count: 1 }), todos: [kept, todo(2)] }])
+
+    expect(screen.queryByText('Todo 1')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '1/2 done' }))
+    expect(await screen.findByText('Todo 1')).toHaveClass('line-through')
+  })
+
+  it('unfolds a card when adding a todo to it', () => {
+    const { setAdding } = renderCards([{ task: task('local-WHF-001'), todos: [todo(1), todo(2)] }])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add todo to WHF-001' }))
+    expect(setAdding).toHaveBeenLastCalledWith('local-WHF-001')
+    expect(screen.getByText('Todo 2')).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('wharf.cardOpen') ?? '{}')).toEqual({ 'local-WHF-001': true })
   })
 })

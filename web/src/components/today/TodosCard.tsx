@@ -14,6 +14,7 @@ import { Kbd, OriginDot, StatusIcon } from '@/components/common/badges'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useTodoActions, useTodos } from '@/hooks/data'
 import { useNow } from '@/hooks/useNow'
+import { useStoredFlags } from '@/hooks/useStoredFlags'
 import { taskKey, type TaskListItem, type TaskStatus, type Todo } from '@/lib/api'
 import { doneLabel, dueTag, fromTaskDate, groupSummary, nextTodo, reminderSummary, toneClass, whenPill } from '@/lib/dates'
 import { cn } from '@/lib/utils'
@@ -31,28 +32,6 @@ export interface TodoGroup {
 const ROW = 'relative ml-11 grid min-h-[42px] grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg py-1.5 pr-3.5 pl-[18px]'
 /** END is the droppable ID of the "move to the end" area. */
 export const END = '__end'
-
-function useCollapsed() {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('wharf.collapsed') ?? '{}') as Record<string, boolean>
-    } catch {
-      return {}
-    }
-  })
-  const set = (ids: string[], v: boolean) => {
-    setCollapsed((prev) => {
-      const next = { ...prev }
-      for (const id of ids) {
-        if (v) next[id] = true
-        else delete next[id]
-      }
-      localStorage.setItem('wharf.collapsed', JSON.stringify(next))
-      return next
-    })
-  }
-  return [collapsed, set] as const
-}
 
 function NewTodoRow({ task, onDone }: { task: TaskListItem; onDone: () => void }) {
   const [text, setText] = useState('')
@@ -565,7 +544,7 @@ export function TodosCard({
   /** onMove puts the task id right before the task before, or last when before is null. */
   onMove: (id: string, before: string | null) => void
 }) {
-  const [collapsed, setCollapsed] = useCollapsed()
+  const [collapsed, setCollapsed] = useStoredFlags('wharf.collapsed')
   const [doneOpen, setDoneOpen] = useState<Record<string, boolean>>({})
   const [active, setActive] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
